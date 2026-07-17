@@ -3,12 +3,14 @@ import {
   EventId,
   ThreadId,
   TurnId,
+  type NativeSubagentDetail,
   type OrchestrationThreadActivity,
 } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { NativeSubagentsPanel } from "./NativeSubagentsPanel";
+import type { NativeSubagentSummary } from "~/nativeSubagents";
+import { NativeSubagentDetailPanel, NativeSubagentsPanel } from "./NativeSubagentsPanel";
 
 const environmentId = EnvironmentId.make("local");
 const parentThreadId = ThreadId.make("parent-task");
@@ -61,5 +63,67 @@ describe("NativeSubagentsPanel", () => {
 
     expect(markup).toContain("reviewer");
     expect(markup).toContain("Running");
+  });
+
+  it("renders inline native lineage, bounded detail, and explicit truncation", () => {
+    const selected: NativeSubagentSummary = {
+      agentThreadId: "child-1",
+      agentPath: "/root/reviewer",
+      status: "completed",
+      recentActivity: ["Review complete"],
+    };
+    const detail: NativeSubagentDetail = {
+      parentTaskId: parentThreadId,
+      agentThreadId: "child-1",
+      status: "completed",
+      nickname: "Reviewer",
+      role: "code review",
+      preview: "Found one actionable issue.",
+      updatedAt: "2026-07-17T00:00:01.000Z",
+      items: [{ id: "item-1", type: "message", summary: "Review complete" }],
+      truncated: true,
+    };
+
+    const markup = renderToStaticMarkup(
+      <NativeSubagentDetailPanel
+        parentThreadId={parentThreadId}
+        selected={selected}
+        detail={detail}
+        loading={false}
+        error={null}
+        onBack={() => undefined}
+        onRetry={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("Parent parent-task");
+    expect(markup).toContain("Child child-1");
+    expect(markup).toContain('aria-label="Back to parent task"');
+    expect(markup).toContain("Found one actionable issue.");
+    expect(markup).toContain("Earlier child activity remains in the native task");
+    expect(markup).not.toContain('role="dialog"');
+  });
+
+  it("renders a retryable explicit child-detail failure", () => {
+    const markup = renderToStaticMarkup(
+      <NativeSubagentDetailPanel
+        parentThreadId={parentThreadId}
+        selected={{
+          agentThreadId: "child-1",
+          agentPath: null,
+          status: "unavailable",
+          recentActivity: [],
+        }}
+        detail={null}
+        loading={false}
+        error="The child is no longer available."
+        onBack={() => undefined}
+        onRetry={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("The child is no longer available.");
+    expect(markup).toContain("Retry child detail");
   });
 });

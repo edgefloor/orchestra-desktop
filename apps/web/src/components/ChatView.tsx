@@ -5468,6 +5468,7 @@ function ChatViewContent(props: ChatViewProps) {
               onClose={() => setWorkspaceContextRailView(null)}
               subagents={
                 <NativeSubagentsPanel
+                  key={`subagents:${activeThreadKey}`}
                   environmentId={activeThread.environmentId}
                   parentThreadId={activeThread.id}
                   activities={activeThread.activities}
@@ -5593,6 +5594,7 @@ function ChatViewContent(props: ChatViewProps) {
             }}
             subagents={
               <NativeSubagentsPanel
+                key={`subagents:${activeThreadKey}`}
                 environmentId={activeThread.environmentId}
                 parentThreadId={activeThread.id}
                 activities={activeThread.activities}
