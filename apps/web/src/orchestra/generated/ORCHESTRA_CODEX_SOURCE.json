@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/edgefloor/orchestra-codex.git",
-  "revision": "1c6ed0131acc148772d878260c76963440057f40",
+  "revision": "67a18b672a5204ccc26c650a85fd47dd1c574f1b",
   "schemaPath": "codex-rs/app-server-protocol/schema/typescript",
   "sourceTree": "fa42435fb75be94d63b81ed2472c08ba719671a8",
   "digestAlgorithm": "sha256-relative-path-nul-file-sha256-lf-v1",
