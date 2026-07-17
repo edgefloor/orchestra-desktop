@@ -36,7 +36,10 @@ export const WorkflowRunsView = memo(function WorkflowRunsView(props: {
         loads on request
       </div>
       {projection.items.map(({ event }) => (
-        <div key={event.runId} className="rounded-md border border-border bg-background/45 p-2">
+        <div
+          key={`${event.runId}:${event.revision}:${event.sequence}`}
+          className="rounded-md border border-border bg-background/45 p-2"
+        >
           <OrchestraLifecycleEntry
             environmentId={props.environmentId}
             threadId={props.threadId}

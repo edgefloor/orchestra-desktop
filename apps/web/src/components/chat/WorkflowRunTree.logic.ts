@@ -1,6 +1,7 @@
 import type {
   OrchestraEvidenceReference,
   OrchestraExecutionStepProjection,
+  OrchestraHistoryCursor,
   OrchestraQueryInput,
   OrchestraReplayEvent,
   OrchestraRunStatus,
@@ -90,17 +91,45 @@ export function buildWorkflowTreeQuery(input: {
   readonly selector: OrchestraQueryInput["selector"];
   readonly stepId?: string;
   readonly evidenceId?: string;
+  readonly after?: string;
+  readonly historyAfter?: OrchestraHistoryCursor;
 }): OrchestraQueryInput {
-  const { threadId, runId, selector, stepId, evidenceId } = input;
+  const { threadId, runId, selector, stepId, evidenceId, after, historyAfter } = input;
   return {
     threadId,
     runId,
     selector,
     ...(stepId ? { stepId } : {}),
     ...(evidenceId ? { evidenceId } : {}),
+    ...(after ? { after } : {}),
+    ...(historyAfter ? { historyAfter } : {}),
     maxItems: selector === "history" ? 30 : selector === "steps" ? 50 : 20,
     maxBytes: 64 * 1024,
   };
+}
+
+export function mergeWorkflowPage<T>(
+  current: ReadonlyArray<T>,
+  incoming: ReadonlyArray<T>,
+  identity: (item: T) => string,
+): T[] {
+  const byIdentity = new Map(current.map((item) => [identity(item), item]));
+  for (const item of incoming) byIdentity.set(identity(item), item);
+  return [...byIdentity.values()];
+}
+
+export function workflowContinuationAdvanced(
+  current: string | OrchestraHistoryCursor,
+  next: string | OrchestraHistoryCursor,
+): boolean {
+  if (typeof current === "string" || typeof next === "string") {
+    return typeof current === "string" && typeof next === "string" && current !== next;
+  }
+  return (
+    current.sequence !== next.sequence ||
+    current.itemId !== next.itemId ||
+    current.revision !== next.revision
+  );
 }
 
 export type EvidenceErrorState =

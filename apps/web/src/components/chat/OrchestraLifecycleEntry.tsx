@@ -5,6 +5,7 @@ import {
   type OrchestraEvidenceContentProjection,
   type OrchestraExecutionRunProjection,
   type OrchestraExecutionStepProjection,
+  type OrchestraHistoryCursor,
   type OrchestraHistoryRecord,
   type OrchestraOutputProjection,
   type OrchestraQueryInput,
@@ -35,8 +36,10 @@ import {
   compactWorkflowStepSummary,
   evidenceErrorState,
   formatBoundedOutputValue,
+  mergeWorkflowPage,
   preserveWorkflowStepOrder,
   workflowDetailDisplayState,
+  workflowContinuationAdvanced,
   workflowRunDisplayState,
   workflowStepKind,
   type WorkflowRunDisplayState,
@@ -60,6 +63,7 @@ const STATUS_PRESENTATION: Record<
 };
 
 type QuerySelector = OrchestraQueryInput["selector"];
+type QueryContinuation = string | OrchestraHistoryCursor;
 
 export function readOrchestraReplayEvent(value: unknown): OrchestraReplayEvent | null {
   return isReplayEvent(value) ? value : null;
@@ -115,12 +119,19 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   >({});
   const [expandedEvidence, setExpandedEvidence] = useState<ReadonlySet<string>>(() => new Set());
   const [history, setHistory] = useState<ReadonlyArray<OrchestraHistoryRecord> | null>(null);
-  const [continuations, setContinuations] = useState<ReadonlySet<string>>(() => new Set());
+  const [continuations, setContinuations] = useState<Readonly<Record<string, QueryContinuation>>>(
+    {},
+  );
   const [loading, setLoading] = useState<ReadonlySet<string>>(() => new Set());
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
 
   const load = useCallback(
-    async (selector: QuerySelector, stepId?: string, evidenceId?: string) => {
+    async (
+      selector: QuerySelector,
+      stepId?: string,
+      evidenceId?: string,
+      continuation?: QueryContinuation,
+    ) => {
       const key = `${selector}:${evidenceId ?? stepId ?? "run"}`;
       setLoading((current) => new Set(current).add(key));
       setErrors((current) => {
@@ -136,6 +147,10 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
           selector,
           ...(stepId ? { stepId } : {}),
           ...(evidenceId ? { evidenceId } : {}),
+          ...(typeof continuation === "string" ? { after: continuation } : {}),
+          ...(continuation && typeof continuation !== "string"
+            ? { historyAfter: continuation }
+            : {}),
         }),
       });
       setLoading((current) => {
@@ -154,25 +169,63 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
       }
 
       const response = result.value;
+      const updateContinuation = (next: QueryContinuation | null | undefined) => {
+        const nextAdvanced =
+          !next || !continuation || workflowContinuationAdvanced(continuation, next);
+        if (!nextAdvanced) {
+          setErrors((current) => ({
+            ...current,
+            [key]: "Native pagination did not advance; additional detail remains unavailable.",
+          }));
+        }
+        setContinuations((current) => {
+          if (next && nextAdvanced) return { ...current, [key]: next };
+          const updated = { ...current };
+          delete updated[key];
+          return updated;
+        });
+      };
       switch (response.selector) {
         case "run":
           setRun(response.result);
           break;
         case "steps":
-          setSteps(preserveWorkflowStepOrder(response.result.items));
-          if (response.result.next) setContinuations((current) => new Set(current).add(key));
+          setSteps((current) =>
+            continuation
+              ? mergeWorkflowPage(current ?? [], response.result.items, (step) => step.id)
+              : preserveWorkflowStepOrder(response.result.items),
+          );
+          updateContinuation(response.result.next);
           break;
         case "outputs":
           if (stepId) {
-            setOutputs((current) => ({ ...current, [stepId]: response.result.items }));
+            setOutputs((current) => ({
+              ...current,
+              [stepId]: continuation
+                ? mergeWorkflowPage(
+                    current[stepId] ?? [],
+                    response.result.items,
+                    (output) => output.name,
+                  )
+                : response.result.items,
+            }));
           }
-          if (response.result.next) setContinuations((current) => new Set(current).add(key));
+          updateContinuation(response.result.next);
           break;
         case "evidence":
           if (stepId) {
-            setEvidence((current) => ({ ...current, [stepId]: response.result.items }));
+            setEvidence((current) => ({
+              ...current,
+              [stepId]: continuation
+                ? mergeWorkflowPage(
+                    current[stepId] ?? [],
+                    response.result.items,
+                    (item) => item.evidenceId,
+                  )
+                : response.result.items,
+            }));
           }
-          if (response.result.next) setContinuations((current) => new Set(current).add(key));
+          updateContinuation(response.result.next);
           break;
         case "evidence_content":
           setEvidenceContent((current) => ({
@@ -181,8 +234,16 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
           }));
           break;
         case "history":
-          setHistory(response.result.items);
-          if (response.result.next) setContinuations((current) => new Set(current).add(key));
+          setHistory((current) =>
+            continuation
+              ? mergeWorkflowPage(
+                  current ?? [],
+                  response.result.items,
+                  (item) => `${item.sequence}:${item.itemId}:${item.revision}`,
+                )
+              : response.result.items,
+          );
+          updateContinuation(response.result.next);
           break;
         case "digest":
           break;
@@ -462,8 +523,29 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                           </div>
                         );
                       })}
-                      {continuations.has(outputKey) || continuations.has(evidenceKey) ? (
-                        <p>Additional step detail remains in the native runtime.</p>
+                      {continuations[outputKey] ? (
+                        <button
+                          type="button"
+                          className="rounded border border-border px-2 py-1 text-foreground/75 hover:bg-accent/30 disabled:opacity-50"
+                          disabled={loading.has(outputKey)}
+                          onClick={() =>
+                            load("outputs", step.id, undefined, continuations[outputKey])
+                          }
+                        >
+                          Load more outputs
+                        </button>
+                      ) : null}
+                      {continuations[evidenceKey] ? (
+                        <button
+                          type="button"
+                          className="rounded border border-border px-2 py-1 text-foreground/75 hover:bg-accent/30 disabled:opacity-50"
+                          disabled={loading.has(evidenceKey)}
+                          onClick={() =>
+                            load("evidence", step.id, undefined, continuations[evidenceKey])
+                          }
+                        >
+                          Load more Evidence
+                        </button>
                       ) : null}
                       {errors[outputKey] || errors[evidenceKey] ? (
                         <p className="flex items-start gap-1.5 text-destructive">
@@ -477,10 +559,15 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
               );
             })}
 
-            {continuations.has("steps:run") ? (
-              <p className="mt-2 text-muted-foreground">
-                Additional steps remain in the native runtime.
-              </p>
+            {continuations["steps:run"] ? (
+              <button
+                type="button"
+                className="mt-2 rounded border border-border px-2 py-1 text-muted-foreground hover:bg-accent/30 disabled:opacity-50"
+                disabled={loading.has("steps:run")}
+                onClick={() => load("steps", undefined, undefined, continuations["steps:run"])}
+              >
+                Load more steps
+              </button>
             ) : null}
 
             <div role="treeitem" aria-expanded={historyExpanded} className="mt-2">
@@ -508,8 +595,17 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                       <p>{item.summary}</p>
                     </div>
                   ))}
-                  {continuations.has("history:run") ? (
-                    <p>Earlier history remains in the native rollout.</p>
+                  {continuations["history:run"] ? (
+                    <button
+                      type="button"
+                      className="rounded border border-border px-2 py-1 text-muted-foreground hover:bg-accent/30 disabled:opacity-50"
+                      disabled={loading.has("history:run")}
+                      onClick={() =>
+                        load("history", undefined, undefined, continuations["history:run"])
+                      }
+                    >
+                      Load earlier history
+                    </button>
                   ) : null}
                   {errors["history:run"] ? (
                     <p className="flex items-start gap-1.5 text-destructive">

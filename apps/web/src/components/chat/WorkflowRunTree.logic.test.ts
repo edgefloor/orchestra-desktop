@@ -13,8 +13,10 @@ import {
   compactWorkflowStepSummary,
   formatBoundedOutputValue,
   evidenceErrorState,
+  mergeWorkflowPage,
   preserveWorkflowStepOrder,
   workflowDetailDisplayState,
+  workflowContinuationAdvanced,
   workflowRunDisplayState,
 } from "./WorkflowRunTree.logic";
 
@@ -105,6 +107,52 @@ describe("WorkflowRunTree logic", () => {
     const rendered = formatBoundedOutputValue({ value: "x".repeat(1_000) });
     expect(rendered).toHaveLength(MAX_INLINE_OUTPUT_CHARS);
     expect(rendered?.endsWith("…")).toBe(true);
+  });
+
+  it("passes opaque continuation cursors and merges overlapping native pages", () => {
+    expect(
+      buildWorkflowTreeQuery({
+        threadId: ThreadId.make("parent-task"),
+        runId: "run-1",
+        selector: "steps",
+        after: "step\u0000name",
+      }),
+    ).toMatchObject({ after: "step\u0000name" });
+    expect(
+      buildWorkflowTreeQuery({
+        threadId: ThreadId.make("parent-task"),
+        runId: "run-1",
+        selector: "history",
+        historyAfter: { sequence: 8, itemId: "item-8", revision: 2 },
+      }),
+    ).toMatchObject({
+      historyAfter: { sequence: 8, itemId: "item-8", revision: 2 },
+    });
+    expect(
+      mergeWorkflowPage(
+        [
+          { id: "first", value: 1 },
+          { id: "shared", value: 1 },
+        ],
+        [
+          { id: "shared", value: 2 },
+          { id: "last", value: 3 },
+        ],
+        (item) => item.id,
+      ),
+    ).toEqual([
+      { id: "first", value: 1 },
+      { id: "shared", value: 2 },
+      { id: "last", value: 3 },
+    ]);
+    expect(workflowContinuationAdvanced("cursor-1", "cursor-2")).toBe(true);
+    expect(workflowContinuationAdvanced("cursor-1", "cursor-1")).toBe(false);
+    expect(
+      workflowContinuationAdvanced(
+        { sequence: 8, itemId: "item-8", revision: 2 },
+        { sequence: 8, itemId: "item-8", revision: 2 },
+      ),
+    ).toBe(false);
   });
 
   it("requests evidence bodies only by opaque identity and projects provenance and integrity", () => {
