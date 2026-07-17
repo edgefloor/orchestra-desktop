@@ -34,6 +34,7 @@ import {
   buildWorkflowTreeQuery,
   compactEvidenceReference,
   compactWorkflowStepSummary,
+  evidenceContentDisplayState,
   evidenceErrorState,
   formatBoundedOutputValue,
   mergeWorkflowPage,
@@ -469,6 +470,9 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                         const itemExpanded = expandedEvidence.has(item.evidenceId);
                         const error = errors[contentKey];
                         const reference = compactEvidenceReference(item);
+                        const contentState = content
+                          ? evidenceContentDisplayState(item, content)
+                          : null;
                         return (
                           <div
                             className="rounded border border-border/40 p-2"
@@ -495,7 +499,9 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                             <div className="mt-1 flex flex-wrap gap-x-3 font-mono text-[10px]">
                               <span>id {reference.identity}</span>
                               <span>{item.bytes} bytes</span>
-                              <span>sha256 {reference.integrity}</span>
+                              <span className="break-all">
+                                runtime-reported sha256 {item.sha256 ?? "unavailable"}
+                              </span>
                             </div>
                             {itemExpanded ? (
                               <div className="mt-2 border-t border-border/35 pt-2">
@@ -508,13 +514,36 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                                   <p className="text-destructive">
                                     Evidence {evidenceErrorState(error).replaceAll("_", " ")}.
                                   </p>
-                                ) : content?.availability === "available" && content.content ? (
-                                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-2 font-mono text-[10px] text-foreground/75">
-                                    {content.content}
-                                  </pre>
-                                ) : content ? (
+                                ) : contentState?.kind === "text" && content ? (
+                                  <div>
+                                    <p className="mb-1 text-[10px] text-muted-foreground">
+                                      Plain-text preview · extension-declared {content.mediaType}
+                                    </p>
+                                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-2 font-mono text-[10px] text-foreground/75">
+                                      {contentState.content}
+                                    </pre>
+                                  </div>
+                                ) : contentState?.kind === "integrity_failure" ? (
+                                  <p className="text-destructive">
+                                    Evidence integrity changed since this reference was loaded;
+                                    content was not rendered.
+                                  </p>
+                                ) : contentState?.kind === "unsupported_media" && content ? (
                                   <p>
-                                    Evidence {content.availability.replaceAll("_", " ")} ·{" "}
+                                    Evidence media type {content.mediaType} is not rendered inline.
+                                  </p>
+                                ) : contentState?.kind === "empty" && content ? (
+                                  <p>Empty evidence · extension-declared {content.mediaType}</p>
+                                ) : contentState?.kind === "content_too_large" && content ? (
+                                  <p>
+                                    Preview exceeds the native evidence or response budget ·{" "}
+                                    {content.mediaType}
+                                  </p>
+                                ) : contentState?.kind === "malformed" && content ? (
+                                  <p>Evidence is not valid UTF-8 text · {content.mediaType}</p>
+                                ) : contentState && content ? (
+                                  <p>
+                                    Evidence {contentState.kind.replaceAll("_", " ")} ·{" "}
                                     {content.mediaType}
                                   </p>
                                 ) : null}

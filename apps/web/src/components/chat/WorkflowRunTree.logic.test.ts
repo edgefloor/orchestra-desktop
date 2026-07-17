@@ -11,6 +11,7 @@ import {
   buildWorkflowTreeQuery,
   compactEvidenceReference,
   compactWorkflowStepSummary,
+  evidenceContentDisplayState,
   formatBoundedOutputValue,
   evidenceErrorState,
   mergeWorkflowPage,
@@ -185,7 +186,6 @@ describe("WorkflowRunTree logic", () => {
     ).toEqual({
       identity: "1234567890ab",
       provenance: "runtime check",
-      integrity: "abcdef0123456789",
       availability: "available",
     });
   });
@@ -193,7 +193,62 @@ describe("WorkflowRunTree logic", () => {
   it("maps native evidence failures without exposing paths", () => {
     expect(evidenceErrorState("query is not authorized for this task")).toBe("unauthorized");
     expect(evidenceErrorState("execution record was not found")).toBe("missing_or_expired");
-    expect(evidenceErrorState("query identity is invalid")).toBe("malformed");
+    expect(evidenceErrorState("query identity is invalid")).toBe("invalid_reference");
+    expect(evidenceErrorState("evidence digest mismatch")).toBe("integrity_failure");
     expect(evidenceErrorState("transport closed")).toBe("unavailable");
+  });
+
+  it("renders only integrity-matched declared textual Evidence", () => {
+    const reference = {
+      evidenceId: "evidence-1",
+      name: "result.json",
+      kind: "check" as const,
+      provenance: "runtime_check" as const,
+      stepId: "build",
+      bytes: 2,
+      sha256: "digest-1",
+      availability: "available" as const,
+    };
+    const content = {
+      evidenceId: "evidence-1",
+      name: "result.json",
+      kind: "check" as const,
+      provenance: "runtime_check" as const,
+      availability: "available" as const,
+      bytes: 2,
+      sha256: "digest-1",
+      mediaType: "application/json; charset=utf-8",
+      content: "{}",
+    };
+
+    expect(evidenceContentDisplayState(reference, content)).toEqual({
+      kind: "text",
+      content: "{}",
+    });
+    expect(
+      evidenceContentDisplayState(reference, { ...content, sha256: "changed-digest" }),
+    ).toEqual({ kind: "integrity_failure" });
+    expect(
+      evidenceContentDisplayState(reference, {
+        ...content,
+        mediaType: "application/octet-stream",
+      }),
+    ).toEqual({ kind: "unsupported_media" });
+    expect(
+      evidenceContentDisplayState(reference, {
+        ...content,
+        availability: "content_too_large",
+        content: null,
+      }),
+    ).toEqual({ kind: "content_too_large" });
+    expect(evidenceContentDisplayState(reference, { ...content, bytes: 0, content: "" })).toEqual({
+      kind: "integrity_failure",
+    });
+    expect(
+      evidenceContentDisplayState(
+        { ...reference, bytes: 0, sha256: "empty-digest" },
+        { ...content, bytes: 0, sha256: "empty-digest", content: "" },
+      ),
+    ).toEqual({ kind: "empty" });
   });
 });

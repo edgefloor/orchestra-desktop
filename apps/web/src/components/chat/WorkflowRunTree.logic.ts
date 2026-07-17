@@ -1,5 +1,6 @@
 import type {
   OrchestraEvidenceReference,
+  OrchestraEvidenceContentProjection,
   OrchestraExecutionStepProjection,
   OrchestraHistoryCursor,
   OrchestraQueryInput,
@@ -135,6 +136,8 @@ export function workflowContinuationAdvanced(
 export type EvidenceErrorState =
   | "missing_or_expired"
   | "unauthorized"
+  | "integrity_failure"
+  | "invalid_reference"
   | "malformed"
   | "unavailable";
 
@@ -146,20 +149,63 @@ export function evidenceErrorState(message: string): EvidenceErrorState {
   if (normalized.includes("not found") || normalized.includes("expired")) {
     return "missing_or_expired";
   }
-  if (normalized.includes("invalid") || normalized.includes("malformed")) return "malformed";
+  if (
+    normalized.includes("integrity") ||
+    normalized.includes("checksum") ||
+    normalized.includes("digest mismatch") ||
+    normalized.includes("corrupt")
+  ) {
+    return "integrity_failure";
+  }
+  if (normalized.includes("invalid")) return "invalid_reference";
+  if (normalized.includes("malformed")) return "malformed";
   return "unavailable";
+}
+
+export type EvidenceContentDisplayState =
+  | { readonly kind: "text"; readonly content: string }
+  | { readonly kind: "empty" }
+  | { readonly kind: "content_too_large" }
+  | { readonly kind: "malformed" }
+  | { readonly kind: "integrity_failure" }
+  | { readonly kind: "unsupported_media" };
+
+function evidenceMediaTypeIsText(mediaType: string): boolean {
+  const normalized = mediaType.toLowerCase().split(";", 1)[0]?.trim() ?? "";
+  return ["application/json", "text/markdown", "text/plain", "text/x-diff"].includes(normalized);
+}
+
+export function evidenceContentDisplayState(
+  reference: OrchestraEvidenceReference,
+  content: OrchestraEvidenceContentProjection,
+): EvidenceContentDisplayState {
+  if (
+    reference.evidenceId !== content.evidenceId ||
+    reference.name !== content.name ||
+    reference.bytes !== content.bytes ||
+    reference.kind !== content.kind ||
+    reference.provenance !== content.provenance ||
+    (reference.sha256 ?? null) !== (content.sha256 ?? null)
+  ) {
+    return { kind: "integrity_failure" };
+  }
+  if (content.availability === "content_too_large") return { kind: "content_too_large" };
+  if (content.availability === "malformed" || typeof content.content !== "string") {
+    return { kind: "malformed" };
+  }
+  if (!evidenceMediaTypeIsText(content.mediaType)) return { kind: "unsupported_media" };
+  if (content.content.length === 0) return { kind: "empty" };
+  return { kind: "text", content: content.content };
 }
 
 export function compactEvidenceReference(item: OrchestraEvidenceReference): {
   readonly identity: string;
   readonly provenance: string;
-  readonly integrity: string;
   readonly availability: string;
 } {
   return {
     identity: item.evidenceId.slice(0, 12),
     provenance: item.provenance.replaceAll("_", " "),
-    integrity: item.sha256 ? item.sha256.slice(0, 16) : "unavailable",
     availability: item.availability.replaceAll("_", " "),
   };
 }
