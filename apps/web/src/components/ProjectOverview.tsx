@@ -2,17 +2,28 @@ import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
+import {
+  scopedProjectKey,
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime/environment";
 import { AlertCircleIcon, ListTodoIcon, PlusIcon, WorkflowIcon, ZapIcon } from "lucide-react";
+import { useEffect, useMemo } from "react";
 
 import { cn } from "~/lib/utils";
+import { useWorkspaceTaskTabsStore } from "~/workspaceTaskTabsStore";
 
 import { Button } from "./ui/button";
 import { deriveProjectOverviewSummary } from "./ProjectOverview.logic";
 import { WorkspaceTaskTabs } from "./WorkspaceTaskTabs";
 import {
   resolveWorkspaceTaskTabStatus,
+  workspaceTaskTabKey,
   type WorkspaceTaskTabStatus,
 } from "./WorkspaceTaskTabs.logic";
+
+const EMPTY_CLOSED_TASK_KEYS: ReadonlyArray<string> = Object.freeze([]);
 
 interface ProjectOverviewProps {
   readonly project: EnvironmentProject;
@@ -49,11 +60,33 @@ function SummaryCard(props: {
 
 export function ProjectOverview({ project, tasks, onSelectTask, onNewTask }: ProjectOverviewProps) {
   const summary = deriveProjectOverviewSummary(tasks);
+  const projectKey = scopedProjectKey(scopeProjectRef(project.environmentId, project.id));
+  const closedTaskKeys = useWorkspaceTaskTabsStore(
+    (state) => state.closedTaskKeysByProject[projectKey] ?? EMPTY_CLOSED_TASK_KEYS,
+  );
+  const closedTaskKeySet = useMemo(() => new Set(closedTaskKeys), [closedTaskKeys]);
+  const visibleTabTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          !closedTaskKeySet.has(scopedThreadKey(scopeThreadRef(task.environmentId, task.id))),
+      ),
+    [closedTaskKeySet, tasks],
+  );
+
+  useEffect(() => {
+    useWorkspaceTaskTabsStore.getState().reconcileProject(
+      projectKey,
+      tasks
+        .filter((task) => task.archivedAt === null)
+        .map((task) => scopedThreadKey(scopeThreadRef(task.environmentId, task.id))),
+    );
+  }, [projectKey, tasks]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       <WorkspaceTaskTabs
-        tasks={tasks}
+        tasks={visibleTabTasks}
         activeTaskKey={null}
         projectOverview={{ title: "Overview", active: true, onSelect: () => undefined }}
         onSelectTask={(selectedTask) => {
@@ -64,6 +97,9 @@ export function ProjectOverview({ project, tasks, onSelectTask, onNewTask }: Pro
           );
           if (task) onSelectTask(task);
         }}
+        onCloseTask={(task) =>
+          useWorkspaceTaskTabsStore.getState().closeTask(projectKey, workspaceTaskTabKey(task))
+        }
         onNewTask={onNewTask}
       />
       <header className="workspace-topbar border-b border-border px-4 sm:px-6">

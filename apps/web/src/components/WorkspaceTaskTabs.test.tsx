@@ -25,6 +25,7 @@ describe("WorkspaceTaskTabs", () => {
         tasks={[task("other", "Other task"), activeTask]}
         activeTaskKey={workspaceTaskTabKey(activeTask)}
         onSelectTask={vi.fn()}
+        onCloseTask={vi.fn()}
         onNewTask={vi.fn()}
       />,
     );
@@ -33,6 +34,7 @@ describe("WorkspaceTaskTabs", () => {
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('aria-selected="true"');
     expect(markup).toContain("Active task");
+    expect(markup).toContain('aria-label="Close Active task"');
     expect(markup).toContain('aria-label="New task"');
   });
 

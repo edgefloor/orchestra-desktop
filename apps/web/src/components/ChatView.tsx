@@ -27,6 +27,7 @@ import {
 } from "@t3tools/client-runtime/connection";
 import {
   parseScopedThreadKey,
+  scopedProjectKey,
   scopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
@@ -212,7 +213,13 @@ import { NativeSubagentsPanel } from "./chat/NativeSubagentsPanel";
 import { AutomationWorkspace } from "./chat/AutomationProfileDialog";
 import { TaskAttentionView } from "./chat/TaskAttentionView";
 import { WorkspaceTaskTabs } from "./WorkspaceTaskTabs";
-import type { WorkspaceTaskTabSource } from "./WorkspaceTaskTabs.logic";
+import {
+  buildWorkspaceTaskTabs,
+  resolveWorkspaceTaskCloseFallback,
+  workspaceTaskTabKey,
+  type WorkspaceTaskTabSource,
+} from "./WorkspaceTaskTabs.logic";
+import { useWorkspaceTaskTabsStore } from "../workspaceTaskTabsStore";
 import {
   WorkspaceContextRail,
   WorkspaceTaskContextBar,
@@ -275,6 +282,7 @@ const PreviewPanel = lazy(() =>
 const DiffPanel = lazy(() => import("./DiffPanel"));
 const FilePreviewPanel = lazy(() => import("./files/FilePreviewPanel"));
 const EMPTY_PENDING_FILE_SURFACE_IDS: ReadonlySet<string> = new Set();
+const EMPTY_CLOSED_WORKSPACE_TASK_KEYS: ReadonlyArray<string> = Object.freeze([]);
 const TYPE_TO_FOCUS_EDITABLE_SELECTOR = [
   "input",
   "textarea",
@@ -1427,6 +1435,16 @@ function ChatViewContent(props: ChatViewProps) {
     ? scopeProjectRef(activeThread.environmentId, activeThread.projectId)
     : null;
   const activeProject = useProject(activeProjectRef);
+  const workspaceProjectKey = activeProjectRef ? scopedProjectKey(activeProjectRef) : null;
+  const closedWorkspaceTaskKeys = useWorkspaceTaskTabsStore((state) =>
+    workspaceProjectKey
+      ? (state.closedTaskKeysByProject[workspaceProjectKey] ?? EMPTY_CLOSED_WORKSPACE_TASK_KEYS)
+      : EMPTY_CLOSED_WORKSPACE_TASK_KEYS,
+  );
+  const closedWorkspaceTaskKeySet = useMemo(
+    () => new Set(closedWorkspaceTaskKeys),
+    [closedWorkspaceTaskKeys],
+  );
   const workspaceTaskSources = useMemo<WorkspaceTaskTabSource[]>(() => {
     if (!activeThread) return [];
     const projectTasks = serverThreadShells.filter(
@@ -1440,10 +1458,36 @@ function ChatViewContent(props: ChatViewProps) {
           scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) === activeThreadKey,
       )
     ) {
-      return projectTasks;
+      return projectTasks.filter(
+        (thread) =>
+          !closedWorkspaceTaskKeySet.has(
+            scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+          ),
+      );
     }
-    return [activeThread, ...projectTasks];
-  }, [activeThread, activeThreadKey, serverThreadShells]);
+    return [activeThread, ...projectTasks].filter(
+      (thread) =>
+        !closedWorkspaceTaskKeySet.has(
+          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+        ),
+    );
+  }, [activeThread, activeThreadKey, closedWorkspaceTaskKeySet, serverThreadShells]);
+  useEffect(() => {
+    if (!workspaceProjectKey || !activeThreadKey) return;
+    useWorkspaceTaskTabsStore.getState().reopenTask(workspaceProjectKey, activeThreadKey);
+  }, [activeThreadKey, workspaceProjectKey]);
+  useEffect(() => {
+    if (!workspaceProjectKey || !activeThread) return;
+    const validTaskKeys = serverThreadShells
+      .filter(
+        (thread) =>
+          thread.environmentId === activeThread.environmentId &&
+          thread.projectId === activeThread.projectId &&
+          thread.archivedAt === null,
+      )
+      .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)));
+    useWorkspaceTaskTabsStore.getState().reconcileProject(workspaceProjectKey, validTaskKeys);
+  }, [activeThread, serverThreadShells, workspaceProjectKey]);
   const handleSelectWorkspaceTask = useCallback(
     (task: WorkspaceTaskTabSource) => {
       const taskRef = scopeThreadRef(task.environmentId, task.id);
@@ -1466,6 +1510,34 @@ function ChatViewContent(props: ChatViewProps) {
       params: buildProjectRouteParams(activeProjectRef),
     });
   }, [activeProjectRef, navigate]);
+  const handleCloseWorkspaceTask = useCallback(
+    (task: WorkspaceTaskTabSource) => {
+      if (!workspaceProjectKey) return;
+      const taskKey = workspaceTaskTabKey(task);
+      const visibleTasks = buildWorkspaceTaskTabs({
+        tasks: workspaceTaskSources,
+        activeTaskKey: activeThreadKey,
+      });
+      useWorkspaceTaskTabsStore.getState().closeTask(workspaceProjectKey, taskKey);
+      if (taskKey !== activeThreadKey) return;
+      const fallbackTask = resolveWorkspaceTaskCloseFallback({
+        visibleTasks,
+        closingTaskKey: taskKey,
+      });
+      if (fallbackTask) {
+        handleSelectWorkspaceTask(fallbackTask);
+      } else {
+        handleSelectProjectOverview();
+      }
+    },
+    [
+      activeThreadKey,
+      handleSelectProjectOverview,
+      handleSelectWorkspaceTask,
+      workspaceProjectKey,
+      workspaceTaskSources,
+    ],
+  );
   const activeEnvironmentShell = useEnvironmentQuery(
     activeThread ? environmentShell.stateAtom(activeThread.environmentId) : null,
   );
@@ -5111,6 +5183,7 @@ function ChatViewContent(props: ChatViewProps) {
             onSelect: handleSelectProjectOverview,
           }}
           onSelectTask={handleSelectWorkspaceTask}
+          onCloseTask={handleCloseWorkspaceTask}
           onNewTask={handleNewWorkspaceTask}
         />
 

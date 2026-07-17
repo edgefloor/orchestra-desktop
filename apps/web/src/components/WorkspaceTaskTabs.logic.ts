@@ -87,3 +87,14 @@ export function resolveWorkspaceTaskTabNavigation(input: {
     tabCount: input.taskCount,
   });
 }
+
+export function resolveWorkspaceTaskCloseFallback(input: {
+  readonly visibleTasks: ReadonlyArray<WorkspaceTaskTabSource>;
+  readonly closingTaskKey: string;
+}): WorkspaceTaskTabSource | null {
+  const closingIndex = input.visibleTasks.findIndex(
+    (task) => workspaceTaskTabKey(task) === input.closingTaskKey,
+  );
+  if (closingIndex < 0) return null;
+  return input.visibleTasks[closingIndex + 1] ?? input.visibleTasks[closingIndex - 1] ?? null;
+}

@@ -1,4 +1,4 @@
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, XIcon } from "lucide-react";
 import { memo, useMemo, useRef, type KeyboardEvent } from "react";
 
 import { cn } from "~/lib/utils";
@@ -31,6 +31,7 @@ interface WorkspaceTaskTabsProps {
     readonly onSelect: () => void;
   };
   readonly onSelectTask: (task: WorkspaceTaskTabSource) => void;
+  readonly onCloseTask?: (task: WorkspaceTaskTabSource) => void;
   readonly onNewTask: () => void;
 }
 
@@ -39,6 +40,7 @@ export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
   activeTaskKey,
   projectOverview,
   onSelectTask,
+  onCloseTask,
   onNewTask,
 }: WorkspaceTaskTabsProps) {
   const tabListRef = useRef<HTMLDivElement>(null);
@@ -106,36 +108,60 @@ export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
           const active = taskKey === activeTaskKey;
           const status = STATUS_PRESENTATION[resolveWorkspaceTaskTabStatus(task)];
           return (
-            <button
+            <div
               key={taskKey}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              tabIndex={active ? 0 : -1}
-              title={task.title}
               className={cn(
-                "group relative flex w-36 shrink-0 items-center gap-2 border-r border-border px-3 text-left text-xs text-muted-foreground outline-hidden transition-[width,color,background-color] hover:bg-background hover:text-foreground focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                "group relative flex w-36 shrink-0 items-stretch border-r border-border text-xs text-muted-foreground transition-[width,color,background-color] hover:bg-background hover:text-foreground",
                 active &&
                   "w-44 bg-background font-medium text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary",
               )}
-              onClick={() => onSelectTask(task)}
-              onKeyDown={(event) => handleKeyDown(event, index + (projectOverview ? 1 : 0))}
             >
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <span
-                      aria-label={status.label}
-                      className="inline-flex size-3 shrink-0 items-center justify-center"
-                    />
+              <button
+                type="button"
+                role="tab"
+                aria-selected={active}
+                tabIndex={active ? 0 : -1}
+                title={task.title}
+                className="flex min-w-0 flex-1 items-center gap-2 px-3 text-left outline-hidden focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                onClick={() => onSelectTask(task)}
+                onKeyDown={(event) => {
+                  if (event.key === "Delete" && onCloseTask) {
+                    event.preventDefault();
+                    onCloseTask(task);
+                    return;
                   }
+                  handleKeyDown(event, index + (projectOverview ? 1 : 0));
+                }}
+              >
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span
+                        aria-label={status.label}
+                        className="inline-flex size-3 shrink-0 items-center justify-center"
+                      />
+                    }
+                  >
+                    <span className={cn("size-1.5 rounded-full", status.className)} />
+                  </TooltipTrigger>
+                  <TooltipPopup side="bottom">{status.label}</TooltipPopup>
+                </Tooltip>
+                <span className="min-w-0 flex-1 truncate">{task.title}</span>
+              </button>
+              {onCloseTask ? (
+                <button
+                  type="button"
+                  aria-label={`Close ${task.title}`}
+                  className={cn(
+                    "mr-1 flex w-5 shrink-0 items-center justify-center self-stretch rounded text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    active ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100",
+                  )}
+                  onClick={() => onCloseTask(task)}
                 >
-                  <span className={cn("size-1.5 rounded-full", status.className)} />
-                </TooltipTrigger>
-                <TooltipPopup side="bottom">{status.label}</TooltipPopup>
-              </Tooltip>
-              <span className="min-w-0 flex-1 truncate">{task.title}</span>
-            </button>
+                  <XIcon className="size-3" />
+                </button>
+              ) : null}
+            </div>
           );
         })}
       </div>

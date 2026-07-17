@@ -3,6 +3,7 @@ import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 
 import {
   buildWorkspaceTaskTabs,
+  resolveWorkspaceTaskCloseFallback,
   resolveWorkspaceTaskTabNavigation,
   resolveWorkspaceTaskTabStatus,
   workspaceTaskTabKey,
@@ -84,6 +85,32 @@ describe("workspace task tabs", () => {
     );
     expect(
       resolveWorkspaceTaskTabNavigation({ currentIndex: 1, key: "Enter", taskCount: 3 }),
+    ).toBeNull();
+  });
+
+  it("selects the right neighbor, then left, when closing a task tab", () => {
+    const tasks = [
+      task("first", "2026-07-17T00:00:00.000Z"),
+      task("middle", "2026-07-17T00:00:00.000Z"),
+      task("last", "2026-07-17T00:00:00.000Z"),
+    ];
+    expect(
+      resolveWorkspaceTaskCloseFallback({
+        visibleTasks: tasks,
+        closingTaskKey: workspaceTaskTabKey(tasks[1]!),
+      })?.id,
+    ).toBe(ThreadId.make("last"));
+    expect(
+      resolveWorkspaceTaskCloseFallback({
+        visibleTasks: tasks,
+        closingTaskKey: workspaceTaskTabKey(tasks[2]!),
+      })?.id,
+    ).toBe(ThreadId.make("middle"));
+    expect(
+      resolveWorkspaceTaskCloseFallback({
+        visibleTasks: [tasks[0]!],
+        closingTaskKey: workspaceTaskTabKey(tasks[0]!),
+      }),
     ).toBeNull();
   });
 });
