@@ -162,6 +162,8 @@ describe("redesigned native workspace dogfood contract", () => {
     expect(
       deriveTaskAttention({
         approvals: [],
+        pendingUserInputs: [],
+        actionableProposedPlan: null,
         workLogEntries: [workLog(waiting)],
         automationRun: null,
         providerError: null,
@@ -187,6 +189,8 @@ describe("redesigned native workspace dogfood contract", () => {
     expect(
       deriveTaskAttention({
         approvals: [],
+        pendingUserInputs: [],
+        actionableProposedPlan: null,
         workLogEntries: [workLog(waiting), workLog(workflowEvent(2, "completed"))],
         automationRun: null,
         providerError: null,

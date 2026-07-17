@@ -7,7 +7,13 @@ import {
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
-import type { PendingApproval, WorkLogEntry } from "../../session-logic";
+import type {
+  LatestProposedPlanState,
+  PendingApproval,
+  PendingUserInput,
+  WorkLogEntry,
+} from "../../session-logic";
+import { proposedPlanTitle } from "../../proposedPlan";
 import { automationRunStorageKey } from "./AutomationProfileDialog.logic";
 
 export const MAX_ATTENTION_ITEMS = 12;
@@ -15,7 +21,12 @@ export const MAX_ATTENTION_DETAIL_CHARS = 480;
 
 export type TaskAttentionKind =
   | "approval"
+  | "user_input"
+  | "proposed_plan"
   | "waiting_gate"
+  | "workflow_failure"
+  | "workflow_recovery"
+  | "automation_gate"
   | "ambiguous_effect"
   | "reconciliation_failure"
   | "provider_failure";
@@ -49,7 +60,9 @@ export interface TaskAttentionProjection {
 
 export type TaskAttentionActionRoute =
   | "native_approval"
-  | "workflow_approval"
+  | "composer_attention"
+  | "plan_workspace"
+  | "workflow_workspace"
   | "automation_workspace"
   | "none";
 
@@ -62,10 +75,24 @@ export function readTaskAttentionRunCursor(
 }
 
 export function taskAttentionActionRoute(item: TaskAttentionItem): TaskAttentionActionRoute {
-  if (item.requestId) return "native_approval";
-  if (item.stepId) return "workflow_approval";
-  if (item.runId) return "automation_workspace";
-  return "none";
+  switch (item.kind) {
+    case "user_input":
+      return "composer_attention";
+    case "proposed_plan":
+      return "plan_workspace";
+    case "approval":
+      return "native_approval";
+    case "waiting_gate":
+    case "workflow_failure":
+    case "workflow_recovery":
+      return "workflow_workspace";
+    case "automation_gate":
+    case "ambiguous_effect":
+    case "reconciliation_failure":
+      return "automation_workspace";
+    case "provider_failure":
+      return "none";
+  }
 }
 
 const isReplayEvent = Schema.is(OrchestraReplayEvent);
@@ -110,11 +137,24 @@ function approvalSummary(approval: PendingApproval): string {
 
 export function deriveTaskAttention(input: {
   readonly approvals: ReadonlyArray<PendingApproval>;
+  readonly pendingUserInputs: ReadonlyArray<PendingUserInput>;
+  readonly actionableProposedPlan: LatestProposedPlanState | null;
   readonly workLogEntries: ReadonlyArray<WorkLogEntry>;
   readonly automationRun: AutomationRun | null;
   readonly providerError: string | null;
 }): TaskAttentionProjection {
   const items: TaskAttentionItem[] = [];
+
+  for (const pending of input.pendingUserInputs) {
+    const question = pending.questions[0];
+    items.push({
+      id: `user-input:${pending.requestId}`,
+      kind: "user_input",
+      title: question?.header ? `Input requested · ${question.header}` : "Input requested",
+      summary: bounded(question?.question ?? "The native task is waiting for your input."),
+      requestId: pending.requestId,
+    });
+  }
 
   for (const approval of input.approvals) {
     items.push({
@@ -127,8 +167,47 @@ export function deriveTaskAttention(input: {
   }
 
   for (const event of latestWorkflowEvents(input.workLogEntries)) {
-    for (const step of event.projection.steps) {
-      if (step.status !== "waitingApproval") continue;
+    const failedSteps = event.projection.steps.filter((step) => step.status === "failed");
+    const waitingSteps = event.projection.steps.filter((step) => step.status === "waitingApproval");
+    if (event.projection.status === "failed") {
+      const firstFailedStep = failedSteps[0];
+      items.push({
+        id: `workflow:${event.runId}:failed`,
+        kind: "workflow_failure",
+        title: firstFailedStep ? `Workflow failed · ${firstFailedStep.id}` : "Workflow Run failed",
+        summary: bounded(event.projection.nextAction),
+        status: event.projection.status,
+        runId: event.runId,
+        ...(firstFailedStep ? { stepId: firstFailedStep.id } : {}),
+      });
+    } else {
+      for (const step of failedSteps) {
+        items.push({
+          id: `workflow:${event.runId}:failed:${step.id}`,
+          kind: "workflow_failure",
+          title: `Workflow step failed · ${step.id}`,
+          summary: bounded(event.projection.nextAction),
+          status: step.status,
+          runId: event.runId,
+          stepId: step.id,
+        });
+      }
+    }
+    if (
+      event.kind === "recovered" &&
+      event.projection.status === "running" &&
+      waitingSteps.length === 0
+    ) {
+      items.push({
+        id: `workflow:${event.runId}:recovering`,
+        kind: "workflow_recovery",
+        title: "Workflow Run recovering",
+        summary: bounded(event.projection.nextAction),
+        status: event.projection.status,
+        runId: event.runId,
+      });
+    }
+    for (const step of waitingSteps) {
       items.push({
         id: `workflow:${event.runId}:${step.id}`,
         kind: "waiting_gate",
@@ -139,6 +218,17 @@ export function deriveTaskAttention(input: {
         stepId: step.id,
       });
     }
+  }
+
+  if (input.actionableProposedPlan) {
+    items.push({
+      id: `proposed-plan:${input.actionableProposedPlan.id}`,
+      kind: "proposed_plan",
+      title:
+        proposedPlanTitle(input.actionableProposedPlan.planMarkdown) ??
+        "Plan ready for implementation",
+      summary: bounded(input.actionableProposedPlan.planMarkdown),
+    });
   }
 
   const automationRun = input.automationRun;
@@ -159,7 +249,7 @@ export function deriveTaskAttention(input: {
         if (effect.status === "waiting_gate") {
           items.push({
             id: `automation:${automationRun.runId}:${claim.claimId}:${effect.effectId}`,
-            kind: "waiting_gate",
+            kind: "automation_gate",
             title: `${effect.kind} gate · ${claim.issueIdentifier}`,
             summary: bounded(effect.bodyPreview.text),
             status: effect.status,
@@ -193,11 +283,16 @@ export function deriveTaskAttention(input: {
   }
 
   const priority: Record<TaskAttentionKind, number> = {
-    approval: 0,
-    reconciliation_failure: 1,
-    ambiguous_effect: 2,
-    waiting_gate: 3,
-    provider_failure: 4,
+    user_input: 0,
+    approval: 1,
+    workflow_failure: 2,
+    reconciliation_failure: 3,
+    ambiguous_effect: 4,
+    waiting_gate: 5,
+    automation_gate: 6,
+    workflow_recovery: 7,
+    proposed_plan: 8,
+    provider_failure: 9,
   };
   items.sort(
     (left, right) => priority[left.kind] - priority[right.kind] || left.id.localeCompare(right.id),

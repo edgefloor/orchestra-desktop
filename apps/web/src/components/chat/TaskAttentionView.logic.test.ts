@@ -6,7 +6,12 @@ import {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import type { PendingApproval, WorkLogEntry } from "../../session-logic";
+import type {
+  LatestProposedPlanState,
+  PendingApproval,
+  PendingUserInput,
+  WorkLogEntry,
+} from "../../session-logic";
 import {
   MAX_ATTENTION_ITEMS,
   buildAttentionWorkflowQuery,
@@ -16,14 +21,18 @@ import {
   taskAttentionActionRoute,
 } from "./TaskAttentionView.logic";
 
-function workflowEvent(revision: number, status: "waitingApproval" | "completed"): WorkLogEntry {
+function workflowEvent(
+  revision: number,
+  status: "waitingApproval" | "completed" | "failed" | "running",
+  kind: OrchestraReplayEvent["kind"] = revision > 1 ? "resumed" : "invoked",
+): WorkLogEntry {
   const event: OrchestraReplayEvent = {
     schemaVersion: 1,
     eventId: `run-1:${revision}`,
     runId: "run-1",
     sequence: revision,
     revision,
-    kind: revision > 1 ? "resumed" : "invoked",
+    kind,
     projection: {
       schemaVersion: 1,
       runId: "run-1",
@@ -43,7 +52,14 @@ function workflowEvent(revision: number, status: "waitingApproval" | "completed"
           error: null,
         },
       ],
-      nextAction: status === "waitingApproval" ? "Approve the publish step" : "Run complete",
+      nextAction:
+        status === "waitingApproval"
+          ? "Approve the publish step"
+          : status === "failed"
+            ? "Repair the publish step"
+            : status === "running"
+              ? "Continue the recovered Run"
+              : "Run complete",
     },
   };
   return {
@@ -136,6 +152,8 @@ describe("deriveTaskAttention", () => {
     ];
     const result = deriveTaskAttention({
       approvals,
+      pendingUserInputs: [],
+      actionableProposedPlan: null,
       workLogEntries: [workflowEvent(1, "waitingApproval")],
       automationRun: automationRun(),
       providerError: "Provider disconnected",
@@ -147,7 +165,7 @@ describe("deriveTaskAttention", () => {
       "reconciliation_failure",
       "ambiguous_effect",
       "waiting_gate",
-      "waiting_gate",
+      "automation_gate",
       "provider_failure",
     ]);
     expect(result.omitted).toBe(0);
@@ -156,12 +174,92 @@ describe("deriveTaskAttention", () => {
   it("uses only the latest native workflow revision and removes resolved gates", () => {
     const result = deriveTaskAttention({
       approvals: [],
+      pendingUserInputs: [],
+      actionableProposedPlan: null,
       workLogEntries: [workflowEvent(1, "waitingApproval"), workflowEvent(2, "completed")],
       automationRun: null,
       providerError: null,
     });
 
     expect(result).toEqual({ count: 0, items: [], omitted: 0 });
+  });
+
+  it("derives canonical input and actionable-plan attention without duplicating their controls", () => {
+    const pendingUserInputs: PendingUserInput[] = [
+      {
+        requestId: ApprovalRequestId.make("input-49"),
+        createdAt: "2026-07-17T00:00:00.000Z",
+        questions: [
+          {
+            id: "scope",
+            header: "Scope",
+            question: "Which slice should be implemented next?",
+            options: [],
+            multiSelect: false,
+          },
+        ],
+      },
+    ];
+    const actionableProposedPlan: LatestProposedPlanState = {
+      id: "plan-49",
+      createdAt: "2026-07-17T00:00:00.000Z",
+      updatedAt: "2026-07-17T00:00:01.000Z",
+      turnId: null,
+      planMarkdown: "# Complete Attention\n\nWire canonical routes.",
+      implementedAt: null,
+      implementationThreadId: null,
+    };
+
+    const result = deriveTaskAttention({
+      approvals: [],
+      pendingUserInputs,
+      actionableProposedPlan,
+      workLogEntries: [],
+      automationRun: null,
+      providerError: null,
+    });
+
+    expect(result.items).toMatchObject([
+      { kind: "user_input", title: "Input requested · Scope", requestId: "input-49" },
+      { kind: "proposed_plan", title: "Complete Attention" },
+    ]);
+  });
+
+  it("surfaces failed and recovered Workflow Runs while later terminal state clears them", () => {
+    const failed = deriveTaskAttention({
+      approvals: [],
+      pendingUserInputs: [],
+      actionableProposedPlan: null,
+      workLogEntries: [workflowEvent(1, "failed")],
+      automationRun: null,
+      providerError: null,
+    });
+    const recovered = deriveTaskAttention({
+      approvals: [],
+      pendingUserInputs: [],
+      actionableProposedPlan: null,
+      workLogEntries: [workflowEvent(2, "running", "recovered")],
+      automationRun: null,
+      providerError: null,
+    });
+    const completed = deriveTaskAttention({
+      approvals: [],
+      pendingUserInputs: [],
+      actionableProposedPlan: null,
+      workLogEntries: [
+        workflowEvent(1, "failed"),
+        workflowEvent(2, "running", "recovered"),
+        workflowEvent(3, "completed"),
+      ],
+      automationRun: null,
+      providerError: null,
+    });
+
+    expect(failed.items).toMatchObject([
+      { kind: "workflow_failure", runId: "run-1", stepId: "publish" },
+    ]);
+    expect(recovered.items).toMatchObject([{ kind: "workflow_recovery", runId: "run-1" }]);
+    expect(completed).toEqual({ count: 0, items: [], omitted: 0 });
   });
 
   it("bounds the list without changing the canonical count", () => {
@@ -172,6 +270,8 @@ describe("deriveTaskAttention", () => {
     }));
     const result = deriveTaskAttention({
       approvals,
+      pendingUserInputs: [],
+      actionableProposedPlan: null,
       workLogEntries: [],
       automationRun: null,
       providerError: null,
@@ -258,7 +358,16 @@ describe("attention recovery", () => {
     expect(readTaskAttentionRunCursor(storage, ThreadId.make("task-missing"))).toBeNull();
   });
 
-  it("routes actions only to existing native approval and Symphony surfaces", () => {
+  it("routes actions by canonical owner instead of incidental identifiers", () => {
+    expect(
+      taskAttentionActionRoute({
+        id: "input:1",
+        kind: "user_input",
+        title: "Input",
+        summary: "Answer",
+        requestId: ApprovalRequestId.make("input-1"),
+      }),
+    ).toBe("composer_attention");
     expect(
       taskAttentionActionRoute({
         id: "approval:1",
@@ -277,7 +386,33 @@ describe("attention recovery", () => {
         runId: "run-1",
         stepId: "step-1",
       }),
-    ).toBe("workflow_approval");
+    ).toBe("workflow_workspace");
+    expect(
+      taskAttentionActionRoute({
+        id: "plan:1",
+        kind: "proposed_plan",
+        title: "Plan",
+        summary: "Review",
+      }),
+    ).toBe("plan_workspace");
+    expect(
+      taskAttentionActionRoute({
+        id: "workflow:failed",
+        kind: "workflow_failure",
+        title: "Workflow failed",
+        summary: "Repair",
+        runId: "run-1",
+      }),
+    ).toBe("workflow_workspace");
+    expect(
+      taskAttentionActionRoute({
+        id: "automation:gate",
+        kind: "automation_gate",
+        title: "Automation gate",
+        summary: "Review",
+        runId: "automation-1",
+      }),
+    ).toBe("automation_workspace");
     expect(
       taskAttentionActionRoute({
         id: "automation:1",

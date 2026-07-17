@@ -8,11 +8,15 @@ const baseProps = {
   environmentId: EnvironmentId.make("local"),
   threadId: ThreadId.make("task-49"),
   runtimeRevisionKey: "2026-07-17T00:00:00.000Z",
+  pendingUserInputs: [],
+  actionableProposedPlan: null,
   workLogEntries: [],
   providerError: null,
   respondingRequestIds: [],
   onRespondToApproval: vi.fn(async () => undefined),
   onReviewComposer: vi.fn(),
+  onOpenPlanWorkspace: vi.fn(),
+  onOpenWorkflowWorkspace: vi.fn(),
   onOpenAutomationWorkspace: vi.fn(),
 } as const;
 
@@ -23,6 +27,9 @@ describe("TaskAttentionView", () => {
     expect(markup).toContain('aria-label="Task attention"');
     expect(markup).toContain("Attention");
     expect(markup).toContain("No items need intervention");
+    expect(markup).toContain(
+      "Empty — approvals, gates, effects, reconciliation, and provider state are clear.",
+    );
     expect(markup).not.toContain('role="dialog"');
   });
 
@@ -41,6 +48,8 @@ describe("TaskAttentionView", () => {
     );
 
     expect(markup).toContain("1 native item");
+    expect(markup).toContain("command approval");
+    expect(markup).toContain('aria-controls="task-attention-detail-approval:approval-49"');
     expect(markup).not.toContain("PENDING APPROVAL");
   });
 });

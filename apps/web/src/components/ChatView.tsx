@@ -1160,6 +1160,10 @@ function ChatViewContent(props: ChatViewProps) {
     },
     [shouldUseWorkspaceContextSheet],
   );
+  const openWorkflowWorkspace = useCallback(
+    () => selectWorkspaceContextView("workflow"),
+    [selectWorkspaceContextView],
+  );
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
   // When set, the thread-change reset effect will open the sidebar instead of closing it.
@@ -1298,11 +1302,22 @@ function ChatViewContent(props: ChatViewProps) {
     setAutomationWorkspaceThreadId(null);
   }, []);
   const openAutomationWorkspace = useCallback(() => {
-    if (activeThreadId !== null) setAutomationWorkspaceThreadId(activeThreadId);
-  }, [activeThreadId]);
+    if (activeThreadId === null) return;
+    if (shouldUseWorkspaceContextSheet) {
+      setWorkspaceContextSheetOpen(false);
+      setWorkspaceContextRailView(null);
+    }
+    setAutomationWorkspaceThreadId(activeThreadId);
+  }, [activeThreadId, shouldUseWorkspaceContextSheet]);
   const reviewComposerAttention = useCallback(() => {
+    if (shouldUseWorkspaceContextSheet) {
+      setWorkspaceContextSheetOpen(false);
+      setWorkspaceContextRailView(null);
+      requestAnimationFrame(() => composerRef.current?.focusAtEnd());
+      return;
+    }
     composerRef.current?.focusAtEnd();
-  }, [composerRef]);
+  }, [composerRef, shouldUseWorkspaceContextSheet]);
   const runningTerminalIds = useThreadRunningTerminalIds({
     environmentId: activeThread?.environmentId ?? null,
     threadId: activeThreadId,
@@ -1935,6 +1950,9 @@ function ChatViewContent(props: ChatViewProps) {
       activeLatestTurn?.turnId ?? null,
     );
   }, [activeLatestTurn?.turnId, activeThread?.proposedPlans, latestTurnSettled]);
+  const actionableProposedPlan = hasActionableProposedPlan(activeProposedPlan)
+    ? activeProposedPlan
+    : null;
   const sidebarProposedPlan = useMemo(
     () =>
       findSidebarProposedPlan({
@@ -2917,6 +2935,15 @@ function ChatViewContent(props: ChatViewProps) {
     }
     useRightPanelStore.getState().toggle(activeThreadRef, "plan");
   }, [activeThreadRef, dismissPlanSidebarForCurrentTurn, planSidebarOpen]);
+  const openPlanWorkspace = useCallback(() => {
+    if (!activeThreadRef) return;
+    if (shouldUseWorkspaceContextSheet) {
+      setWorkspaceContextSheetOpen(false);
+      setWorkspaceContextRailView(null);
+    }
+    planSidebarDismissedForTurnRef.current = null;
+    useRightPanelStore.getState().open(activeThreadRef, "plan");
+  }, [activeThreadRef, shouldUseWorkspaceContextSheet]);
   const closePlanSidebar = useCallback(() => {
     if (!activeThreadRef) return;
     setMaximizedRightPanelThreadKey(null);
@@ -5483,15 +5510,20 @@ function ChatViewContent(props: ChatViewProps) {
               }
               attention={
                 <TaskAttentionView
+                  key={`attention:${activeThreadKey}`}
                   environmentId={activeThread.environmentId}
                   threadId={activeThread.id}
                   runtimeRevisionKey={activeThread.updatedAt}
                   approvals={pendingApprovals}
+                  pendingUserInputs={pendingUserInputs}
+                  actionableProposedPlan={actionableProposedPlan}
                   workLogEntries={workLogEntries}
                   providerError={threadError}
                   respondingRequestIds={respondingRequestIds}
                   onRespondToApproval={onRespondToApproval}
                   onReviewComposer={reviewComposerAttention}
+                  onOpenPlanWorkspace={openPlanWorkspace}
+                  onOpenWorkflowWorkspace={openWorkflowWorkspace}
                   onOpenAutomationWorkspace={openAutomationWorkspace}
                 />
               }
@@ -5609,15 +5641,20 @@ function ChatViewContent(props: ChatViewProps) {
             }
             attention={
               <TaskAttentionView
+                key={`attention:${activeThreadKey}`}
                 environmentId={activeThread.environmentId}
                 threadId={activeThread.id}
                 runtimeRevisionKey={activeThread.updatedAt}
                 approvals={pendingApprovals}
+                pendingUserInputs={pendingUserInputs}
+                actionableProposedPlan={actionableProposedPlan}
                 workLogEntries={workLogEntries}
                 providerError={threadError}
                 respondingRequestIds={respondingRequestIds}
                 onRespondToApproval={onRespondToApproval}
                 onReviewComposer={reviewComposerAttention}
+                onOpenPlanWorkspace={openPlanWorkspace}
+                onOpenWorkflowWorkspace={openWorkflowWorkspace}
                 onOpenAutomationWorkspace={openAutomationWorkspace}
               />
             }
