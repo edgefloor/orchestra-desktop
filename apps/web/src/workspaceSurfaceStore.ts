@@ -61,7 +61,7 @@ function isWorkspaceSurface(value: unknown): value is WorkspaceSurface {
         (value.automationRunId === null || typeof value.automationRunId === "string")
       );
     case "issue":
-      return stringFields("threadId", "automationRunId", "issueId");
+      return stringFields("threadId", "automationRunId", "issueId", "issueTaskThreadId");
     case "evidence":
       return stringFields("threadId", "runId", "evidenceId");
     case "preview":

@@ -1285,29 +1285,82 @@ function ChatViewContent(props: ChatViewProps) {
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const activeThreadId = activeThread?.id ?? null;
+  const automationWorkspaceSurface = useMemo<Extract<
+    WorkspaceSurface,
+    { kind: "symphony" }
+  > | null>(
+    () =>
+      activeThread
+        ? {
+            schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+            kind: "symphony",
+            environmentId: activeThread.environmentId,
+            projectId: activeThread.projectId,
+            threadId: activeThread.id,
+            automationRunId: null,
+          }
+        : null,
+    [activeThread],
+  );
   const automationWorkspaceOpen =
     activeThreadId !== null && automationWorkspaceThreadId === activeThreadId;
   const toggleAutomationWorkspace = useCallback(() => {
-    if (activeThreadId === null) return;
-    setAutomationWorkspaceThreadId((current) =>
-      current === activeThreadId ? null : activeThreadId,
-    );
-  }, [activeThreadId]);
+    if (activeThreadId === null || !activeThread || !automationWorkspaceSurface) return;
+    if (automationWorkspaceOpen) {
+      setAutomationWorkspaceThreadId(null);
+      useWorkspaceSurfaceStore.getState().openSurface({
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+        kind: "task",
+        environmentId: activeThread.environmentId,
+        projectId: activeThread.projectId,
+        threadId: activeThread.id,
+      });
+      return;
+    }
+    useWorkspaceSurfaceStore.getState().openSurface(automationWorkspaceSurface);
+    setAutomationWorkspaceThreadId(activeThreadId);
+  }, [activeThread, activeThreadId, automationWorkspaceOpen, automationWorkspaceSurface]);
   const closeAutomationWorkspace = useCallback(() => {
     setAutomationWorkspaceThreadId(null);
-  }, []);
+    if (automationWorkspaceSurface) {
+      useWorkspaceSurfaceStore
+        .getState()
+        .closeSurface(workspaceSurfaceKey(automationWorkspaceSurface));
+    }
+    if (activeThread) {
+      useWorkspaceSurfaceStore.getState().openSurface({
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+        kind: "task",
+        environmentId: activeThread.environmentId,
+        projectId: activeThread.projectId,
+        threadId: activeThread.id,
+      });
+    }
+  }, [activeThread, automationWorkspaceSurface]);
   const openAutomationWorkspace = useCallback(() => {
-    if (activeThreadId === null) return;
+    if (activeThreadId === null || !automationWorkspaceSurface) return;
     if (shouldUseWorkspaceContextSheet) {
       setWorkspaceContextSheetOpen(false);
       setWorkspaceContextRailView(null);
     }
+    useWorkspaceSurfaceStore.getState().openSurface(automationWorkspaceSurface);
     setAutomationWorkspaceThreadId(activeThreadId);
-  }, [activeThreadId, shouldUseWorkspaceContextSheet]);
+  }, [activeThreadId, automationWorkspaceSurface, shouldUseWorkspaceContextSheet]);
   const openAutomationIssueTask = useCallback(
-    (threadId: ThreadId) => {
+    (input: { threadId: ThreadId; automationRunId: string; issueId: string }) => {
       if (!activeThread) return;
-      const issueTaskRef = scopeThreadRef(activeThread.environmentId, threadId);
+      useWorkspaceSurfaceStore.getState().openSurface({
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+        kind: "issue",
+        environmentId: activeThread.environmentId,
+        projectId: activeThread.projectId,
+        threadId: activeThread.id,
+        automationRunId: input.automationRunId,
+        issueId: input.issueId,
+        issueTaskThreadId: input.threadId,
+      });
+      setAutomationWorkspaceThreadId(null);
+      const issueTaskRef = scopeThreadRef(activeThread.environmentId, input.threadId);
       void navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(issueTaskRef),
@@ -1504,6 +1557,28 @@ function ChatViewContent(props: ChatViewProps) {
       if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
       return;
     }
+    if (
+      activeEntry?.surface.kind === "symphony" &&
+      activeEntry.surface.environmentId === activeTaskSurface.environmentId &&
+      activeEntry.surface.projectId === activeTaskSurface.projectId &&
+      activeEntry.surface.threadId === activeTaskSurface.threadId
+    ) {
+      setWorkspaceContextRailView(null);
+      setWorkspaceContextSheetOpen(false);
+      setAutomationWorkspaceThreadId(activeTaskSurface.threadId);
+      return;
+    }
+    if (
+      activeEntry?.surface.kind === "issue" &&
+      activeEntry.surface.environmentId === activeTaskSurface.environmentId &&
+      activeEntry.surface.projectId === activeTaskSurface.projectId &&
+      activeEntry.surface.issueTaskThreadId === activeTaskSurface.threadId
+    ) {
+      setWorkspaceContextRailView(null);
+      setWorkspaceContextSheetOpen(false);
+      setAutomationWorkspaceThreadId(null);
+      return;
+    }
     useWorkspaceSurfaceStore.getState().openSurface(activeTaskSurface);
   }, [
     activeTaskSurface,
@@ -1529,14 +1604,26 @@ function ChatViewContent(props: ChatViewProps) {
           if (
             entry.surface.environmentId !== activeThread.environmentId ||
             entry.surface.projectId !== activeThread.projectId ||
-            (entry.surface.kind !== "task" && entry.surface.kind !== "attention")
+            (entry.surface.kind !== "task" &&
+              entry.surface.kind !== "attention" &&
+              entry.surface.kind !== "symphony" &&
+              entry.surface.kind !== "issue")
           ) {
             return [];
           }
+          const retained =
+            entry.surface.kind === "issue"
+              ? validTaskIds.has(entry.surface.threadId) &&
+                validTaskIds.has(entry.surface.issueTaskThreadId)
+              : validTaskIds.has(entry.surface.threadId);
           return [
             [
               workspaceSurfaceKey(entry.surface),
-              validTaskIds.has(entry.surface.threadId) ? "available" : "removed",
+              retained
+                ? "available"
+                : entry.surface.kind === "issue"
+                  ? "temporarilyUnavailable"
+                  : "removed",
             ],
           ];
         }),
@@ -1630,6 +1717,32 @@ function ChatViewContent(props: ChatViewProps) {
         case "attention":
           if (surface.threadId === activeThread?.id) selectWorkspaceContextView("attention");
           return;
+        case "symphony": {
+          setWorkspaceContextRailView(null);
+          setWorkspaceContextSheetOpen(false);
+          if (surface.threadId === activeThread?.id) {
+            setAutomationWorkspaceThreadId(surface.threadId);
+            return;
+          }
+          const taskRef = scopeThreadRef(surface.environmentId, surface.threadId);
+          void navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(taskRef),
+          });
+          return;
+        }
+        case "issue": {
+          setWorkspaceContextRailView(null);
+          setWorkspaceContextSheetOpen(false);
+          setAutomationWorkspaceThreadId(null);
+          if (surface.issueTaskThreadId === activeThread?.id) return;
+          const issueTaskRef = scopeThreadRef(surface.environmentId, surface.issueTaskThreadId);
+          void navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(issueTaskRef),
+          });
+          return;
+        }
         default:
           return;
       }
@@ -1701,6 +1814,33 @@ function ChatViewContent(props: ChatViewProps) {
                 {
                   key,
                   title: "Attention",
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
+            if (entry.surface.kind === "symphony") {
+              const symphonySurface = entry.surface;
+              const owner = workspaceTaskSources.find(
+                (candidate) => candidate.id === symphonySurface.threadId,
+              );
+              return [
+                {
+                  key,
+                  title: owner ? `Symphony · ${owner.title}` : "Symphony",
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
+            if (entry.surface.kind === "issue") {
+              const issueSurface = entry.surface;
+              return [
+                {
+                  key,
+                  title: `Issue ${issueSurface.issueId}`,
                   active: key === activeWorkspaceSurfaceKey,
                   onSelect: () => activateWorkspaceSurface(key),
                   onClose: () => closeWorkspaceSurface(key),

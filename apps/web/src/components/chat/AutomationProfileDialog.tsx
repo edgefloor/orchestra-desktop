@@ -51,7 +51,11 @@ interface AutomationWorkspaceProps {
   readonly threadId: ThreadId;
   readonly threadTitle: string;
   readonly onClose: () => void;
-  readonly onOpenIssueTask: (threadId: ThreadId) => void;
+  readonly onOpenIssueTask: (input: {
+    readonly threadId: ThreadId;
+    readonly automationRunId: string;
+    readonly issueId: string;
+  }) => void;
 }
 
 function readableError(cause: unknown): string {
@@ -789,7 +793,13 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                       Agent path <code className="select-all">{claim.issueTask.taskPath}</code>
                     </div>
                     <Button
-                      onClick={() => onOpenIssueTask(ThreadId.make(claim.issueTask!.threadId))}
+                      onClick={() =>
+                        onOpenIssueTask({
+                          threadId: ThreadId.make(claim.issueTask!.threadId),
+                          automationRunId: runResult.run.runId,
+                          issueId: claim.issueId,
+                        })
+                      }
                       size="xs"
                       variant="outline"
                     >

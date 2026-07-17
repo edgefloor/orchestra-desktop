@@ -181,6 +181,7 @@ describe("automationRunRows", () => {
     expect(rows).toEqual([
       {
         claimId: "claim-1",
+        issueId: "issue-33",
         issueIdentifier: "ORC-33",
         issueTitle: { text: "Run one fixture issue", truncated: false },
         trackerState: "Todo",

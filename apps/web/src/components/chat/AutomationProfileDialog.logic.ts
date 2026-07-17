@@ -127,6 +127,7 @@ export function buildAutomationStartInput(input: {
 export function automationRunRows(result: AutomationRunResult) {
   return result.run.claims.map((claim) => ({
     claimId: claim.claimId,
+    issueId: claim.issueId,
     issueIdentifier: claim.issueIdentifier,
     issueTitle: claim.issueTitle,
     trackerState: claim.trackerState,

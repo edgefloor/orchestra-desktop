@@ -37,6 +37,7 @@ export type WorkspaceSurface =
       readonly threadId: ThreadId;
       readonly automationRunId: string;
       readonly issueId: string;
+      readonly issueTaskThreadId: ThreadId;
     })
   | (WorkspaceSurfaceScope & {
       readonly kind: "evidence";
@@ -111,10 +112,15 @@ export function workspaceSurfaceKey(surface: WorkspaceSurface): WorkspaceSurface
       identity = [surface.threadId, surface.runId];
       break;
     case "symphony":
-      identity = [surface.threadId, surface.automationRunId];
+      identity = [surface.threadId];
       break;
     case "issue":
-      identity = [surface.threadId, surface.automationRunId, surface.issueId];
+      identity = [
+        surface.threadId,
+        surface.automationRunId,
+        surface.issueId,
+        surface.issueTaskThreadId,
+      ];
       break;
     case "evidence":
       identity = [surface.threadId, surface.runId, surface.evidenceId];

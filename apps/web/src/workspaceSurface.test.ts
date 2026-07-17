@@ -67,6 +67,7 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     threadId,
     automationRunId: "automation",
     issueId: "issue",
+    issueTaskThreadId: ThreadId.make("issue-task"),
   },
   {
     schemaVersion: 1,
@@ -144,6 +145,24 @@ describe("workspace surface identity", () => {
     expect(workspaceSurfaceKey(base)).not.toBe(
       workspaceSurfaceKey({ ...base, projectId: ProjectId.make("other") }),
     );
+  });
+
+  it("keeps one task-owned Symphony identity while distinguishing issue tasks", () => {
+    const symphony = everySurfaceKind.find(
+      (surface): surface is Extract<WorkspaceSurface, { kind: "symphony" }> =>
+        surface.kind === "symphony",
+    )!;
+    expect(workspaceSurfaceKey({ ...symphony, automationRunId: null })).toBe(
+      workspaceSurfaceKey({ ...symphony, automationRunId: "new-run" }),
+    );
+
+    const issue = everySurfaceKind.find(
+      (surface): surface is Extract<WorkspaceSurface, { kind: "issue" }> =>
+        surface.kind === "issue",
+    )!;
+    expect(
+      workspaceSurfaceKey({ ...issue, issueTaskThreadId: ThreadId.make("other-issue-task") }),
+    ).not.toBe(workspaceSurfaceKey(issue));
   });
 });
 
