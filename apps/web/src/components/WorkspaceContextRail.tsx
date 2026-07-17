@@ -57,6 +57,7 @@ interface WorkspaceContextRailProps {
   readonly subagents: ReactNode;
   readonly attention: ReactNode;
   readonly onClose: () => void;
+  readonly variant?: "rail" | "sheet";
 }
 
 export function WorkspaceContextRail({
@@ -64,12 +65,17 @@ export function WorkspaceContextRail({
   subagents,
   attention,
   onClose,
+  variant = "rail",
 }: WorkspaceContextRailProps) {
   return (
     <aside
       aria-label="Task context"
-      className="hidden min-h-0 w-72 shrink-0 flex-col border-l border-border bg-sidebar min-[840px]:flex"
+      className={cn(
+        "min-h-0 shrink-0 flex-col border-l border-border bg-sidebar",
+        variant === "rail" ? "hidden w-72 min-[840px]:flex" : "flex h-full w-full",
+      )}
       data-workspace-context-rail=""
+      data-workspace-context-variant={variant}
     >
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
         <span className="text-xs font-semibold text-foreground">

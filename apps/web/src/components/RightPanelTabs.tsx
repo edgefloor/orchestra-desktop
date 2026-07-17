@@ -2,6 +2,7 @@ import type { ContextMenuItem, PreviewSessionSnapshot } from "@t3tools/contracts
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import { ClipboardList, FileDiff, Files, Globe2, Plus, TerminalSquare, X } from "lucide-react";
 import {
+  type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
   type ReactNode,
@@ -24,6 +25,7 @@ import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
+import { resolveWorkspaceTabNavigation } from "./workspaceTabNavigation";
 
 interface RightPanelTabsProps {
   mode: PreviewPanelMode;
@@ -273,6 +275,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
   const { resolvedTheme } = useTheme();
   const tabListRef = useRef<HTMLDivElement>(null);
+  const activeSurface = props.surfaces.find((surface) => surface.id === props.activeSurfaceId);
 
   const handleTabContextMenu = useCallback(
     async (event: ReactMouseEvent, surface: RightPanelSurface) => {
@@ -344,6 +347,25 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     },
     [props],
   );
+  const handleTabKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
+      const targetIndex = resolveWorkspaceTabNavigation({
+        currentIndex,
+        key: event.key,
+        tabCount: props.surfaces.length,
+      });
+      if (targetIndex === null) return;
+      const targetSurface = props.surfaces[targetIndex];
+      if (!targetSurface) return;
+      event.preventDefault();
+      props.onActivate(targetSurface);
+      tabListRef.current
+        ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+        .item(targetIndex)
+        .focus();
+    },
+    [props],
+  );
 
   useEffect(() => {
     const activeTab = tabListRef.current?.querySelector<HTMLElement>("[data-active-tab='true']");
@@ -371,8 +393,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           className={cn("min-w-0 flex-1 rounded-none", ownsDesktopTitleBar && "drag-region")}
           data-right-panel-tab-list
         >
-          <div className="flex h-full w-max min-w-full items-center gap-1">
-            {props.surfaces.map((surface) => {
+          <div
+            className="flex h-full w-max min-w-full items-center gap-1"
+            role="tablist"
+            aria-label="Open panel surfaces"
+          >
+            {props.surfaces.map((surface, index) => {
               const active = surface.id === props.activeSurfaceId;
               const pending = props.pendingSurfaceIds.has(surface.id);
               const title = surfaceTitle(surface, props.previewSessions, props.terminalLabelsById);
@@ -395,8 +421,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                       render={
                         <button
                           type="button"
+                          role="tab"
+                          aria-selected={active}
+                          tabIndex={active ? 0 : -1}
                           className="flex min-w-0 flex-1 items-center gap-1.5"
                           onClick={() => props.onActivate(surface)}
+                          onKeyDown={(event) => handleTabKeyDown(event, index)}
                         >
                           <SurfaceIcon
                             surface={surface}
@@ -477,7 +507,15 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         </ScrollArea>
         {props.layoutControls}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div
+        className="flex min-h-0 flex-1 flex-col"
+        role={activeSurface ? "tabpanel" : undefined}
+        aria-label={
+          activeSurface
+            ? surfaceTitle(activeSurface, props.previewSessions, props.terminalLabelsById)
+            : undefined
+        }
+      >
         {props.activeSurfaceId === null ? (
           <RightPanelEmptyState
             onAddBrowser={props.onAddBrowser}

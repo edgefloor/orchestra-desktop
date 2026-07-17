@@ -130,10 +130,13 @@
         "apps/web/src/components/DiffPanelShell.tsx",
         "apps/web/src/components/RightPanelSheet.tsx",
         "apps/web/src/components/RightPanelTabs.tsx",
+        "apps/web/src/components/WorkspaceContextRail.tsx",
         "apps/web/src/components/preview/RightPanelResizeHandle.tsx",
         "apps/web/src/rightPanelStore.ts"
       ],
       "requiredTests": [
+        "apps/web/src/components/RightPanelTabs.test.tsx",
+        "apps/web/src/components/WorkspaceContextRail.test.tsx",
         "apps/web/src/components/preview/previewViewportReadiness.test.ts",
         "apps/web/src/rightPanelStore.test.ts"
       ]

@@ -1,6 +1,8 @@
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 
+import { resolveWorkspaceTabNavigation } from "./workspaceTabNavigation";
+
 export const MAX_WORKSPACE_TASK_TABS = 8;
 
 export interface WorkspaceTaskTabSource {
@@ -79,17 +81,9 @@ export function resolveWorkspaceTaskTabNavigation(input: {
   readonly key: string;
   readonly taskCount: number;
 }): number | null {
-  if (input.taskCount <= 0) return null;
-  switch (input.key) {
-    case "ArrowLeft":
-      return (input.currentIndex - 1 + input.taskCount) % input.taskCount;
-    case "ArrowRight":
-      return (input.currentIndex + 1) % input.taskCount;
-    case "Home":
-      return 0;
-    case "End":
-      return input.taskCount - 1;
-    default:
-      return null;
-  }
+  return resolveWorkspaceTabNavigation({
+    currentIndex: input.currentIndex,
+    key: input.key,
+    tabCount: input.taskCount,
+  });
 }

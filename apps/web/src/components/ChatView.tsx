@@ -1116,7 +1116,8 @@ function ChatViewContent(props: ChatViewProps) {
     null,
   );
   const [workspaceContextRailView, setWorkspaceContextRailView] =
-    useState<WorkspaceContextRailView | null>("subagents");
+    useState<WorkspaceContextRailView | null>(null);
+  const [workspaceContextSheetOpen, setWorkspaceContextSheetOpen] = useState(false);
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
   const optimisticUserMessagesRef = useRef(optimisticUserMessages);
   optimisticUserMessagesRef.current = optimisticUserMessages;
@@ -1141,6 +1142,14 @@ function ChatViewContent(props: ChatViewProps) {
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
   const shouldUsePlanSidebarSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const shouldUseWorkspaceContextSheet = useMediaQuery("(max-width: 839px)");
+  const selectWorkspaceContextView = useCallback(
+    (view: WorkspaceContextRailView) => {
+      setWorkspaceContextRailView(view);
+      if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
+    },
+    [shouldUseWorkspaceContextSheet],
+  );
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
   // When set, the thread-change reset effect will open the sidebar instead of closing it.
@@ -5137,7 +5146,7 @@ function ChatViewContent(props: ChatViewProps) {
           projectName={activeProject?.title ?? null}
           workspaceRoot={activeWorkspaceRoot ?? null}
           activeView={workspaceContextRailView}
-          onSelectView={setWorkspaceContextRailView}
+          onSelectView={selectWorkspaceContextView}
         />
 
         {/* Error banner */}
@@ -5364,7 +5373,9 @@ function ChatViewContent(props: ChatViewProps) {
             ) : null}
           </div>
           {/* end chat column */}
-          {workspaceContextRailView !== null && !rightPanelOpen ? (
+          {workspaceContextRailView !== null &&
+          !rightPanelOpen &&
+          !shouldUseWorkspaceContextSheet ? (
             <WorkspaceContextRail
               activeView={workspaceContextRailView}
               onClose={() => setWorkspaceContextRailView(null)}
@@ -5466,6 +5477,48 @@ function ChatViewContent(props: ChatViewProps) {
           >
             {rightPanelContent}
           </RightPanelTabs>
+        </RightPanelSheet>
+      ) : null}
+      {shouldUseWorkspaceContextSheet &&
+      workspaceContextSheetOpen &&
+      workspaceContextRailView !== null &&
+      !rightPanelOpen ? (
+        <RightPanelSheet
+          open
+          onClose={() => {
+            setWorkspaceContextSheetOpen(false);
+            setWorkspaceContextRailView(null);
+          }}
+        >
+          <WorkspaceContextRail
+            variant="sheet"
+            activeView={workspaceContextRailView}
+            onClose={() => {
+              setWorkspaceContextSheetOpen(false);
+              setWorkspaceContextRailView(null);
+            }}
+            subagents={
+              <NativeSubagentsPanel
+                environmentId={activeThread.environmentId}
+                parentThreadId={activeThread.id}
+                activities={activeThread.activities}
+              />
+            }
+            attention={
+              <TaskAttentionView
+                environmentId={activeThread.environmentId}
+                threadId={activeThread.id}
+                runtimeRevisionKey={activeThread.updatedAt}
+                approvals={pendingApprovals}
+                workLogEntries={workLogEntries}
+                providerError={threadError}
+                respondingRequestIds={respondingRequestIds}
+                onRespondToApproval={onRespondToApproval}
+                onReviewComposer={reviewComposerAttention}
+                onOpenAutomationWorkspace={openAutomationWorkspace}
+              />
+            }
+          />
         </RightPanelSheet>
       ) : null}
 
