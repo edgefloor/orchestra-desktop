@@ -3,24 +3,68 @@
   "upstreamRevision": "ecb35f75839925dd1ac6f854efeef5c9e291d11b",
   "capabilities": [
     {
+      "id": "annotations",
+      "requiredFiles": [
+        "apps/desktop/src/preview/PickedElementPayload.ts",
+        "apps/desktop/src/preview/PlaywrightInjectedRuntime.ts",
+        "apps/web/src/components/chat/ComposerPreviewAnnotationCards.tsx",
+        "apps/web/src/lib/previewAnnotation.ts"
+      ],
+      "requiredTests": [
+        "apps/desktop/src/preview/PickedElementPayload.test.ts",
+        "apps/desktop/src/preview/PlaywrightInjectedRuntime.test.ts",
+        "apps/web/src/components/chat/ComposerPreviewAnnotationCards.test.tsx",
+        "apps/web/src/lib/previewAnnotation.test.ts"
+      ]
+    },
+    {
+      "id": "approvals",
+      "requiredFiles": [
+        "apps/web/src/components/chat/ComposerPendingApprovalActions.tsx",
+        "apps/web/src/components/chat/ComposerPendingApprovalPanel.tsx",
+        "apps/web/src/session-logic.ts"
+      ],
+      "requiredTests": ["apps/web/src/session-logic.test.ts"]
+    },
+    {
+      "id": "auth",
+      "requiredFiles": [
+        "apps/desktop/src/backend/DesktopLocalEnvironmentAuth.ts",
+        "apps/server/src/auth/EnvironmentAuth.ts",
+        "apps/server/src/auth/SessionStore.ts",
+        "apps/web/src/environments/primary/auth.ts"
+      ],
+      "requiredTests": [
+        "apps/desktop/src/backend/DesktopLocalEnvironmentAuth.test.ts",
+        "apps/server/src/auth/EnvironmentAuth.test.ts",
+        "apps/server/src/auth/SessionStore.test.ts",
+        "apps/web/src/authBootstrap.test.ts"
+      ]
+    },
+    {
       "id": "browser-preview",
       "requiredFiles": [
         "apps/desktop/src/preview/BrowserSession.ts",
-        "apps/web/src/components/preview/PreviewPanel.tsx"
+        "apps/server/src/mcp/PreviewAutomationBroker.ts",
+        "apps/web/src/components/preview/PreviewPanel.tsx",
+        "apps/web/src/components/preview/openPreviewSession.ts"
       ],
       "requiredTests": [
+        "apps/desktop/src/preview/BrowserSession.test.ts",
         "apps/server/src/mcp/PreviewAutomationBroker.test.ts",
-        "apps/web/src/components/preview/openPreviewSession.test.ts",
-        "apps/web/src/lib/previewAnnotation.test.ts"
+        "apps/web/src/components/preview/openPreviewSession.test.ts"
       ]
     },
     {
       "id": "composer",
       "requiredFiles": [
         "apps/web/src/components/chat/ChatComposer.tsx",
-        "apps/web/src/components/chat/ComposerCommandMenu.tsx"
+        "apps/web/src/components/chat/ComposerCommandMenu.tsx",
+        "apps/web/src/components/chat/ComposerPrimaryActions.tsx",
+        "apps/web/src/composerDraftStore.ts"
       ],
       "requiredTests": [
+        "apps/web/src/components/chat/ComposerPendingTerminalContexts.test.tsx",
         "apps/web/src/components/chat/ComposerPrimaryActions.test.ts",
         "apps/web/src/composerDraftStore.test.ts"
       ]
@@ -29,22 +73,32 @@
       "id": "diff-review",
       "requiredFiles": [
         "apps/web/src/components/DiffPanel.tsx",
-        "apps/web/src/components/chat/ChangedFilesTree.tsx"
+        "apps/web/src/components/chat/ChangedFilesTree.tsx",
+        "apps/web/src/diffFileActions.ts",
+        "apps/web/src/diffPanelStore.ts",
+        "apps/web/src/reviewCommentContext.ts"
       ],
       "requiredTests": [
         "apps/server/src/review/ReviewService.test.ts",
-        "apps/web/src/lib/diffRendering.test.ts"
+        "apps/web/src/components/chat/ChangedFilesTree.test.tsx",
+        "apps/web/src/diffFileActions.test.ts",
+        "apps/web/src/diffPanelStore.test.ts",
+        "apps/web/src/lib/diffRendering.test.ts",
+        "apps/web/src/reviewCommentContext.test.ts"
       ]
     },
     {
       "id": "environments",
       "requiredFiles": [
         "apps/desktop/src/app/DesktopEnvironment.ts",
+        "apps/desktop/src/settings/DesktopSavedEnvironments.ts",
         "apps/desktop/src/ssh/DesktopSshEnvironment.ts",
         "apps/desktop/src/wsl/DesktopWslEnvironment.ts"
       ],
       "requiredTests": [
+        "apps/desktop/src/app/DesktopEnvironment.test.ts",
         "apps/desktop/src/backend/DesktopBackendPool.test.ts",
+        "apps/desktop/src/settings/DesktopSavedEnvironments.test.ts",
         "apps/desktop/src/ssh/DesktopSshEnvironment.test.ts",
         "apps/desktop/src/wsl/DesktopWslBackend.test.ts"
       ]
@@ -58,24 +112,54 @@
       "requiredTests": ["apps/web/src/components/files/FilePreviewPanel.test.ts"]
     },
     {
-      "id": "responsive-panels",
+      "id": "models",
       "requiredFiles": [
-        "apps/web/src/components/DiffPanelShell.tsx",
-        "apps/web/src/components/RightPanelSheet.tsx",
-        "apps/web/src/components/RightPanelTabs.tsx"
+        "apps/web/src/components/chat/ModelPickerContent.tsx",
+        "apps/web/src/components/chat/ProviderModelPicker.tsx",
+        "apps/web/src/components/chat/modelPickerSearch.ts",
+        "apps/web/src/modelSelection.ts"
       ],
       "requiredTests": [
-        "apps/web/src/components/files/FilePreviewPanel.test.ts",
-        "apps/web/src/components/preview/previewViewportReadiness.test.ts"
+        "apps/web/src/components/chat/modelPickerSearch.test.ts",
+        "apps/web/src/modelSelection.test.ts"
       ]
     },
     {
-      "id": "settings-keybindings",
+      "id": "panels",
       "requiredFiles": [
+        "apps/web/src/components/DiffPanelShell.tsx",
+        "apps/web/src/components/RightPanelSheet.tsx",
+        "apps/web/src/components/RightPanelTabs.tsx",
+        "apps/web/src/components/preview/RightPanelResizeHandle.tsx",
+        "apps/web/src/rightPanelStore.ts"
+      ],
+      "requiredTests": [
+        "apps/web/src/components/preview/previewViewportReadiness.test.ts",
+        "apps/web/src/rightPanelStore.test.ts"
+      ]
+    },
+    {
+      "id": "recovery",
+      "requiredFiles": [
+        "apps/server/src/provider/Layers/ProviderSessionDirectory.ts",
+        "apps/web/src/orchestrationRecovery.ts",
+        "apps/web/src/session-logic.ts"
+      ],
+      "requiredTests": [
+        "apps/server/src/provider/Layers/ProviderSessionDirectory.test.ts",
+        "apps/web/src/orchestrationRecovery.test.ts",
+        "apps/web/src/session-logic.test.ts"
+      ]
+    },
+    {
+      "id": "settings",
+      "requiredFiles": [
+        "apps/desktop/src/settings/DesktopAppSettings.ts",
         "apps/web/src/components/settings/KeybindingsSettings.tsx",
         "apps/web/src/components/settings/SettingsPanels.tsx"
       ],
       "requiredTests": [
+        "apps/desktop/src/settings/DesktopAppSettings.test.ts",
         "apps/web/src/components/settings/KeybindingsSettings.logic.test.ts",
         "apps/web/src/components/settings/SettingsPanels.logic.test.ts"
       ]
@@ -84,7 +168,8 @@
       "id": "terminal-context",
       "requiredFiles": [
         "apps/server/src/terminal/Manager.ts",
-        "apps/web/src/components/ThreadTerminalDrawer.tsx"
+        "apps/web/src/components/ThreadTerminalDrawer.tsx",
+        "apps/web/src/components/chat/userMessageTerminalContexts.ts"
       ],
       "requiredTests": [
         "apps/web/src/components/ThreadTerminalDrawer.test.ts",
@@ -92,14 +177,14 @@
       ]
     },
     {
-      "id": "update-recovery",
+      "id": "updates",
       "requiredFiles": [
         "apps/desktop/src/updates/DesktopUpdates.ts",
-        "apps/web/src/session-logic.ts"
+        "apps/desktop/src/updates/updateMachine.ts"
       ],
       "requiredTests": [
         "apps/desktop/src/updates/DesktopUpdates.test.ts",
-        "apps/web/src/session-logic.test.ts"
+        "apps/desktop/src/updates/updateMachine.test.ts"
       ]
     },
     {

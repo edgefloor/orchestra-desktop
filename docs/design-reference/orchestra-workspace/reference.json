@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "orchestra-workspace-v1",
+  "role": "non-authoritative-direction",
+  "captureDate": "2026-07-17",
+  "source": {
+    "url": "https://orchestra.demystify.hu/orchestra-workspace",
+    "contentType": "text/html; charset=utf-8",
+    "bytes": 174950,
+    "sha256": "285b5d0a0cd2edd45a0a81f5f816f8dd3276d8f49b6e6c3b828dbc04e5638b79"
+  },
+  "precedence": ["native-behavior", "retained-capabilities", "coherent-fusion", "reference-pixels"],
+  "brandNotes": {
+    "file": "docs/design-reference/orchestra-workspace/brand-notes.md",
+    "sha256": "4ef23f141560de0857924ca2e7e6b12fda0454506445e18cf4eceec33d8438e8"
+  },
+  "screenshots": [
+    {
+      "id": "desktop",
+      "file": "docs/design-reference/orchestra-workspace/desktop-1280x720.jpg",
+      "width": 1280,
+      "height": 720,
+      "deviceScaleFactor": 1,
+      "theme": "light",
+      "state": "issue-task-selected",
+      "approval": "approved-reference",
+      "sha256": "e6f7f195316e83aea9e32bc333863a54c7efeb25173d6829c50731c0b8098a1d"
+    },
+    {
+      "id": "narrow-desktop",
+      "file": "docs/design-reference/orchestra-workspace/narrow-desktop-900x506.jpg",
+      "width": 900,
+      "height": 506,
+      "deviceScaleFactor": 1,
+      "theme": "light",
+      "state": "issue-task-selected",
+      "approval": "approved-reference",
+      "sha256": "efebc08bf992ac0422957457ddaba413eaafb61ea0db086d52a0da5f0727e018"
+    }
+  ],
+  "exclusions": [
+    "detached-workflow-control-planes",
+    "landing-and-marketing-pages",
+    "mobile-and-widths-at-or-below-820px",
+    "pixel-parity-that-conflicts-with-native-behavior",
+    "prototype-actions-as-runtime-authority",
+    "prototype-data-as-product-authority"
+  ]
+}
