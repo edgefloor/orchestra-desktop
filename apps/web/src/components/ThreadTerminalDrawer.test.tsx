@@ -1,10 +1,39 @@
-import { describe, expect, it } from "vite-plus/test";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
   resolveTerminalSelectionActionPosition,
   shouldHandleTerminalSelectionMouseUp,
+  TerminalDrawerResizeHandle,
   terminalSelectionActionDelayForClickCount,
 } from "./ThreadTerminalDrawer";
+
+describe("TerminalDrawerResizeHandle", () => {
+  it("renders as a focusable, named horizontal separator with its height range", () => {
+    const pointerHandler = vi.fn();
+    const markup = renderToStaticMarkup(
+      <TerminalDrawerResizeHandle
+        height={320}
+        maxHeight={408}
+        onHeightChange={vi.fn()}
+        onPointerDown={pointerHandler}
+        onPointerMove={pointerHandler}
+        onPointerUp={pointerHandler}
+        onPointerCancel={pointerHandler}
+      />,
+    );
+
+    expect(markup).toContain('role="separator"');
+    expect(markup).toContain('aria-orientation="horizontal"');
+    expect(markup).toContain('aria-label="Resize terminal drawer"');
+    expect(markup).toContain('aria-valuemin="180"');
+    expect(markup).toContain('aria-valuemax="408"');
+    expect(markup).toContain('aria-valuenow="320"');
+    expect(markup).toContain('aria-valuetext="320 pixels"');
+    expect(markup).toContain('tabindex="0"');
+    expect(markup).toContain("focus-visible:ring-2");
+  });
+});
 
 describe("resolveTerminalSelectionActionPosition", () => {
   it("prefers the selection rect over the last pointer position", () => {

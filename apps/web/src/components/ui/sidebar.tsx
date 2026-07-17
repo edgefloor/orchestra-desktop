@@ -19,6 +19,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
+import { resolveResizeSeparatorKey } from "../resizeSeparator";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
 import * as Schema from "effect/Schema";
 
@@ -28,6 +29,7 @@ const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "calc(100vw - var(--spacing(3)))";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH = 16 * 16;
+const SIDEBAR_RESIZE_DEFAULT_WIDTH = 16 * 16;
 
 type SidebarContextProps = {
   state: ResponsiveSidebarState;
@@ -347,6 +349,49 @@ function clampSidebarWidth(width: number, options: SidebarResolvedResizableOptio
   return Math.max(options.minWidth, Math.min(width, options.maxWidth));
 }
 
+export function resolveSidebarResizeKey(options: {
+  key: string;
+  value: number;
+  min: number;
+  max: number;
+  side: "left" | "right";
+}): number | null {
+  return resolveResizeSeparatorKey({
+    key: options.key,
+    value: options.value,
+    min: options.min,
+    max: options.max,
+    increaseKey: options.side === "left" ? "ArrowRight" : "ArrowLeft",
+    decreaseKey: options.side === "left" ? "ArrowLeft" : "ArrowRight",
+  });
+}
+
+export function resolveSidebarAcceptedMaxWidth(options: {
+  minWidth: number;
+  upperWidth: number;
+  accepts: (width: number) => boolean;
+}): number {
+  const minWidth = Math.round(options.minWidth);
+  let low = minWidth;
+  let high = Math.max(minWidth, Math.floor(options.upperWidth));
+  let acceptedMax = minWidth;
+
+  // Sidebar layout constraints are monotonic: after a width stops fitting, a
+  // wider one cannot fit either. Binary search keeps ResizeObserver updates
+  // cheap even on very wide displays.
+  while (low <= high) {
+    const candidate = Math.floor((low + high) / 2);
+    if (options.accepts(candidate)) {
+      acceptedMax = candidate;
+      low = candidate + 1;
+    } else {
+      high = candidate - 1;
+    }
+  }
+
+  return acceptedMax;
+}
+
 function SidebarRail({
   className,
   onClick,
@@ -354,6 +399,7 @@ function SidebarRail({
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onKeyDown,
   ...props
 }: React.ComponentProps<"button">) {
   const { open, toggleSidebar } = useSidebar();
@@ -377,7 +423,68 @@ function SidebarRail({
   const resolvedResizable = sidebarInstance?.resizable ?? null;
   const canResize = resolvedResizable !== null && open;
   const railLabel = canResize ? "Resize Sidebar" : "Toggle Sidebar";
-  const railTitle = canResize ? "Drag to resize sidebar" : "Toggle Sidebar";
+  const railTitle = canResize ? "Drag or use arrow keys to resize sidebar" : "Toggle Sidebar";
+  const fallbackResizeWidth = resolvedResizable
+    ? clampSidebarWidth(SIDEBAR_RESIZE_DEFAULT_WIDTH, resolvedResizable)
+    : SIDEBAR_RESIZE_DEFAULT_WIDTH;
+  const fallbackResizeMax = resolvedResizable
+    ? Number.isFinite(resolvedResizable.maxWidth)
+      ? Math.max(resolvedResizable.minWidth, Math.round(resolvedResizable.maxWidth))
+      : Math.max(resolvedResizable.minWidth, fallbackResizeWidth)
+    : fallbackResizeWidth;
+  const [resizeMetrics, setResizeMetrics] = React.useState(() => ({
+    maxWidth: fallbackResizeMax,
+    width: Math.min(fallbackResizeWidth, fallbackResizeMax),
+  }));
+
+  const resolveResizeElements = React.useCallback((rail: HTMLButtonElement) => {
+    const wrapper = rail.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
+    const sidebarRoot = rail.closest<HTMLElement>("[data-slot='sidebar']");
+    const sidebarContainer = sidebarRoot?.querySelector<HTMLElement>(
+      "[data-slot='sidebar-container']",
+    );
+    return wrapper && sidebarRoot && sidebarContainer
+      ? { sidebarContainer, sidebarRoot, wrapper }
+      : null;
+  }, []);
+
+  const measureResizeMetrics = React.useCallback(() => {
+    const rail = railRef.current;
+    if (!rail || !resolvedResizable || !open) return;
+    const elements = resolveResizeElements(rail);
+    if (!elements) return;
+
+    const currentWidth = clampSidebarWidth(
+      elements.sidebarContainer.getBoundingClientRect().width,
+      resolvedResizable,
+    );
+    const configuredMax = Number.isFinite(resolvedResizable.maxWidth)
+      ? resolvedResizable.maxWidth
+      : elements.wrapper.clientWidth;
+    const upperWidth = Math.max(
+      resolvedResizable.minWidth,
+      Math.min(configuredMax, elements.wrapper.clientWidth),
+    );
+    const acceptedMax = resolveSidebarAcceptedMaxWidth({
+      minWidth: resolvedResizable.minWidth,
+      upperWidth,
+      accepts: (nextWidth) =>
+        resolvedResizable.shouldAcceptWidth?.({
+          currentWidth,
+          nextWidth,
+          rail,
+          side: sidebarInstance?.side ?? "left",
+          sidebarRoot: elements.sidebarRoot,
+          wrapper: elements.wrapper,
+        }) ?? true,
+    });
+    const maxWidth = Math.max(resolvedResizable.minWidth, currentWidth, acceptedMax);
+    setResizeMetrics((previous) =>
+      previous.width === currentWidth && previous.maxWidth === maxWidth
+        ? previous
+        : { maxWidth, width: currentWidth },
+    );
+  }, [open, resolveResizeElements, resolvedResizable, sidebarInstance?.side]);
 
   const stopResize = React.useCallback(
     (pointerId: number) => {
@@ -395,6 +502,7 @@ function SidebarRail({
         setLocalStorageItem(resolvedResizable.storageKey, resizeState.width, Schema.Finite);
       }
       resolvedResizable?.onResize?.(resizeState.width);
+      setResizeMetrics((previous) => ({ ...previous, width: resizeState.width }));
       resizeStateRef.current = null;
       if (resizeState.rail.hasPointerCapture(pointerId)) {
         resizeState.rail.releasePointerCapture(pointerId);
@@ -411,18 +519,9 @@ function SidebarRail({
       if (event.defaultPrevented) return;
       if (!resolvedResizable || !open || event.button !== 0) return;
 
-      const wrapper = event.currentTarget.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
-      const sidebarRoot = event.currentTarget.closest<HTMLElement>("[data-slot='sidebar']");
-      if (!wrapper || !sidebarRoot) {
-        return;
-      }
-
-      const sidebarContainer = sidebarRoot.querySelector<HTMLElement>(
-        "[data-slot='sidebar-container']",
-      );
-      if (!sidebarContainer) {
-        return;
-      }
+      const elements = resolveResizeElements(event.currentTarget);
+      if (!elements) return;
+      const { sidebarContainer, sidebarRoot, wrapper } = elements;
 
       const startWidth = sidebarContainer.getBoundingClientRect().width;
       const initialWidth = clampSidebarWidth(startWidth, resolvedResizable);
@@ -455,7 +554,7 @@ function SidebarRail({
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
     },
-    [onPointerDown, open, resolvedResizable, sidebarInstance?.side],
+    [onPointerDown, open, resolveResizeElements, resolvedResizable, sidebarInstance?.side],
   );
 
   const handlePointerMove = React.useCallback(
@@ -502,6 +601,7 @@ function SidebarRail({
 
         activeResizeState.wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
         activeResizeState.width = nextWidth;
+        setResizeMetrics((previous) => ({ ...previous, width: nextWidth }));
       });
     },
     [onPointerMove, resolvedResizable],
@@ -555,6 +655,53 @@ function SidebarRail({
     [onClick, open, resolvedResizable, toggleSidebar],
   );
 
+  const handleKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      onKeyDown?.(event);
+      if (event.defaultPrevented || !resolvedResizable || !open) return;
+
+      const nextWidth = resolveSidebarResizeKey({
+        key: event.key,
+        value: resizeMetrics.width,
+        min: resolvedResizable.minWidth,
+        max: resizeMetrics.maxWidth,
+        side: sidebarInstance?.side ?? "left",
+      });
+      if (nextWidth === null) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      const elements = resolveResizeElements(event.currentTarget);
+      if (!elements) return;
+      const accepted =
+        resolvedResizable.shouldAcceptWidth?.({
+          currentWidth: resizeMetrics.width,
+          nextWidth,
+          rail: event.currentTarget,
+          side: sidebarInstance?.side ?? "left",
+          sidebarRoot: elements.sidebarRoot,
+          wrapper: elements.wrapper,
+        }) ?? true;
+      if (!accepted) return;
+
+      elements.wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
+      setResizeMetrics((previous) => ({ ...previous, width: nextWidth }));
+      if (resolvedResizable.storageKey && typeof window !== "undefined") {
+        setLocalStorageItem(resolvedResizable.storageKey, nextWidth, Schema.Finite);
+      }
+      resolvedResizable.onResize?.(nextWidth);
+    },
+    [
+      onKeyDown,
+      open,
+      resizeMetrics.maxWidth,
+      resizeMetrics.width,
+      resolveResizeElements,
+      resolvedResizable,
+      sidebarInstance?.side,
+    ],
+  );
+
   React.useEffect(() => {
     if (!resolvedResizable?.storageKey || typeof window === "undefined") return;
     const rail = railRef.current;
@@ -567,7 +714,25 @@ function SidebarRail({
     const clampedWidth = clampSidebarWidth(storedWidth, resolvedResizable);
     wrapper.style.setProperty("--sidebar-width", `${clampedWidth}px`);
     resolvedResizable.onResize?.(clampedWidth);
+    setResizeMetrics((previous) => ({ ...previous, width: clampedWidth }));
   }, [resolvedResizable]);
+
+  React.useEffect(() => {
+    measureResizeMetrics();
+    if (!canResize) return;
+    const rail = railRef.current;
+    const wrapper = rail?.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
+    if (!wrapper) return;
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(measureResizeMetrics);
+      observer.observe(wrapper);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", measureResizeMetrics);
+    return () => window.removeEventListener("resize", measureResizeMetrics);
+  }, [canResize, measureResizeMetrics]);
 
   React.useEffect(() => {
     return () => {
@@ -589,6 +754,12 @@ function SidebarRail({
         render={
           <button
             aria-label={railLabel}
+            aria-orientation={canResize ? "vertical" : undefined}
+            aria-pressed={canResize ? undefined : open}
+            aria-valuemax={canResize ? resizeMetrics.maxWidth : undefined}
+            aria-valuemin={canResize ? resolvedResizable?.minWidth : undefined}
+            aria-valuenow={canResize ? resizeMetrics.width : undefined}
+            aria-valuetext={canResize ? `${Math.round(resizeMetrics.width)} pixels` : undefined}
             className={cn(
               /* disable pointer events only when offcanvas sidebar is collapsed, that's when the rail sits over the native scrollbar on windows and linux. icon mode stays fully clickable. */
               "-translate-x-1/2 group-data-[side=left]:-right-4 absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=right]:left-0 sm:flex [[data-collapsible=offcanvas][data-state=collapsed]_&]:pointer-events-none",
@@ -602,12 +773,14 @@ function SidebarRail({
             data-sidebar="rail"
             data-slot="sidebar-rail"
             onClick={handleClick}
+            onKeyDown={handleKeyDown}
             onPointerCancel={handlePointerCancel}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             ref={railRef}
-            tabIndex={-1}
+            role={canResize ? "separator" : undefined}
+            tabIndex={canResize ? 0 : -1}
             type="button"
             {...props}
           />

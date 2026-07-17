@@ -29,7 +29,7 @@ export function PreviewPanelShell(props: {
   const useDragRegion = isElectron && props.mode !== "sheet" && props.mode !== "embedded";
   const isInline = props.mode === "inline";
   const maxWidth = useViewportClampedMaxWidth();
-  const { width, handlers } = useResizableWidth({
+  const { width, handlers, resizeTo } = useResizableWidth({
     storageKey: PREVIEW_PANEL_WIDTH_STORAGE_KEY,
     defaultWidth: PREVIEW_PANEL_DEFAULT_WIDTH,
     minWidth: PREVIEW_PANEL_MIN_WIDTH,
@@ -51,7 +51,15 @@ export function PreviewPanelShell(props: {
       data-preview-panel-mode={props.mode}
       data-preview-panel-maximized={props.maximized ? "true" : "false"}
     >
-      {isInline && !props.maximized ? <RightPanelResizeHandle handlers={handlers} /> : null}
+      {isInline && !props.maximized ? (
+        <RightPanelResizeHandle
+          handlers={handlers}
+          width={width}
+          minWidth={PREVIEW_PANEL_MIN_WIDTH}
+          maxWidth={maxWidth}
+          onWidthChange={resizeTo}
+        />
+      ) : null}
       {useDragRegion ? <div className="electron-drag-region h-0 w-full" aria-hidden /> : null}
       {props.children}
     </div>

@@ -2,10 +2,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  resolveSidebarAcceptedMaxWidth,
+  resolveSidebarResizeKey,
+  Sidebar,
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuSubButton,
   SidebarProvider,
+  SidebarRail,
   SidebarTrigger,
 } from "./sidebar";
 import { resolveSidebarState } from "./sidebarState";
@@ -82,5 +86,82 @@ describe("sidebar interactive cursors", () => {
 
     expect(html).toContain('data-slot="sidebar-menu-sub-button"');
     expect(html).toContain("cursor-pointer");
+  });
+
+  it("renders an expanded resizable rail as a focusable, finite separator", () => {
+    const html = renderToStaticMarkup(
+      <SidebarProvider>
+        <Sidebar resizable={{ minWidth: 208, maxWidth: 480 }}>
+          <SidebarRail />
+        </Sidebar>
+      </SidebarProvider>,
+    );
+
+    expect(html).toContain('role="separator"');
+    expect(html).toContain('aria-orientation="vertical"');
+    expect(html).toContain('aria-label="Resize Sidebar"');
+    expect(html).toContain('aria-valuemin="208"');
+    expect(html).toContain('aria-valuemax="480"');
+    expect(html).toContain('aria-valuenow="256"');
+    expect(html).toContain('aria-valuetext="256 pixels"');
+    expect(html).toContain('tabindex="0"');
+  });
+
+  it("retains toggle button semantics while the resizable sidebar is collapsed", () => {
+    const html = renderToStaticMarkup(
+      <SidebarProvider defaultOpen={false}>
+        <Sidebar resizable>
+          <SidebarRail />
+        </Sidebar>
+      </SidebarProvider>,
+    );
+
+    expect(html).toContain('aria-label="Toggle Sidebar"');
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain('tabindex="-1"');
+    expect(html).not.toContain('role="separator"');
+    expect(html).not.toContain("aria-valuemax");
+  });
+});
+
+describe("sidebar keyboard resizing", () => {
+  it("uses physical arrow directions appropriate to the sidebar side", () => {
+    expect(
+      resolveSidebarResizeKey({ key: "ArrowRight", value: 256, min: 208, max: 480, side: "left" }),
+    ).toBe(272);
+    expect(
+      resolveSidebarResizeKey({ key: "ArrowLeft", value: 256, min: 208, max: 480, side: "left" }),
+    ).toBe(240);
+    expect(
+      resolveSidebarResizeKey({ key: "ArrowLeft", value: 256, min: 208, max: 480, side: "right" }),
+    ).toBe(272);
+    expect(
+      resolveSidebarResizeKey({ key: "ArrowRight", value: 256, min: 208, max: 480, side: "right" }),
+    ).toBe(240);
+  });
+
+  it("supports Home and End and clamps arrows to the exposed range", () => {
+    expect(
+      resolveSidebarResizeKey({ key: "Home", value: 320, min: 208, max: 480, side: "left" }),
+    ).toBe(208);
+    expect(
+      resolveSidebarResizeKey({ key: "End", value: 320, min: 208, max: 480, side: "left" }),
+    ).toBe(480);
+    expect(
+      resolveSidebarResizeKey({ key: "ArrowRight", value: 476, min: 208, max: 480, side: "left" }),
+    ).toBe(480);
+    expect(
+      resolveSidebarResizeKey({ key: "Enter", value: 320, min: 208, max: 480, side: "left" }),
+    ).toBeNull();
+  });
+
+  it("finds the finite maximum accepted by dynamic main-content constraints", () => {
+    expect(
+      resolveSidebarAcceptedMaxWidth({
+        minWidth: 208,
+        upperWidth: 1_024,
+        accepts: (width) => 1_024 - width >= 640,
+      }),
+    ).toBe(384);
   });
 });

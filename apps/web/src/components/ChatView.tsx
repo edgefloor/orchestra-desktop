@@ -213,6 +213,7 @@ import { NativeSubagentsPanel } from "./chat/NativeSubagentsPanel";
 import { AutomationWorkspace } from "./chat/AutomationProfileDialog";
 import { TaskAttentionView } from "./chat/TaskAttentionView";
 import { WorkflowRunsView } from "./chat/WorkflowRunsView";
+import { deriveWorkspaceWorkflowRuns } from "./chat/WorkflowRunsView.logic";
 import { WorkspaceTaskTabs } from "./WorkspaceTaskTabs";
 import {
   buildWorkspaceTaskTabs,
@@ -221,6 +222,9 @@ import {
   type WorkspaceTaskTabSource,
 } from "./WorkspaceTaskTabs.logic";
 import { useWorkspaceTaskTabsStore } from "../workspaceTaskTabsStore";
+import { deriveNativeSubagents } from "../nativeSubagents";
+import { WorkspaceStatusAnnouncer } from "./WorkspaceStatusAnnouncer";
+import { buildWorkspaceStatusSnapshot } from "./WorkspaceStatusAnnouncer.logic";
 import {
   WorkspaceContextRail,
   WorkspaceTaskContextBar,
@@ -1964,6 +1968,29 @@ function ChatViewContent(props: ChatViewProps) {
   const actionableProposedPlan = hasActionableProposedPlan(activeProposedPlan)
     ? activeProposedPlan
     : null;
+  const workspaceStatusSnapshot = useMemo(
+    () =>
+      buildWorkspaceStatusSnapshot({
+        scopeKey: activeThreadKey,
+        tasks: workspaceTaskSources,
+        subagents: deriveNativeSubagents(threadActivities).agents,
+        workflowRuns: deriveWorkspaceWorkflowRuns(workLogEntries).items,
+        pendingApprovalIds: pendingApprovals.map(({ requestId }) => String(requestId)),
+        pendingUserInputIds: pendingUserInputs.map(({ requestId }) => String(requestId)),
+        actionablePlanId: actionableProposedPlan ? String(actionableProposedPlan.id) : null,
+        providerFailed: threadError !== null,
+      }),
+    [
+      actionableProposedPlan,
+      activeThreadKey,
+      pendingApprovals,
+      pendingUserInputs,
+      threadActivities,
+      threadError,
+      workLogEntries,
+      workspaceTaskSources,
+    ],
+  );
   const sidebarProposedPlan = useMemo(
     () =>
       findSidebarProposedPlan({
@@ -5225,6 +5252,7 @@ function ChatViewContent(props: ChatViewProps) {
           onCloseTask={handleCloseWorkspaceTask}
           onNewTask={handleNewWorkspaceTask}
         />
+        <WorkspaceStatusAnnouncer snapshot={workspaceStatusSnapshot} />
 
         {/* Native task header */}
         <header

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import { OrchestraLifecycleEntry, readOrchestraReplayEvent } from "./OrchestraLifecycleEntry";
+import lifecycleSource from "./OrchestraLifecycleEntry.tsx?raw";
 
 function event(): OrchestraReplayEvent {
   return {
@@ -59,5 +60,11 @@ describe("OrchestraLifecycleEntry", () => {
   it("accepts only a valid native replay event", () => {
     expect(readOrchestraReplayEvent(event())?.runId).toBe("run-1");
     expect(readOrchestraReplayEvent({ runId: "fixture-only" })).toBeNull();
+  });
+
+  it("keeps compact disclosures operable and reports asynchronous detail failures", () => {
+    expect(lifecycleSource).toContain("min-h-6 w-full");
+    expect(lifecycleSource).toContain("pointer-coarse:min-h-11");
+    expect(lifecycleSource).toContain('role="alert"');
   });
 });

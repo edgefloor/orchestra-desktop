@@ -1307,7 +1307,7 @@ export const makeCodexSessionRuntime = (
 
     // The pinned Orchestra Product currently reports the native thread's
     // authoritative idle transition without a separate turn/completed frame.
-    // Settle that Product turn at the existing Codex provider seam so T3Code's
+    // Settle that Product turn at the existing Codex provider seam so the retained shell's
     // normal task timeline cannot remain stuck in "running". Stock Codex is
     // unchanged, and an eventual native turn/completed frame is deduplicated.
     if (options.expectedProductManifestSha256) {

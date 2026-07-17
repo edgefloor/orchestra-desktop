@@ -20,6 +20,7 @@ import {
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type SetStateAction,
@@ -54,7 +55,11 @@ import {
   terminalNavigationShortcutData,
 } from "../keybindings";
 import { MAX_TERMINALS_PER_GROUP, type ThreadTerminalGroup } from "../types";
-import { clampTerminalDrawerHeight } from "../threadTerminalDrawerLayout";
+import {
+  clampTerminalDrawerHeight,
+  MIN_TERMINAL_DRAWER_HEIGHT_PX,
+  resolveMaxTerminalDrawerHeight,
+} from "../threadTerminalDrawerLayout";
 import { readLocalApi } from "~/localApi";
 import { useAttachedTerminalSession } from "../state/terminalSessions";
 import { serverEnvironment } from "../state/server";
@@ -62,8 +67,54 @@ import { previewEnvironment } from "../state/preview";
 import { terminalEnvironment } from "../state/terminal";
 import { openTerminalLinkInPreview } from "./preview/openTerminalLinkInPreview";
 import { useAtomCommand } from "../state/use-atom-command";
+import { resolveResizeSeparatorKey } from "./resizeSeparator";
 
 const MULTI_CLICK_SELECTION_ACTION_DELAY_MS = 260;
+
+export function TerminalDrawerResizeHandle(props: {
+  height: number;
+  maxHeight: number;
+  onHeightChange: (height: number) => void;
+  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onPointerCancel: (event: ReactPointerEvent<HTMLDivElement>) => void;
+}) {
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const nextHeight = resolveResizeSeparatorKey({
+      key: event.key,
+      value: props.height,
+      min: MIN_TERMINAL_DRAWER_HEIGHT_PX,
+      max: props.maxHeight,
+      // The drawer is below its handle, so moving the edge up makes it taller.
+      increaseKey: "ArrowUp",
+      decreaseKey: "ArrowDown",
+    });
+    if (nextHeight === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    props.onHeightChange(nextHeight);
+  };
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Resize terminal drawer"
+      aria-valuemin={MIN_TERMINAL_DRAWER_HEIGHT_PX}
+      aria-valuemax={props.maxHeight}
+      aria-valuenow={props.height}
+      aria-valuetext={`${props.height} pixels`}
+      tabIndex={0}
+      className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      onKeyDown={handleKeyDown}
+      onPointerDown={props.onPointerDown}
+      onPointerMove={props.onPointerMove}
+      onPointerUp={props.onPointerUp}
+      onPointerCancel={props.onPointerCancel}
+    />
+  );
+}
 
 function clampDrawerHeight(height: number): number {
   return clampTerminalDrawerHeight(
@@ -891,6 +942,9 @@ export default function ThreadTerminalDrawer({
   }));
   const drawerHeight =
     drawerHeightState.threadId === threadId ? drawerHeightState.height : controlledDrawerHeight;
+  const maxDrawerHeight = resolveMaxTerminalDrawerHeight(
+    typeof window === "undefined" ? Number.NaN : window.innerHeight,
+  );
   const setDrawerHeight = useCallback(
     (update: SetStateAction<number>) => {
       setDrawerHeightState((current) => {
@@ -1146,6 +1200,18 @@ export default function ThreadTerminalDrawer({
     [syncHeight],
   );
 
+  const handleKeyboardHeightChange = useCallback(
+    (nextHeight: number) => {
+      const clampedHeight = clampDrawerHeight(nextHeight);
+      if (clampedHeight === drawerHeightRef.current) return;
+      drawerHeightRef.current = clampedHeight;
+      setDrawerHeight(clampedHeight);
+      syncHeight(clampedHeight);
+      setResizeEpoch((value) => value + 1);
+    },
+    [setDrawerHeight, syncHeight],
+  );
+
   useEffect(() => {
     if (!visible) {
       return;
@@ -1193,8 +1259,10 @@ export default function ThreadTerminalDrawer({
         style={isPanel ? undefined : { height: `${drawerHeight}px` }}
       >
         {!isPanel ? (
-          <div
-            className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
+          <TerminalDrawerResizeHandle
+            height={drawerHeight}
+            maxHeight={maxDrawerHeight}
+            onHeightChange={handleKeyboardHeightChange}
             onPointerDown={handleResizePointerDown}
             onPointerMove={handleResizePointerMove}
             onPointerUp={handleResizePointerEnd}
@@ -1227,8 +1295,10 @@ export default function ThreadTerminalDrawer({
       style={isPanel ? undefined : { height: `${drawerHeight}px` }}
     >
       {!isPanel ? (
-        <div
-          className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
+        <TerminalDrawerResizeHandle
+          height={drawerHeight}
+          maxHeight={maxDrawerHeight}
+          onHeightChange={handleKeyboardHeightChange}
           onPointerDown={handleResizePointerDown}
           onPointerMove={handleResizePointerMove}
           onPointerUp={handleResizePointerEnd}

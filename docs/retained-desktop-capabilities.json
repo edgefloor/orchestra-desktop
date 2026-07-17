@@ -175,7 +175,7 @@
         "apps/web/src/components/chat/userMessageTerminalContexts.ts"
       ],
       "requiredTests": [
-        "apps/web/src/components/ThreadTerminalDrawer.test.ts",
+        "apps/web/src/components/ThreadTerminalDrawer.test.tsx",
         "apps/web/src/components/chat/userMessageTerminalContexts.test.ts"
       ]
     },

@@ -310,7 +310,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
           type="button"
           aria-controls={`${disclosureId}-run-details`}
           aria-expanded={expanded}
-          className="flex w-full items-center gap-1.5 rounded text-left hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+          className="flex min-h-6 w-full items-center gap-1.5 rounded text-left hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 pointer-coarse:min-h-11"
           onClick={toggleRoot}
         >
           <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground/70">
@@ -483,7 +483,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                           >
                             <button
                               aria-expanded={itemExpanded}
-                              className="flex w-full items-center gap-2 text-left"
+                              className="flex min-h-6 w-full items-center gap-2 text-left pointer-coarse:min-h-11"
                               onClick={() => toggleEvidence(item)}
                               type="button"
                             >
@@ -514,7 +514,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                                     Loading authorized evidence…
                                   </p>
                                 ) : error ? (
-                                  <p className="text-destructive">
+                                  <p className="text-destructive" role="alert">
                                     Evidence {evidenceErrorState(error).replaceAll("_", " ")}.
                                   </p>
                                 ) : contentState?.kind === "text" && content ? (
@@ -527,7 +527,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                                     </pre>
                                   </div>
                                 ) : contentState?.kind === "integrity_failure" ? (
-                                  <p className="text-destructive">
+                                  <p className="text-destructive" role="alert">
                                     Evidence integrity changed since this reference was loaded;
                                     content was not rendered.
                                   </p>
@@ -558,7 +558,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                       {continuations[outputKey] ? (
                         <button
                           type="button"
-                          className="rounded border border-border px-2 py-1 text-foreground/75 hover:bg-accent/30 disabled:opacity-50"
+                          className="min-h-6 rounded border border-border px-2 py-1 text-foreground/75 hover:bg-accent/30 disabled:opacity-50 pointer-coarse:min-h-11"
                           disabled={loading.has(outputKey)}
                           onClick={() =>
                             load("outputs", step.id, undefined, continuations[outputKey])
@@ -570,7 +570,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                       {continuations[evidenceKey] ? (
                         <button
                           type="button"
-                          className="rounded border border-border px-2 py-1 text-foreground/75 hover:bg-accent/30 disabled:opacity-50"
+                          className="min-h-6 rounded border border-border px-2 py-1 text-foreground/75 hover:bg-accent/30 disabled:opacity-50 pointer-coarse:min-h-11"
                           disabled={loading.has(evidenceKey)}
                           onClick={() =>
                             load("evidence", step.id, undefined, continuations[evidenceKey])
@@ -580,7 +580,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                         </button>
                       ) : null}
                       {errors[outputKey] || errors[evidenceKey] ? (
-                        <p className="flex items-start gap-1.5 text-destructive">
+                        <p className="flex items-start gap-1.5 text-destructive" role="alert">
                           <CircleAlertIcon className="mt-0.5 size-3 shrink-0" />
                           {errors[outputKey] ?? errors[evidenceKey]}
                         </p>
@@ -594,7 +594,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
             {continuations["steps:run"] ? (
               <button
                 type="button"
-                className="mt-2 rounded border border-border px-2 py-1 text-muted-foreground hover:bg-accent/30 disabled:opacity-50"
+                className="mt-2 min-h-6 rounded border border-border px-2 py-1 text-muted-foreground hover:bg-accent/30 disabled:opacity-50 pointer-coarse:min-h-11"
                 disabled={loading.has("steps:run")}
                 onClick={() => load("steps", undefined, undefined, continuations["steps:run"])}
               >
@@ -607,7 +607,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                 type="button"
                 aria-controls={`${disclosureId}-history-details`}
                 aria-expanded={historyExpanded}
-                className="flex items-center gap-2 rounded px-1 py-1 text-muted-foreground hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                className="flex min-h-6 items-center gap-2 rounded px-1 py-1 text-muted-foreground hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 pointer-coarse:min-h-11"
                 onClick={toggleHistory}
               >
                 {historyExpanded ? (
@@ -632,7 +632,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                   {continuations["history:run"] ? (
                     <button
                       type="button"
-                      className="rounded border border-border px-2 py-1 text-muted-foreground hover:bg-accent/30 disabled:opacity-50"
+                      className="min-h-6 rounded border border-border px-2 py-1 text-muted-foreground hover:bg-accent/30 disabled:opacity-50 pointer-coarse:min-h-11"
                       disabled={loading.has("history:run")}
                       onClick={() =>
                         load("history", undefined, undefined, continuations["history:run"])
@@ -642,7 +642,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                     </button>
                   ) : null}
                   {errors["history:run"] ? (
-                    <p className="flex items-start gap-1.5 text-destructive">
+                    <p className="flex items-start gap-1.5 text-destructive" role="alert">
                       <CircleAlertIcon className="mt-0.5 size-3 shrink-0" />
                       {errors["history:run"]}
                     </p>
@@ -652,7 +652,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
             </div>
 
             {rootUnavailable ? (
-              <p className="mt-2 flex items-start gap-1.5 text-destructive">
+              <p className="mt-2 flex items-start gap-1.5 text-destructive" role="alert">
                 <CircleAlertIcon className="mt-0.5 size-3 shrink-0" />
                 {errors["run:run"] ?? errors["steps:run"]}
               </p>
