@@ -10,6 +10,16 @@
  * @module ProviderServiceLive
  */
 import {
+  AutomationCancelIssueInput,
+  AutomationCancelInput,
+  AutomationLinearReadInput,
+  AutomationLifecycleInput,
+  AutomationQueueReadInput,
+  AutomationReconcileInput,
+  AutomationRunInput,
+  AutomationValidateInput,
+  OrchestraQueryInput,
+  NativeSubagentReadInput,
   ModelSelection,
   NonNegativeInt,
   ThreadId,
@@ -1008,6 +1018,279 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     );
   });
 
+  const readNativeSubagent: ProviderServiceMethod<"readNativeSubagent"> = Effect.fn(
+    "readNativeSubagent",
+  )(function* (rawInput) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.readNativeSubagent",
+      schema: NativeSubagentReadInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.readNativeSubagent",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.readNativeSubagent) {
+      return yield* toValidationError(
+        "ProviderService.readNativeSubagent",
+        "Native child-agent detail is unavailable for this provider.",
+      );
+    }
+    return yield* routed.adapter.readNativeSubagent(routed.threadId, input.agentThreadId);
+  });
+
+  const validateAutomationProfile = Effect.fn("validateAutomationProfile")(function* (
+    rawInput: AutomationValidateInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.validateAutomationProfile",
+      schema: AutomationValidateInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.validateAutomationProfile",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.validateAutomationProfile) {
+      return yield* toValidationError(
+        "ProviderService.validateAutomationProfile",
+        "Automation profiles require an active Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.validateAutomationProfile(routed.threadId, request);
+  });
+
+  const runAutomationFixture = Effect.fn("runAutomationFixture")(function* (
+    rawInput: AutomationRunInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.runAutomationFixture",
+      schema: AutomationRunInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.runAutomationFixture",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.runAutomationFixture) {
+      return yield* toValidationError(
+        "ProviderService.runAutomationFixture",
+        "Task-owned Automation requires an active Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.runAutomationFixture(routed.threadId, request);
+  });
+
+  const readLinearAutomation = Effect.fn("readLinearAutomation")(function* (
+    rawInput: AutomationLinearReadInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.readLinearAutomation",
+      schema: AutomationLinearReadInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.readLinearAutomation",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.readLinearAutomation) {
+      return yield* toValidationError(
+        "ProviderService.readLinearAutomation",
+        "Live Linear intake requires an active Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.readLinearAutomation(routed.threadId, request);
+  });
+
+  const readAutomationQueue = Effect.fn("readAutomationQueue")(function* (
+    rawInput: AutomationQueueReadInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.readAutomationQueue",
+      schema: AutomationQueueReadInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.readAutomationQueue",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.readAutomationQueue) {
+      return yield* toValidationError(
+        "ProviderService.readAutomationQueue",
+        "Automation queue inspection requires an active Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.readAutomationQueue(routed.threadId, request);
+  });
+
+  const cancelAutomation = Effect.fn("cancelAutomation")(function* (
+    rawInput: AutomationCancelInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.cancelAutomation",
+      schema: AutomationCancelInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.cancelAutomation",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.cancelAutomation) {
+      return yield* toValidationError(
+        "ProviderService.cancelAutomation",
+        "Task-owned Automation cancellation requires an active Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.cancelAutomation(routed.threadId, request);
+  });
+
+  const cancelAutomationIssue = Effect.fn("cancelAutomationIssue")(function* (
+    rawInput: AutomationCancelIssueInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.cancelAutomationIssue",
+      schema: AutomationCancelIssueInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.cancelAutomationIssue",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.cancelAutomationIssue) {
+      return yield* toValidationError(
+        "ProviderService.cancelAutomationIssue",
+        "Task-owned Issue cancellation requires an active Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.cancelAutomationIssue(routed.threadId, request);
+  });
+
+  const automationStatus = Effect.fn("automationStatus")(function* (
+    rawInput: AutomationLifecycleInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.automationStatus",
+      schema: AutomationLifecycleInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.automationStatus",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.automationStatus) {
+      return yield* toValidationError(
+        "ProviderService.automationStatus",
+        "Automation inspection requires an active Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.automationStatus(routed.threadId, request);
+  });
+
+  const pauseAutomation = Effect.fn("pauseAutomation")(function* (
+    rawInput: AutomationLifecycleInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.pauseAutomation",
+      schema: AutomationLifecycleInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.pauseAutomation",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.pauseAutomation) {
+      return yield* toValidationError(
+        "ProviderService.pauseAutomation",
+        "Automation pause requires an active Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.pauseAutomation(routed.threadId, request);
+  });
+
+  const refreshAutomation = Effect.fn("refreshAutomation")(function* (
+    rawInput: AutomationReconcileInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.refreshAutomation",
+      schema: AutomationReconcileInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.refreshAutomation",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.refreshAutomation) {
+      return yield* toValidationError(
+        "ProviderService.refreshAutomation",
+        "Automation refresh requires an active Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.refreshAutomation(routed.threadId, request);
+  });
+
+  const resumeAutomation = Effect.fn("resumeAutomation")(function* (
+    rawInput: AutomationReconcileInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.resumeAutomation",
+      schema: AutomationReconcileInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.resumeAutomation",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.resumeAutomation) {
+      return yield* toValidationError(
+        "ProviderService.resumeAutomation",
+        "Automation resume requires an active Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.resumeAutomation(routed.threadId, request);
+  });
+
+  const queryOrchestra = Effect.fn("queryOrchestra")(function* (rawInput: OrchestraQueryInput) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.queryOrchestra",
+      schema: OrchestraQueryInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.queryOrchestra",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.queryOrchestra) {
+      return yield* toValidationError(
+        "ProviderService.queryOrchestra",
+        "Bounded Orchestra detail queries require an active Orchestra-enabled Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.queryOrchestra(routed.threadId, request);
+  });
+
   const runStopAll = Effect.fn("runStopAll")(function* () {
     const threadIds = yield* directory.listThreadIds();
     const currentAdapters = yield* getAdapterEntries;
@@ -1079,6 +1362,18 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     getCapabilities,
     getInstanceInfo,
     rollbackConversation,
+    readNativeSubagent,
+    queryOrchestra,
+    validateAutomationProfile,
+    runAutomationFixture,
+    readLinearAutomation,
+    readAutomationQueue,
+    automationStatus,
+    pauseAutomation,
+    refreshAutomation,
+    resumeAutomation,
+    cancelAutomationIssue,
+    cancelAutomation,
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each
     // independently receive all runtime events.

@@ -1,0 +1,357 @@
+import { ThreadId } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
+
+import {
+  automationLinearRows,
+  automationRunRows,
+  automationWorkspaceCapabilities,
+  buildAutomationValidateInput,
+  deriveAutomationWorkspaceState,
+} from "./AutomationProfileDialog.logic";
+
+describe("buildAutomationValidateInput", () => {
+  it("creates only a task-scoped native validation request", () => {
+    const request = buildAutomationValidateInput({
+      threadId: ThreadId.make("task-13"),
+      profilePath: " WORKFLOW.md ",
+      issueIdentifier: " DOGFOOD-13 ",
+      issueTitle: "Exercise Automation",
+      issueState: " Todo ",
+      issueLabels: " automation, dogfood ",
+      attempt: "2",
+    });
+
+    expect(request).toEqual({
+      threadId: "task-13",
+      profilePath: "WORKFLOW.md",
+      fixtureIssue: {
+        id: "DOGFOOD-13",
+        identifier: "DOGFOOD-13",
+        title: "Exercise Automation",
+        state: "Todo",
+        labels: ["automation", "dogfood"],
+        blockedBy: [],
+      },
+      attempt: 2,
+    });
+    expect(request).not.toHaveProperty("repositoryRoot");
+    expect(request).not.toHaveProperty("approvalPolicy");
+    expect(request).not.toHaveProperty("sandboxPolicy");
+  });
+
+  it("bounds malformed attempts to the first attempt", () => {
+    const request = buildAutomationValidateInput({
+      threadId: ThreadId.make("task-13"),
+      profilePath: "WORKFLOW.md",
+      issueIdentifier: "DOGFOOD-13",
+      issueTitle: "Exercise Automation",
+      issueState: "Todo",
+      issueLabels: "automation",
+      attempt: "-4",
+    });
+
+    expect(request.attempt).toBe(1);
+  });
+});
+
+describe("automationRunRows", () => {
+  it("carries the native fixture claim and stable task link into the bounded desktop model", () => {
+    const rows = automationRunRows({
+      run: {
+        schemaVersion: 1,
+        runId: "automation-root-1",
+        ownerThreadId: "task-33",
+        sourceRevision: "abc123",
+        profileDigest: "profile-digest",
+        profileRevision: 2,
+        profileRevisionStatus: "active",
+        profileDiagnostics: [],
+        trackerProjectSlug: "orchestra",
+        leaseEpoch: 1,
+        revision: 4,
+        status: "running",
+        reconciliation: "complete",
+        queueCounts: {
+          queued: 0,
+          running: 0,
+          blocked: 0,
+          waitingGate: 0,
+          handoff: 0,
+          terminal: 1,
+        },
+        claimsTotal: 1,
+        queuePreview: [],
+        queuePreviewTruncated: false,
+        nextAction: { text: "Automation remains resident", truncated: false },
+        claims: [
+          {
+            claimId: "claim-1",
+            issueId: "issue-33",
+            issueIdentifier: "ORC-33",
+            issueTitle: { text: "Run one fixture issue", truncated: false },
+            trackerState: "Todo",
+            priority: 2,
+            attempt: 1,
+            profileDigest: "claim-profile-digest",
+            profileRevision: 1,
+            status: "completed",
+            worktree: "/repo/.worktrees/orc-33-a1",
+            sourceRevision: "abc123",
+            issueTask: { threadId: "issue-task-33", taskPath: "/root/automation_orc_33" },
+            workflowRunId: "workflow-run-33",
+            workflowStatus: "completed",
+            effects: [
+              {
+                effectId: "effect-34",
+                idempotencyKey: "idem-34",
+                kind: "tracker.comment",
+                status: "committed",
+                gatePolicy: "auto_accept",
+                requestSha256: "request-sha",
+                bodyPreview: { text: "Implemented and verified.", truncated: false },
+                providerReceipt: "fixture-comment:idem-34",
+              },
+              {
+                effectId: "effect-transition-41",
+                idempotencyKey: "idem-transition-41",
+                kind: "tracker.transition",
+                status: "committed",
+                gatePolicy: "auto_accept",
+                requestSha256: "transition-sha",
+                bodyPreview: { text: "Done", truncated: false },
+                providerReceipt: "fixture-transition:idem-transition-41",
+              },
+              {
+                effectId: "effect-pr-41",
+                idempotencyKey: "idem-pr-41",
+                kind: "tracker.link_pull_request",
+                status: "committed",
+                gatePolicy: "auto_accept",
+                requestSha256: "pull-request-sha",
+                bodyPreview: {
+                  text: "https://github.com/edgefloor/codex-orchestra/pull/43",
+                  truncated: false,
+                },
+                providerReceipt: "fixture-pull-request:idem-pr-41",
+              },
+            ],
+            hookReceipts: [
+              {
+                kind: "before_run",
+                invocation: 1,
+                commandSha256: "hook-sha",
+                status: "succeeded",
+                exitCode: 0,
+                stdoutPreview: { text: "ready", truncated: false },
+                stderrPreview: { text: "", truncated: false },
+              },
+            ],
+            cleanup: { status: "retained", attempts: 0 },
+            nextAction: { text: "claim complete", truncated: false },
+          },
+        ],
+      },
+    });
+
+    expect(rows).toEqual([
+      {
+        claimId: "claim-1",
+        issueIdentifier: "ORC-33",
+        issueTitle: { text: "Run one fixture issue", truncated: false },
+        trackerState: "Todo",
+        priority: 2,
+        status: "completed",
+        profileDigest: "claim-profile-digest",
+        profileRevision: 1,
+        issueTaskThreadId: "issue-task-33",
+        workflowRunId: "workflow-run-33",
+        cleanup: { status: "retained", attempts: 0 },
+        hookReceipts: [
+          {
+            kind: "before_run",
+            invocation: 1,
+            commandSha256: "hook-sha",
+            status: "succeeded",
+            exitCode: 0,
+            stdoutPreview: { text: "ready", truncated: false },
+            stderrPreview: { text: "", truncated: false },
+          },
+        ],
+        effects: [
+          {
+            effectId: "effect-34",
+            kind: "tracker.comment",
+            status: "committed",
+            gatePolicy: "auto_accept",
+            bodyPreview: { text: "Implemented and verified.", truncated: false },
+            providerReceipt: "fixture-comment:idem-34",
+            failure: undefined,
+          },
+          {
+            effectId: "effect-transition-41",
+            kind: "tracker.transition",
+            status: "committed",
+            gatePolicy: "auto_accept",
+            bodyPreview: { text: "Done", truncated: false },
+            providerReceipt: "fixture-transition:idem-transition-41",
+            failure: undefined,
+          },
+          {
+            effectId: "effect-pr-41",
+            kind: "tracker.link_pull_request",
+            status: "committed",
+            gatePolicy: "auto_accept",
+            bodyPreview: {
+              text: "https://github.com/edgefloor/codex-orchestra/pull/43",
+              truncated: false,
+            },
+            providerReceipt: "fixture-pull-request:idem-pr-41",
+            failure: undefined,
+          },
+        ],
+        nextAction: { text: "claim complete", truncated: false },
+      },
+    ]);
+    expect(rows[0]).not.toHaveProperty("worktree");
+    expect(rows[0]).not.toHaveProperty("outputs");
+  });
+});
+
+describe("automationLinearRows", () => {
+  it("projects a bounded normalized summary without provider-specific detail", () => {
+    const issues = Array.from({ length: 26 }, (_, index) => ({
+      id: `issue-${index}`,
+      identifier: `ORC-${index}`,
+      title: `Issue ${index}`,
+      state: "Todo",
+      priority: index % 4 || undefined,
+      labels: ["automation"],
+      blockedBy: index === 0 ? [{ identifier: "ORC-99" }] : [],
+      description: "must not cross the renderer projection",
+      url: "https://linear.app/example",
+    }));
+
+    const rows = automationLinearRows({
+      status: "ready",
+      issues,
+      hasNextPage: true,
+      endCursor: "cursor-25",
+      nextAction: { text: "Read the next page", truncated: false },
+    });
+
+    expect(rows).toHaveLength(25);
+    expect(rows[0]).toEqual({
+      id: "issue-0",
+      identifier: "ORC-0",
+      title: "Issue 0",
+      state: "Todo",
+      priority: undefined,
+      labels: ["automation"],
+      blockedByCount: 1,
+    });
+    expect(rows[0]).not.toHaveProperty("description");
+    expect(rows[0]).not.toHaveProperty("url");
+  });
+});
+
+describe("Automation workspace lifecycle", () => {
+  const running = {
+    schemaVersion: 1,
+    runId: "automation-root-1",
+    ownerThreadId: "task-33",
+    sourceRevision: "abc123",
+    profileDigest: "profile-digest",
+    profileRevision: 1,
+    profileRevisionStatus: "active" as const,
+    profileDiagnostics: [],
+    trackerProjectSlug: "orchestra",
+    leaseEpoch: 1,
+    revision: 1,
+    status: "running" as const,
+    reconciliation: "complete" as const,
+    queueCounts: {
+      queued: 0,
+      running: 1,
+      blocked: 0,
+      waitingGate: 0,
+      handoff: 0,
+      terminal: 0,
+    },
+    claimsTotal: 0,
+    claims: [],
+    queuePreview: [],
+    queuePreviewTruncated: false,
+    nextAction: { text: "Continue", truncated: false },
+  };
+
+  it("derives renderer presentation only from native state and the current request", () => {
+    expect(
+      deriveAutomationWorkspaceState({
+        pendingAction: "validating",
+        validation: null,
+        run: null,
+        error: null,
+      }),
+    ).toBe("validating");
+    expect(
+      deriveAutomationWorkspaceState({
+        pendingAction: null,
+        validation: null,
+        run: running,
+        error: null,
+      }),
+    ).toBe("running");
+    expect(
+      deriveAutomationWorkspaceState({
+        pendingAction: null,
+        validation: null,
+        run: { ...running, reconciliation: "required" },
+        error: null,
+      }),
+    ).toBe("reconciling");
+    expect(
+      deriveAutomationWorkspaceState({
+        pendingAction: null,
+        validation: null,
+        run: { ...running, status: "suspended" },
+        error: null,
+      }),
+    ).toBe("paused");
+    expect(
+      deriveAutomationWorkspaceState({
+        pendingAction: null,
+        validation: null,
+        run: null,
+        error: "native runtime unavailable",
+      }),
+    ).toBe("unavailable");
+  });
+
+  it("enables only controls supported by the current native run", () => {
+    expect(
+      automationWorkspaceCapabilities({ pending: false, validation: null, run: running }),
+    ).toMatchObject({ pause: true, resume: false, refresh: true, cancel: true, start: false });
+    expect(
+      automationWorkspaceCapabilities({
+        pending: false,
+        validation: null,
+        run: { ...running, status: "suspended" },
+      }),
+    ).toMatchObject({ pause: false, resume: true, refresh: true, cancel: true });
+    expect(
+      automationWorkspaceCapabilities({
+        pending: true,
+        validation: { valid: true, diagnostics: [] },
+        run: null,
+      }),
+    ).toEqual({
+      validate: false,
+      start: false,
+      inspect: false,
+      pause: false,
+      resume: false,
+      refresh: false,
+      cancel: false,
+    });
+  });
+});

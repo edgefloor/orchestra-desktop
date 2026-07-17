@@ -734,11 +734,18 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   if (title) {
     entry.toolTitle = title;
   }
-  if (itemType === "mcp_tool_call") {
+  if (itemType === "mcp_tool_call" || itemType === "collab_agent_tool_call") {
     const data = asRecord(payload?.data);
     if (data?.item !== undefined) {
       entry.toolData = data.item;
     }
+  }
+  const usage = asRecord(payload?.usage);
+  if (usage?.orchestra !== undefined) {
+    entry.toolData = usage.orchestra;
+    // Orchestra lifecycle is durable task state, not transient model
+    // reasoning. Keep the task-scoped row visible even when it has no turn.
+    entry.tone = "info";
   }
   if (itemType) {
     entry.itemType = itemType;

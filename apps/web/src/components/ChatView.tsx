@@ -111,6 +111,7 @@ import {
 } from "../types";
 import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
+import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { isCommandPaletteOpen } from "../commandPaletteContext";
 import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -158,7 +159,7 @@ import {
   deriveLogicalProjectKeyFromSettings,
   selectProjectGroupingSettings,
 } from "../logicalProject";
-import { buildDraftThreadRouteParams } from "../threadRoutes";
+import { buildDraftThreadRouteParams, buildThreadRouteParams } from "../threadRoutes";
 import {
   type ComposerImageAttachment,
   type DraftThreadEnvMode,
@@ -198,6 +199,7 @@ import {
   useThread,
   useThreadProposedPlans,
   useThreadRefs,
+  useThreadShells,
 } from "../state/entities";
 import { environmentShell } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
@@ -205,6 +207,16 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
+import { NativeSubagentsPanel } from "./chat/NativeSubagentsPanel";
+import { AutomationWorkspace } from "./chat/AutomationProfileDialog";
+import { TaskAttentionView } from "./chat/TaskAttentionView";
+import { WorkspaceTaskTabs } from "./WorkspaceTaskTabs";
+import type { WorkspaceTaskTabSource } from "./WorkspaceTaskTabs.logic";
+import {
+  WorkspaceContextRail,
+  WorkspaceTaskContextBar,
+  type WorkspaceContextRailView,
+} from "./WorkspaceContextRail";
 import { PanelLayoutControls, RightPanelMaximizeControl } from "./chat/PanelLayoutControls";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
@@ -1047,6 +1059,7 @@ function ChatViewContent(props: ChatViewProps) {
   const timestampFormat = settings.timestampFormat;
   const autoOpenPlanSidebar = settings.autoOpenPlanSidebar;
   const navigate = useNavigate();
+  const startNewWorkspaceTask = useNewThreadHandler();
   const { resolvedTheme } = useTheme();
   // Granular store selectors — avoid subscribing to prompt changes.
   const composerRuntimeMode = useComposerDraftStore(
@@ -1099,6 +1112,11 @@ function ChatViewContent(props: ChatViewProps) {
   const composerRef = useComposerHandleContext() ?? localComposerRef;
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
+  const [automationWorkspaceThreadId, setAutomationWorkspaceThreadId] = useState<ThreadId | null>(
+    null,
+  );
+  const [workspaceContextRailView, setWorkspaceContextRailView] =
+    useState<WorkspaceContextRailView | null>("subagents");
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
   const optimisticUserMessagesRef = useRef(optimisticUserMessages);
   optimisticUserMessagesRef.current = optimisticUserMessages;
@@ -1195,6 +1213,7 @@ function ChatViewContent(props: ChatViewProps) {
   const storeSetActiveTerminal = useTerminalUiStateStore((s) => s.setActiveTerminal);
   const storeCloseTerminal = useTerminalUiStateStore((s) => s.closeTerminal);
   const serverThreadRefs = useThreadRefs();
+  const serverThreadShells = useThreadShells();
   const serverThreadKeys = useMemo(() => serverThreadRefs.map(scopedThreadKey), [serverThreadRefs]);
   const draftThreadsByThreadKey = useComposerDraftStore((store) => store.draftThreadsByThreadKey);
   const draftThreadKeys = useMemo(
@@ -1248,6 +1267,23 @@ function ChatViewContent(props: ChatViewProps) {
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const activeThreadId = activeThread?.id ?? null;
+  const automationWorkspaceOpen =
+    activeThreadId !== null && automationWorkspaceThreadId === activeThreadId;
+  const toggleAutomationWorkspace = useCallback(() => {
+    if (activeThreadId === null) return;
+    setAutomationWorkspaceThreadId((current) =>
+      current === activeThreadId ? null : activeThreadId,
+    );
+  }, [activeThreadId]);
+  const closeAutomationWorkspace = useCallback(() => {
+    setAutomationWorkspaceThreadId(null);
+  }, []);
+  const openAutomationWorkspace = useCallback(() => {
+    if (activeThreadId !== null) setAutomationWorkspaceThreadId(activeThreadId);
+  }, [activeThreadId]);
+  const reviewComposerAttention = useCallback(() => {
+    composerRef.current?.focusAtEnd();
+  }, [composerRef]);
   const runningTerminalIds = useThreadRunningTerminalIds({
     environmentId: activeThread?.environmentId ?? null,
     threadId: activeThreadId,
@@ -1381,6 +1417,38 @@ function ChatViewContent(props: ChatViewProps) {
     ? scopeProjectRef(activeThread.environmentId, activeThread.projectId)
     : null;
   const activeProject = useProject(activeProjectRef);
+  const workspaceTaskSources = useMemo<WorkspaceTaskTabSource[]>(() => {
+    if (!activeThread) return [];
+    const projectTasks = serverThreadShells.filter(
+      (thread) =>
+        thread.environmentId === activeThread.environmentId &&
+        thread.projectId === activeThread.projectId,
+    );
+    if (
+      projectTasks.some(
+        (thread) =>
+          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) === activeThreadKey,
+      )
+    ) {
+      return projectTasks;
+    }
+    return [activeThread, ...projectTasks];
+  }, [activeThread, activeThreadKey, serverThreadShells]);
+  const handleSelectWorkspaceTask = useCallback(
+    (task: WorkspaceTaskTabSource) => {
+      const taskRef = scopeThreadRef(task.environmentId, task.id);
+      if (scopedThreadKey(taskRef) === routeThreadKey) return;
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(taskRef),
+      });
+    },
+    [navigate, routeThreadKey],
+  );
+  const handleNewWorkspaceTask = useCallback(() => {
+    if (!activeProjectRef) return;
+    void startNewWorkspaceTask(activeProjectRef);
+  }, [activeProjectRef, startNewWorkspaceTask]);
   const activeEnvironmentShell = useEnvironmentQuery(
     activeThread ? environmentShell.stateAtom(activeThread.environmentId) : null,
   );
@@ -5017,7 +5085,14 @@ function ChatViewContent(props: ChatViewProps) {
         )}
         data-chat-column-maximized-away={rightPanelMaximized ? "true" : "false"}
       >
-        {/* Top bar */}
+        <WorkspaceTaskTabs
+          tasks={workspaceTaskSources}
+          activeTaskKey={activeThreadKey}
+          onSelectTask={handleSelectWorkspaceTask}
+          onNewTask={handleNewWorkspaceTask}
+        />
+
+        {/* Native task header */}
         <header
           data-chat-header
           className={cn(
@@ -5048,13 +5123,22 @@ function ChatViewContent(props: ChatViewProps) {
             keybindings={keybindings}
             availableEditors={availableEditors}
             rightPanelOpen={rightPanelOpen}
+            automationWorkspaceOpen={automationWorkspaceOpen}
             gitCwd={gitCwd}
             onRunProjectScript={runProjectScript}
             onAddProjectScript={saveProjectScript}
             onUpdateProjectScript={updateProjectScript}
             onDeleteProjectScript={deleteProjectScript}
+            onAutomationWorkspaceToggle={toggleAutomationWorkspace}
           />
         </header>
+
+        <WorkspaceTaskContextBar
+          projectName={activeProject?.title ?? null}
+          workspaceRoot={activeWorkspaceRoot ?? null}
+          activeView={workspaceContextRailView}
+          onSelectView={setWorkspaceContextRailView}
+        />
 
         {/* Error banner */}
         <ProviderStatusBanner status={activeProviderStatus} />
@@ -5062,6 +5146,14 @@ function ChatViewContent(props: ChatViewProps) {
           error={threadError}
           onDismiss={() => setThreadError(activeThread.id, null)}
         />
+        {automationWorkspaceOpen ? (
+          <AutomationWorkspace
+            environmentId={activeThread.environmentId}
+            threadId={activeThread.id}
+            threadTitle={activeThread.title}
+            onClose={closeAutomationWorkspace}
+          />
+        ) : null}
         {/* Main content area with optional plan sidebar */}
         <div className="flex min-h-0 min-w-0 flex-1">
           {/* Chat column */}
@@ -5272,6 +5364,33 @@ function ChatViewContent(props: ChatViewProps) {
             ) : null}
           </div>
           {/* end chat column */}
+          {workspaceContextRailView !== null && !rightPanelOpen ? (
+            <WorkspaceContextRail
+              activeView={workspaceContextRailView}
+              onClose={() => setWorkspaceContextRailView(null)}
+              subagents={
+                <NativeSubagentsPanel
+                  environmentId={activeThread.environmentId}
+                  parentThreadId={activeThread.id}
+                  activities={activeThread.activities}
+                />
+              }
+              attention={
+                <TaskAttentionView
+                  environmentId={activeThread.environmentId}
+                  threadId={activeThread.id}
+                  runtimeRevisionKey={activeThread.updatedAt}
+                  approvals={pendingApprovals}
+                  workLogEntries={workLogEntries}
+                  providerError={threadError}
+                  respondingRequestIds={respondingRequestIds}
+                  onRespondToApproval={onRespondToApproval}
+                  onReviewComposer={reviewComposerAttention}
+                  onOpenAutomationWorkspace={openAutomationWorkspace}
+                />
+              }
+            />
+          ) : null}
         </div>
         {/* end horizontal flex container */}
 

@@ -756,6 +756,42 @@ describe("deriveWorkLogEntries", () => {
     expect(entries[0]?.label).toBe("Searching for API endpoints");
   });
 
+  it("retains bounded Orchestra lifecycle data for its native timeline row", () => {
+    const orchestra = {
+      schemaVersion: 1,
+      eventId: "native-event-1",
+      runId: "run-1",
+      sequence: 1,
+      revision: 2,
+      kind: "recovered",
+      projection: {
+        schemaVersion: 1,
+        runId: "run-1",
+        workflowSha256: "workflow-sha",
+        parentThreadId: "provider-thread-1",
+        sourceRevision: "source-revision",
+        status: "running",
+        promotion: "pending",
+        steps: [],
+        nextAction: "Continue step implementation",
+      },
+    };
+    const entries = deriveWorkLogEntries([
+      makeActivity({
+        id: "orchestra:native-event-1",
+        kind: "task.progress",
+        summary: "Workflow running",
+        payload: { summary: "Workflow running", usage: { orchestra } },
+      }),
+    ]);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.toolData).toEqual(orchestra);
+    expect(entries[0]?.turnId).toBeNull();
+    expect(entries[0]?.tone).toBe("info");
+    expect(workEntryIndicatesToolNeutralStatus(entries[0]!)).toBe(false);
+  });
+
   it("uses payload detail as label for task.completed and preserves error tone", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

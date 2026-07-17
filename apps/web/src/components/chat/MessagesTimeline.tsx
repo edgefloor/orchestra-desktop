@@ -106,6 +106,7 @@ import {
 } from "./userMessageTerminalContexts";
 import { SkillInlineText } from "./SkillInlineText";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
+import { OrchestraLifecycleEntry, readOrchestraReplayEvent } from "./OrchestraLifecycleEntry";
 import {
   buildReviewCommentRenderablePatch,
   formatReviewCommentFence,
@@ -1898,6 +1899,25 @@ function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
 const stopRowToggle = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
 const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
+  workEntry: TimelineWorkEntry;
+  workspaceRoot: string | undefined;
+}) {
+  const { workEntry, workspaceRoot } = props;
+  const ctx = use(TimelineRowCtx);
+  const orchestraEvent = readOrchestraReplayEvent(workEntry.toolData);
+  if (orchestraEvent && ctx.threadRef) {
+    return (
+      <OrchestraLifecycleEntry
+        environmentId={ctx.activeThreadEnvironmentId}
+        threadId={ctx.threadRef.threadId}
+        event={orchestraEvent}
+      />
+    );
+  }
+  return <DefaultWorkEntryRow workEntry={workEntry} workspaceRoot={workspaceRoot} />;
+});
+
+const DefaultWorkEntryRow = memo(function DefaultWorkEntryRow(props: {
   workEntry: TimelineWorkEntry;
   workspaceRoot: string | undefined;
 }) {

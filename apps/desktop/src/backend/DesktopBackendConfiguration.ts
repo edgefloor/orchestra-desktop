@@ -335,6 +335,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
     const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
     const backendExposure = yield* serverExposure.backendConfig;
+    const orchestraResources = environment.path.join(environment.resourcesPath, "orchestra");
 
     const bootstrap = {
       mode: "desktop" as const,
@@ -356,6 +357,19 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       env: {
         ...backendChildEnvPatch(),
         ELECTRON_RUN_AS_NODE: "1",
+        ...(environment.isPackaged
+          ? {
+              ORCHESTRA_CODEX_PATH: environment.path.join(orchestraResources, "codex"),
+              ORCHESTRA_EVALUATOR_BIN: environment.path.join(
+                orchestraResources,
+                "orchestra-validate-worker",
+              ),
+              ORCHESTRA_RELEASE_MANIFEST: environment.path.join(
+                orchestraResources,
+                "release-manifest.json",
+              ),
+            }
+          : {}),
       },
       // Primary wants process.env (PATH, dev-runner's T3CODE_HOME, etc.).
       extendEnv: true,

@@ -58,6 +58,10 @@ import {
   resolveCodexHomeLayout,
 } from "./CodexHomeLayout.ts";
 const decodeCodexSettings = Schema.decodeSync(CodexSettings);
+const OrchestraReleaseIdentity = Schema.fromJsonString(
+  Schema.Struct({ manifestSha256: Schema.NonEmptyString }),
+);
+const decodeOrchestraReleaseIdentity = Schema.decodeEffect(OrchestraReleaseIdentity);
 
 const DRIVER_KIND = ProviderDriverKind.make("codex");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
@@ -119,7 +123,46 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
       const httpClient = yield* HttpClient.HttpClient;
       const serverSettings = yield* ServerSettingsService;
       const eventLoggers = yield* ProviderEventLoggers;
+      const fileSystem = yield* FileSystem.FileSystem;
       const processEnv = mergeProviderInstanceEnvironment(environment);
+      const productCodexPath = process.env.ORCHESTRA_CODEX_PATH?.trim();
+      const productManifestPath = process.env.ORCHESTRA_RELEASE_MANIFEST?.trim();
+      const expectedProductManifestSha256 = productCodexPath
+        ? yield* Effect.gen(function* () {
+            if (!productManifestPath) {
+              return yield* new ProviderDriverError({
+                driver: DRIVER_KIND,
+                instanceId,
+                detail:
+                  "ORCHESTRA_RELEASE_MANIFEST is required with the sealed Orchestra Codex binary.",
+              });
+            }
+            const raw = yield* fileSystem.readFileString(productManifestPath).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ProviderDriverError({
+                    driver: DRIVER_KIND,
+                    instanceId,
+                    detail: `Unable to read the Orchestra release manifest at ${productManifestPath}.`,
+                    cause,
+                  }),
+              ),
+            );
+            const manifest = yield* decodeOrchestraReleaseIdentity(raw).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ProviderDriverError({
+                    driver: DRIVER_KIND,
+                    instanceId,
+                    detail:
+                      "The Orchestra release manifest is invalid or has no manifestSha256 identity.",
+                    cause,
+                  }),
+              ),
+            );
+            return manifest.manifestSha256;
+          })
+        : undefined;
       const homeLayout = yield* resolveCodexHomeLayout(config);
       const continuationIdentity = codexContinuationIdentity(homeLayout);
       const stampIdentity = withInstanceIdentity({
@@ -143,6 +186,7 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
         ...config,
         enabled,
         homePath: homeLayout.effectiveHomePath ?? "",
+        ...(productCodexPath ? { binaryPath: productCodexPath } : {}),
       } satisfies CodexSettings;
       const maintenanceCapabilities = yield* resolveProviderMaintenanceCapabilitiesEffect(UPDATE, {
         binaryPath: effectiveConfig.binaryPath,
@@ -159,6 +203,7 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
         instanceId,
         environment: processEnv,
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
+        ...(expectedProductManifestSha256 ? { expectedProductManifestSha256 } : {}),
       });
       const textGeneration = yield* makeCodexTextGeneration(effectiveConfig, processEnv);
 

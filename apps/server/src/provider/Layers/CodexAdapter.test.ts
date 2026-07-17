@@ -10,6 +10,8 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   ProviderItemId,
+  type OrchestraQueryInput,
+  type OrchestraQueryResult,
   type ProviderApprovalDecision,
   type ProviderEvent,
   type ProviderSession,
@@ -103,6 +105,11 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
       }),
   );
 
+  public readonly queryOrchestraImpl = vi.fn(
+    (_input: Omit<OrchestraQueryInput, "threadId">): Promise<OrchestraQueryResult> =>
+      Promise.resolve({ selector: "steps", result: { items: [] } }),
+  );
+
   public readonly respondToRequestImpl = vi.fn(
     (_requestId: ApprovalRequestId, _decision: ProviderApprovalDecision): Promise<void> =>
       Promise.resolve(undefined),
@@ -137,8 +144,16 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
 
   readThread = Effect.promise(() => this.readThreadImpl());
 
+  readNativeSubagent(_agentThreadId: string) {
+    return Effect.die("Native subagent detail is not configured for this adapter test.");
+  }
+
   rollbackThread(numTurns: number) {
     return Effect.promise(() => this.rollbackThreadImpl(numTurns));
+  }
+
+  queryOrchestra(input: Omit<OrchestraQueryInput, "threadId">) {
+    return Effect.promise(() => this.queryOrchestraImpl(input));
   }
 
   respondToRequest(requestId: ApprovalRequestId, decision: ProviderApprovalDecision) {
@@ -448,6 +463,92 @@ function startLifecycleRuntime() {
 }
 
 lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
+  it.effect("routes bounded Orchestra queries through the active Codex task", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      NodeAssert.ok(adapter.queryOrchestra);
+      const result = yield* adapter.queryOrchestra(asThreadId("thread-1"), {
+        runId: "run-1",
+        selector: "evidence",
+        maxItems: 10,
+        maxBytes: 4096,
+      });
+
+      NodeAssert.deepEqual(result, { selector: "steps", result: { items: [] } });
+      NodeAssert.deepEqual(runtime.queryOrchestraImpl.mock.calls[0]?.[0], {
+        runId: "run-1",
+        selector: "evidence",
+        maxItems: 10,
+        maxBytes: 4096,
+      });
+    }),
+  );
+
+  it.effect("projects persisted Orchestra lifecycle into the normal task event stream", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      yield* runtime.emit({
+        id: asEventId("orchestra:native-event-1"),
+        kind: "notification",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        method: "orchestra/lifecycle",
+        payload: {
+          schemaVersion: 1,
+          eventId: "native-event-1",
+          runId: "run-1",
+          sequence: 1,
+          revision: 2,
+          kind: "recovered",
+          projection: {
+            schemaVersion: 1,
+            runId: "run-1",
+            workflowSha256: "workflow-sha",
+            parentThreadId: "provider-thread-1",
+            sourceRevision: "source-revision",
+            status: "running",
+            promotion: "pending",
+            steps: [],
+            nextAction: "Continue step implementation",
+          },
+        },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+      NodeAssert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some") return;
+      NodeAssert.equal(firstEvent.value.eventId, "orchestra:native-event-1");
+      NodeAssert.equal(firstEvent.value.type, "task.progress");
+      if (firstEvent.value.type !== "task.progress") return;
+      NodeAssert.equal(firstEvent.value.payload.taskId, "orchestra:run-1");
+      NodeAssert.equal(firstEvent.value.payload.summary, "Workflow running");
+      NodeAssert.deepEqual(firstEvent.value.payload.usage, {
+        orchestra: {
+          schemaVersion: 1,
+          eventId: "native-event-1",
+          runId: "run-1",
+          sequence: 1,
+          revision: 2,
+          kind: "recovered",
+          projection: {
+            schemaVersion: 1,
+            runId: "run-1",
+            workflowSha256: "workflow-sha",
+            parentThreadId: "provider-thread-1",
+            sourceRevision: "source-revision",
+            status: "running",
+            promotion: "pending",
+            steps: [],
+            nextAction: "Continue step implementation",
+          },
+        },
+      });
+    }),
+  );
+
   it.effect("maps completed agent message items to canonical item.completed events", () =>
     Effect.gen(function* () {
       const { adapter, runtime } = yield* startLifecycleRuntime();

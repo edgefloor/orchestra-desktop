@@ -4,9 +4,10 @@ import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { describe } from "vite-plus/test";
-import { ThreadId } from "@t3tools/contracts";
+import { NATIVE_SUBAGENT_DETAIL_MAX_ITEMS, ThreadId } from "@t3tools/contracts";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexRpc from "effect-codex-app-server/rpc";
+import type * as EffectCodexSchema from "effect-codex-app-server/schema";
 
 import {
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
@@ -14,9 +15,14 @@ import {
 } from "../CodexDeveloperInstructions.ts";
 import {
   buildTurnStartParams,
+  decodeOrchestraThreadReadEnvelope,
   hasConfiguredMcpServer,
+  isDirectNativeSubagent,
   isRecoverableThreadResumeError,
   openCodexThread,
+  projectNativeSubagentDetail,
+  redactCodexDiagnostic,
+  validateOrchestraProductCompatibility,
 } from "./CodexSessionRuntime.ts";
 const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequestError);
 
@@ -34,6 +40,179 @@ describe("CodexSessionRuntimeIdentifierGenerationError", () => {
       error.message,
       "Failed to generate Codex App Server identifier for provider-event.",
     );
+  });
+});
+
+describe("Orchestra Product compatibility", () => {
+  it("accepts only the exact manifest with the required native capabilities", () => {
+    NodeAssert.equal(
+      validateOrchestraProductCompatibility("manifest-a", {
+        manifestSha256: "manifest-a",
+        capabilities: ["orchestra/query", "orchestra/threadItem"],
+      }),
+      undefined,
+    );
+
+    const wrongManifest = validateOrchestraProductCompatibility("manifest-a", {
+      manifestSha256: "manifest-b",
+      capabilities: ["orchestra/query", "orchestra/threadItem"],
+    });
+    NodeAssert.equal(wrongManifest?._tag, "CodexSessionRuntimeProductMismatchError");
+    NodeAssert.equal(wrongManifest?.actualManifestSha256, "manifest-b");
+
+    const missingCapability = validateOrchestraProductCompatibility("manifest-a", {
+      manifestSha256: "manifest-a",
+      capabilities: ["orchestra/query"],
+    });
+    NodeAssert.match(missingCapability?.message ?? "", /orchestra\/threadItem/);
+
+    const stockCodex = validateOrchestraProductCompatibility("manifest-a", null);
+    NodeAssert.match(stockCodex?.message ?? "", /does not expose/);
+  });
+});
+
+describe("Orchestra task replay", () => {
+  it.effect("decodes Rust Option fields serialized as null", () =>
+    Effect.gen(function* () {
+      const decoded = yield* decodeOrchestraThreadReadEnvelope({
+        thread: { id: "provider-thread" },
+        orchestra: {
+          latest: {
+            schemaVersion: 1,
+            eventId: "run-1:1",
+            runId: "run-1",
+            sequence: 1,
+            revision: 1,
+            kind: "invoked",
+            projection: {
+              schemaVersion: 1,
+              runId: "run-1",
+              workflowSha256: "sha256",
+              parentThreadId: "provider-thread",
+              sourceRevision: "revision",
+              status: "completed",
+              promotion: "notRequired",
+              steps: [
+                {
+                  id: "check",
+                  status: "completed",
+                  attempts: 1,
+                  rounds: 1,
+                  outputKeys: ["passed"],
+                  finalResponse: null,
+                  error: null,
+                },
+              ],
+              nextAction: "run complete",
+            },
+          },
+          events: [],
+          replayTruncated: false,
+        },
+      });
+
+      NodeAssert.equal(decoded.orchestra?.latest.projection.status, "completed");
+      NodeAssert.equal(decoded.orchestra?.latest.projection.steps[0]?.error, null);
+    }),
+  );
+
+  it.effect("rejects replay tails beyond the native task-local bound", () =>
+    Effect.gen(function* () {
+      const event = {
+        schemaVersion: 1,
+        eventId: "run-1:1",
+        runId: "run-1",
+        sequence: 1,
+        revision: 1,
+        kind: "invoked",
+        projection: {
+          schemaVersion: 1,
+          runId: "run-1",
+          workflowSha256: "sha256",
+          parentThreadId: "provider-thread",
+          sourceRevision: "revision",
+          status: "running",
+          promotion: "pending",
+          steps: [],
+          nextAction: "continue",
+        },
+      };
+      const error = yield* decodeOrchestraThreadReadEnvelope({
+        orchestra: {
+          latest: event,
+          events: Array.from({ length: 65 }, (_, index) => ({
+            ...event,
+            eventId: `run-1:${index + 1}`,
+            sequence: index + 1,
+            revision: index + 1,
+          })),
+          replayTruncated: false,
+        },
+      }).pipe(Effect.flip);
+
+      NodeAssert.ok(Schema.isSchemaError(error));
+    }),
+  );
+});
+
+describe("native subagent detail", () => {
+  const childThread = {
+    agentNickname: "Scout",
+    agentRole: "researcher",
+    cliVersion: "0.1.0",
+    createdAt: 1_768_435_200,
+    cwd: "/tmp/project",
+    ephemeral: false,
+    id: "child-provider-thread",
+    modelProvider: "openai",
+    parentThreadId: "parent-provider-thread",
+    preview: "Inspect the native Codex boundary",
+    sessionId: "session-1",
+    source: "appServer",
+    status: { type: "active", activeFlags: ["waitingOnUserInput"] },
+    turns: [
+      {
+        id: "turn-1",
+        items: Array.from({ length: 30 }, (_, index) => ({
+          type: "agentMessage" as const,
+          id: `item-${index}`,
+          text: `Finding ${index} ${"detail ".repeat(80)}`,
+        })),
+        status: "inProgress" as const,
+      },
+    ],
+    updatedAt: 1_768_435_260,
+  } satisfies EffectCodexSchema.V2ThreadReadResponse["thread"];
+
+  it("accepts only a direct native child relationship", () => {
+    NodeAssert.equal(isDirectNativeSubagent("parent-provider-thread", childThread), true);
+    NodeAssert.equal(isDirectNativeSubagent("unrelated-provider-thread", childThread), false);
+  });
+
+  it("projects bounded child history and waiting state", () => {
+    const detail = projectNativeSubagentDetail(ThreadId.make("parent-task"), childThread);
+
+    NodeAssert.equal(detail.parentTaskId, "parent-task");
+    NodeAssert.equal(detail.agentThreadId, "child-provider-thread");
+    NodeAssert.equal(detail.status, "waiting");
+    NodeAssert.equal(detail.items.length, NATIVE_SUBAGENT_DETAIL_MAX_ITEMS);
+    NodeAssert.equal(detail.items[0]?.id, "item-6");
+    NodeAssert.equal(detail.truncated, true);
+    NodeAssert.ok(detail.items.every((item) => item.summary.length <= 320));
+  });
+});
+
+describe("Codex diagnostics", () => {
+  it("redacts credential-shaped values and bounds support output", () => {
+    const secret = "diagnostic-secret-sentinel";
+    const diagnostic = redactCodexDiagnostic(
+      `Authorization: Bearer ${secret} api_key=${secret} ${"x".repeat(8_192)}`,
+    );
+
+    NodeAssert.doesNotMatch(diagnostic, new RegExp(secret));
+    NodeAssert.match(diagnostic, /\[REDACTED\]/);
+    NodeAssert.ok(diagnostic.length <= 4_096);
+    NodeAssert.ok(diagnostic.endsWith("…"));
   });
 });
 

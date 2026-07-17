@@ -84,8 +84,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   });
 
   it("switches desktop packaging product names to nightly for nightly builds", () => {
-    assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Alpha)");
-    assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
+    assert.equal(resolveDesktopProductName("0.0.17"), "Orchestra");
+    assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "Orchestra (Nightly)");
   });
 
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
@@ -349,7 +349,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     });
 
     assert.deepStrictEqual(configuration, {
-      appId: "com.t3tools.t3code",
+      appId: "com.edgefloor.orchestra",
       teamId: "ABC1234567",
       rpDomains: ["example.clerk.accounts.dev"],
       provisioningProfilePath: "/tmp/t3code.provisionprofile",
@@ -369,7 +369,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       "clerk.example.com",
       "example.clerk.accounts.dev",
     ]);
-    assert.include(entitlements, "<string>ABC1234567.com.t3tools.t3code</string>");
+    assert.include(entitlements, "<string>ABC1234567.com.edgefloor.orchestra</string>");
     assert.include(entitlements, "<string>webcredentials:clerk.example.com</string>");
     assert.include(entitlements, "<string>webcredentials:example.clerk.accounts.dev</string>");
     assert.include(entitlements, "<key>com.apple.security.cs.allow-jit</key>");
@@ -464,12 +464,10 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       });
 
       const mac = config.mac as Record<string, unknown>;
-      assert.equal(config.appId, "com.t3tools.t3code");
+      assert.equal(config.appId, "com.edgefloor.orchestra");
       assert.equal(mac.entitlements, "/tmp/entitlements.mac.plist");
       assert.equal(mac.provisioningProfile, "/tmp/t3code.provisionprofile");
-      assert.deepStrictEqual(mac.protocols, [
-        { name: "T3 Code", schemes: ["t3code", "t3code-dev"] },
-      ]);
+      assert.deepStrictEqual(mac.protocols, [{ name: "Orchestra", schemes: ["orchestra"] }]);
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 
@@ -490,6 +488,39 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.equal(win.signAndEditExecutable, true);
       assert.notProperty(win, "azureSignOptions");
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
+  );
+
+  it.effect("embeds the sealed Orchestra Product resources when supplied", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = process.env.ORCHESTRA_PRODUCT_RESOURCES;
+        process.env.ORCHESTRA_PRODUCT_RESOURCES = "/tmp/orchestra-product-resources";
+        return previous;
+      }),
+      () =>
+        Effect.gen(function* () {
+          const config = yield* createBuildConfig(
+            "mac",
+            "dmg",
+            "1.2.3",
+            false,
+            false,
+            undefined,
+            undefined,
+          );
+          assert.deepStrictEqual(config.extraResources, [
+            { from: "/tmp/orchestra-product-resources", to: "orchestra" },
+          ]);
+        }),
+      (previous) =>
+        Effect.sync(() => {
+          if (previous === undefined) {
+            delete process.env.ORCHESTRA_PRODUCT_RESOURCES;
+          } else {
+            process.env.ORCHESTRA_PRODUCT_RESOURCES = previous;
+          }
+        }),
+    ).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 
   it("promotes target fff binaries to direct staged dependencies", () => {

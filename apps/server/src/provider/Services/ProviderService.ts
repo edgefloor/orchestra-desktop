@@ -12,6 +12,20 @@
  * @module ProviderService
  */
 import type {
+  AutomationLinearReadInput,
+  AutomationLinearReadResult,
+  AutomationLifecycleInput,
+  AutomationQueueReadInput,
+  AutomationQueueReadResult,
+  AutomationReconcileInput,
+  AutomationRunInput,
+  AutomationRunResult,
+  AutomationCancelInput,
+  AutomationCancelIssueInput,
+  AutomationValidateInput,
+  AutomationValidateResult,
+  OrchestraQueryInput,
+  OrchestraQueryResult,
   ProviderInterruptTurnInput,
   ProviderInstanceId,
   ProviderRespondToRequestInput,
@@ -23,6 +37,8 @@ import type {
   ProviderStopSessionInput,
   ThreadId,
   ProviderTurnStartResult,
+  NativeSubagentDetail,
+  NativeSubagentReadInput,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -104,6 +120,44 @@ export interface ProviderServiceShape {
     readonly threadId: ThreadId;
     readonly numTurns: number;
   }) => Effect.Effect<void, ProviderServiceError>;
+
+  readonly readNativeSubagent?: (
+    input: NativeSubagentReadInput,
+  ) => Effect.Effect<NativeSubagentDetail, ProviderServiceError>;
+
+  readonly validateAutomationProfile?: (
+    input: AutomationValidateInput,
+  ) => Effect.Effect<AutomationValidateResult, ProviderServiceError>;
+  readonly runAutomationFixture?: (
+    input: AutomationRunInput,
+  ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
+  readonly readLinearAutomation?: (
+    input: AutomationLinearReadInput,
+  ) => Effect.Effect<AutomationLinearReadResult, ProviderServiceError>;
+  readonly readAutomationQueue?: (
+    input: AutomationQueueReadInput,
+  ) => Effect.Effect<AutomationQueueReadResult, ProviderServiceError>;
+  readonly automationStatus?: (
+    input: AutomationLifecycleInput,
+  ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
+  readonly pauseAutomation?: (
+    input: AutomationLifecycleInput,
+  ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
+  readonly refreshAutomation?: (
+    input: AutomationReconcileInput,
+  ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
+  readonly resumeAutomation?: (
+    input: AutomationReconcileInput,
+  ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
+  readonly cancelAutomation?: (
+    input: AutomationCancelInput,
+  ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
+  readonly cancelAutomationIssue?: (
+    input: AutomationCancelIssueInput,
+  ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
+  readonly queryOrchestra?: (
+    input: OrchestraQueryInput,
+  ) => Effect.Effect<OrchestraQueryResult, ProviderServiceError>;
 
   /**
    * Canonical provider runtime event stream.

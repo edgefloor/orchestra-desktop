@@ -135,6 +135,15 @@ describe("DesktopBackendConfiguration", () => {
         assert.equal(first.cwd, environment.backendCwd);
         assert.equal(first.captureOutput, true);
         assert.equal(first.env.ELECTRON_RUN_AS_NODE, "1");
+        assert.equal(first.env.ORCHESTRA_CODEX_PATH, "/missing/resources/orchestra/codex");
+        assert.equal(
+          first.env.ORCHESTRA_EVALUATOR_BIN,
+          "/missing/resources/orchestra/orchestra-validate-worker",
+        );
+        assert.equal(
+          first.env.ORCHESTRA_RELEASE_MANIFEST,
+          "/missing/resources/orchestra/release-manifest.json",
+        );
         assert.isUndefined(first.env.T3CODE_PORT);
         assert.isUndefined(first.env.T3CODE_MODE);
         assert.isUndefined(first.env.T3CODE_DESKTOP_LAN_HOST);

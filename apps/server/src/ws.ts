@@ -11,6 +11,10 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import {
   DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL,
+  AutomationRunError,
+  AutomationValidateError,
+  OrchestraQueryError,
+  NativeSubagentReadError,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   AuthReviewWriteScope,
@@ -76,6 +80,7 @@ import {
   observeRpcStreamEffect as instrumentRpcStreamEffect,
 } from "./observability/RpcInstrumentation.ts";
 import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
+import * as ProviderService from "./provider/Services/ProviderService.ts";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
@@ -321,6 +326,18 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.vcsSwitchRef, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsInit, AuthOrchestrationOperateScope],
   [WS_METHODS.reviewGetDiffPreview, AuthReviewWriteScope],
+  [WS_METHODS.automationValidate, AuthOrchestrationReadScope],
+  [WS_METHODS.automationRunFixture, AuthOrchestrationOperateScope],
+  [WS_METHODS.automationLinearRead, AuthOrchestrationReadScope],
+  [WS_METHODS.automationQueueRead, AuthOrchestrationReadScope],
+  [WS_METHODS.automationStatus, AuthOrchestrationReadScope],
+  [WS_METHODS.automationPause, AuthOrchestrationOperateScope],
+  [WS_METHODS.automationRefresh, AuthOrchestrationOperateScope],
+  [WS_METHODS.automationResume, AuthOrchestrationOperateScope],
+  [WS_METHODS.automationCancelIssue, AuthOrchestrationOperateScope],
+  [WS_METHODS.automationCancel, AuthOrchestrationOperateScope],
+  [WS_METHODS.orchestraQuery, AuthOrchestrationReadScope],
+  [WS_METHODS.nativeSubagentRead, AuthOrchestrationReadScope],
   [WS_METHODS.terminalOpen, AuthTerminalOperateScope],
   [WS_METHODS.terminalAttach, AuthTerminalOperateScope],
   [WS_METHODS.terminalWrite, AuthTerminalOperateScope],
@@ -1242,6 +1259,320 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.serverGetConfig, loadServerConfig, {
             "rpc.aggregate": "server",
           }),
+        [WS_METHODS.automationValidate]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationValidate,
+            Effect.gen(function* () {
+              const providerService = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!providerService?.validateAutomationProfile) {
+                return yield* new AutomationValidateError({
+                  threadId: input.threadId,
+                  message: "Automation validation is unavailable.",
+                });
+              }
+              return yield* providerService.validateAutomationProfile(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationValidateError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.automationRunFixture]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationRunFixture,
+            Effect.gen(function* () {
+              const providerService = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!providerService?.runAutomationFixture) {
+                return yield* new AutomationRunError({
+                  threadId: input.threadId,
+                  message: "Task-owned Automation execution is unavailable.",
+                });
+              }
+              return yield* providerService.runAutomationFixture(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationRunError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.automationLinearRead]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationLinearRead,
+            Effect.gen(function* () {
+              const providerService = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!providerService?.readLinearAutomation) {
+                return yield* new AutomationValidateError({
+                  threadId: input.threadId,
+                  message: "Live read-only Linear intake is unavailable.",
+                });
+              }
+              return yield* providerService.readLinearAutomation(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationValidateError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.automationQueueRead]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationQueueRead,
+            Effect.gen(function* () {
+              const providerService = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!providerService?.readAutomationQueue) {
+                return yield* new AutomationRunError({
+                  threadId: input.threadId,
+                  message: "Automation queue inspection is unavailable.",
+                });
+              }
+              return yield* providerService.readAutomationQueue(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationRunError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.automationCancel]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationCancel,
+            Effect.gen(function* () {
+              const providerService = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!providerService?.cancelAutomation) {
+                return yield* new AutomationRunError({
+                  threadId: input.threadId,
+                  message: "Task-owned Automation cancellation is unavailable.",
+                });
+              }
+              return yield* providerService.cancelAutomation(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationRunError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.automationCancelIssue]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationCancelIssue,
+            Effect.gen(function* () {
+              const providerService = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!providerService?.cancelAutomationIssue) {
+                return yield* new AutomationRunError({
+                  threadId: input.threadId,
+                  message: "Task-owned Issue cancellation is unavailable.",
+                });
+              }
+              return yield* providerService.cancelAutomationIssue(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationRunError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.automationStatus]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationStatus,
+            Effect.gen(function* () {
+              const service = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!service?.automationStatus) {
+                return yield* new AutomationRunError({
+                  threadId: input.threadId,
+                  message: "Automation inspection is unavailable.",
+                });
+              }
+              return yield* service.automationStatus(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationRunError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.automationPause]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationPause,
+            Effect.gen(function* () {
+              const service = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!service?.pauseAutomation) {
+                return yield* new AutomationRunError({
+                  threadId: input.threadId,
+                  message: "Automation pause is unavailable.",
+                });
+              }
+              return yield* service.pauseAutomation(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationRunError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.automationRefresh]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationRefresh,
+            Effect.gen(function* () {
+              const service = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!service?.refreshAutomation) {
+                return yield* new AutomationRunError({
+                  threadId: input.threadId,
+                  message: "Automation reconciliation refresh is unavailable.",
+                });
+              }
+              return yield* service.refreshAutomation(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationRunError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.automationResume]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationResume,
+            Effect.gen(function* () {
+              const service = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!service?.resumeAutomation) {
+                return yield* new AutomationRunError({
+                  threadId: input.threadId,
+                  message: "Automation resume is unavailable.",
+                });
+              }
+              return yield* service.resumeAutomation(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationRunError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.orchestraQuery]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.orchestraQuery,
+            Effect.gen(function* () {
+              const service = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!service?.queryOrchestra) {
+                return yield* new OrchestraQueryError({
+                  threadId: input.threadId,
+                  message: "Bounded Orchestra detail queries are unavailable.",
+                });
+              }
+              return yield* service.queryOrchestra(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new OrchestraQueryError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "orchestra", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.nativeSubagentRead]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.nativeSubagentRead,
+            Effect.gen(function* () {
+              const service = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!service?.readNativeSubagent) {
+                return yield* new NativeSubagentReadError({
+                  threadId: input.threadId,
+                  agentThreadId: input.agentThreadId,
+                  message: "Native child-agent detail is unavailable.",
+                });
+              }
+              return yield* service.readNativeSubagent(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new NativeSubagentReadError({
+                      threadId: input.threadId,
+                      agentThreadId: input.agentThreadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "native-subagent", "thread.id": input.threadId },
+          ),
         [WS_METHODS.serverRefreshProviders]: (input) =>
           observeRpcEffect(
             WS_METHODS.serverRefreshProviders,

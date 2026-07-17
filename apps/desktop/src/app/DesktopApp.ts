@@ -1,5 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Duration from "effect/Duration";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -24,6 +26,7 @@ import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopState from "./DesktopState.ts";
 import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
+import * as OrchestraProductLifecycle from "../updates/OrchestraProductLifecycle.ts";
 import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = 3773;
@@ -125,7 +128,7 @@ const handleFatalStartupError = Effect.fn("desktop.startup.handleFatalStartupErr
   const wasQuitting = yield* Ref.getAndSet(state.quitting, true);
   if (!wasQuitting) {
     yield* electronDialog.showErrorBox(
-      "T3 Code failed to start",
+      "Orchestra failed to start",
       `Stage: ${stage}\n${message}${detail}`,
     );
   }
@@ -245,10 +248,33 @@ const startup = Effect.gen(function* () {
     Effect.catchCause((cause) => fatalStartupCause("whenReady", cause)),
   );
   yield* logStartupInfo("app ready");
+  const productStartupPhase = yield* OrchestraProductLifecycle.beginStartup(environment).pipe(
+    Effect.orDie,
+  );
   yield* appIdentity.configure;
   yield* applicationMenu.configure;
   yield* updates.configure;
-  yield* bootstrap.pipe(Effect.catchCause((cause) => fatalStartupCause("bootstrap", cause)));
+  const bootstrapExit = yield* Effect.exit(bootstrap);
+  if (Exit.isFailure(bootstrapExit)) {
+    if (productStartupPhase === "first-launch-pending") {
+      yield* OrchestraProductLifecycle.rollbackStartup(environment).pipe(Effect.orDie);
+      yield* electronApp.relaunch({ execPath: process.execPath, args: process.argv.slice(1) });
+      yield* electronApp.exit(0);
+    }
+    return yield* fatalStartupCause("bootstrap", bootstrapExit.cause);
+  }
+  if (productStartupPhase === "first-launch-pending") {
+    const pool = yield* DesktopBackendPool.DesktopBackendPool;
+    const primaryBackend = yield* pool.primary;
+    const ready = yield* primaryBackend.waitForReady(Duration.seconds(30));
+    if (!ready) {
+      yield* OrchestraProductLifecycle.rollbackStartup(environment).pipe(Effect.orDie);
+      yield* lifecycle.relaunch("Orchestra Product first-launch health check failed");
+      return;
+    }
+    yield* OrchestraProductLifecycle.commitStartup(environment).pipe(Effect.orDie);
+    yield* logStartupInfo("Orchestra Product first launch committed");
+  }
 }).pipe(Effect.withSpan("desktop.startup"));
 
 const scopedProgram = Effect.scoped(

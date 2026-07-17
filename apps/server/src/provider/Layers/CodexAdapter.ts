@@ -11,6 +11,7 @@ import {
   type CanonicalItemType,
   type CanonicalRequestType,
   type CodexSettings,
+  OrchestraReplayEvent,
   ProviderDriverKind,
   type ProviderEvent,
   ProviderInstanceId,
@@ -20,6 +21,7 @@ import {
   type ProviderUserInputAnswers,
   RuntimeItemId,
   RuntimeRequestId,
+  RuntimeTaskId,
   ProviderApprovalDecision,
   ThreadId,
   ProviderSendTurnInput,
@@ -67,6 +69,7 @@ const isCodexSessionRuntimeThreadIdMissingError = Schema.is(
   CodexSessionRuntimeThreadIdMissingError,
 );
 const isCodexResumeCursorSchema = Schema.is(CodexResumeCursorSchema);
+const isOrchestraReplayEvent = Schema.is(OrchestraReplayEvent);
 
 const PROVIDER = ProviderDriverKind.make("codex");
 
@@ -82,6 +85,7 @@ export interface CodexAdapterLiveOptions {
   >;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
+  readonly expectedProductManifestSha256?: string;
 }
 
 interface CodexAdapterSessionContext {
@@ -225,7 +229,7 @@ function toCanonicalItemType(raw: string | undefined | null): CanonicalItemType 
     return "file_change";
   if (type.includes("mcp")) return "mcp_tool_call";
   if (type.includes("dynamic tool")) return "dynamic_tool_call";
-  if (type.includes("collab")) return "collab_agent_tool_call";
+  if (type.includes("collab") || type.includes("sub agent")) return "collab_agent_tool_call";
   if (type.includes("web search")) return "web_search";
   if (type.includes("image")) return "image_view";
   if (type.includes("review entered")) return "review_entered";
@@ -256,6 +260,8 @@ function itemTitle(itemType: CanonicalItemType, item?: CodexLifecycleItem): stri
       return "MCP tool call";
     case "dynamic_tool_call":
       return "Tool call";
+    case "collab_agent_tool_call":
+      return "Subagent activity";
     case "web_search":
       return "Web search";
     case "image_view":
@@ -275,6 +281,7 @@ function itemDetail(item: CodexLifecycleItem): string | undefined {
     "text" in item ? item.text : undefined,
     "path" in item ? item.path : undefined,
     "prompt" in item ? item.prompt : undefined,
+    "agentPath" in item ? item.agentPath : undefined,
   ];
   for (const candidate of candidates) {
     const trimmed = typeof candidate === "string" ? trimText(candidate) : undefined;
@@ -490,6 +497,25 @@ function mapToRuntimeEvents(
   event: ProviderEvent,
   canonicalThreadId: ThreadId,
 ): ReadonlyArray<ProviderRuntimeEvent> {
+  if (event.method === "orchestra/lifecycle") {
+    if (!isOrchestraReplayEvent(event.payload)) {
+      return [];
+    }
+    const lifecycle = event.payload;
+    return [
+      {
+        ...runtimeEventBase(event, canonicalThreadId),
+        type: "task.progress",
+        payload: {
+          taskId: RuntimeTaskId.make(`orchestra:${lifecycle.runId}`),
+          description: `Orchestra ${lifecycle.kind}`,
+          summary: `Workflow ${lifecycle.projection.status}`,
+          usage: { orchestra: lifecycle },
+        },
+      },
+    ];
+  }
+
   if (event.kind === "error") {
     if (!event.message) {
       return [];
@@ -1393,6 +1419,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           cwd: input.cwd ?? process.cwd(),
           binaryPath: codexConfig.binaryPath,
           ...(options?.environment ? { environment: options.environment } : {}),
+          ...(options?.expectedProductManifestSha256
+            ? { expectedProductManifestSha256: options.expectedProductManifestSha256 }
+            : {}),
           ...(codexConfig.homePath ? { homePath: codexConfig.homePath } : {}),
           ...(isCodexResumeCursorSchema(input.resumeCursor)
             ? { resumeCursor: input.resumeCursor }
@@ -1588,6 +1617,19 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       })),
     );
 
+  const readNativeSubagent: NonNullable<CodexAdapterShape["readNativeSubagent"]> = (
+    threadId,
+    agentThreadId,
+  ) =>
+    requireSession(threadId).pipe(
+      Effect.flatMap((session) => session.runtime.readNativeSubagent(agentThreadId)),
+      Effect.mapError((cause) =>
+        cause._tag === "ProviderAdapterSessionNotFoundError"
+          ? cause
+          : mapCodexRuntimeError(threadId, "thread/read-subagent", cause),
+      ),
+    );
+
   const rollbackThread: CodexAdapterShape["rollbackThread"] = (threadId, numTurns) => {
     if (!Number.isInteger(numTurns) || numTurns < 1) {
       return Effect.fail(
@@ -1612,6 +1654,193 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       })),
     );
   };
+
+  const queryOrchestra: NonNullable<CodexAdapterShape["queryOrchestra"]> = Effect.fn(
+    "queryOrchestra",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.queryOrchestra) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "orchestra/query",
+        detail: "This Codex runtime does not expose bounded Orchestra detail queries.",
+      });
+    }
+    return yield* session.runtime
+      .queryOrchestra(input)
+      .pipe(Effect.mapError((cause) => mapCodexRuntimeError(threadId, "orchestra/query", cause)));
+  });
+
+  const validateAutomationProfile: NonNullable<CodexAdapterShape["validateAutomationProfile"]> =
+    Effect.fn("validateAutomationProfile")(function* (threadId, input) {
+      const session = yield* requireSession(threadId);
+      if (!session.runtime.validateAutomationProfile) {
+        return yield* new ProviderAdapterRequestError({
+          provider: PROVIDER,
+          method: "automation/validate",
+          detail: "This Codex runtime does not expose Automation profile validation.",
+        });
+      }
+      return yield* session.runtime
+        .validateAutomationProfile(input)
+        .pipe(
+          Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/validate", cause)),
+        );
+    });
+
+  const runAutomationFixture: NonNullable<CodexAdapterShape["runAutomationFixture"]> = Effect.fn(
+    "runAutomationFixture",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.runAutomationFixture) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/runFixture",
+        detail: "This Codex runtime does not expose task-owned Automation execution.",
+      });
+    }
+    return yield* session.runtime
+      .runAutomationFixture(input)
+      .pipe(
+        Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/runFixture", cause)),
+      );
+  });
+
+  const readLinearAutomation: NonNullable<CodexAdapterShape["readLinearAutomation"]> = Effect.fn(
+    "readLinearAutomation",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.readLinearAutomation) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/linear/read",
+        detail: "This Codex runtime does not expose live read-only Linear intake.",
+      });
+    }
+    return yield* session.runtime
+      .readLinearAutomation(input)
+      .pipe(
+        Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/linear/read", cause)),
+      );
+  });
+
+  const readAutomationQueue: NonNullable<CodexAdapterShape["readAutomationQueue"]> = Effect.fn(
+    "readAutomationQueue",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.readAutomationQueue) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/queue/read",
+        detail: "This Codex runtime does not expose bounded Automation queue pages.",
+      });
+    }
+    return yield* session.runtime
+      .readAutomationQueue(input)
+      .pipe(
+        Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/queue/read", cause)),
+      );
+  });
+
+  const cancelAutomation: NonNullable<CodexAdapterShape["cancelAutomation"]> = Effect.fn(
+    "cancelAutomation",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.cancelAutomation) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/cancel",
+        detail: "This Codex runtime does not expose task-owned Automation cancellation.",
+      });
+    }
+    return yield* session.runtime
+      .cancelAutomation(input)
+      .pipe(Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/cancel", cause)));
+  });
+
+  const cancelAutomationIssue: NonNullable<CodexAdapterShape["cancelAutomationIssue"]> = Effect.fn(
+    "cancelAutomationIssue",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.cancelAutomationIssue) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/cancelIssue",
+        detail: "This Codex runtime does not expose task-owned Issue cancellation.",
+      });
+    }
+    return yield* session.runtime
+      .cancelAutomationIssue(input)
+      .pipe(
+        Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/cancelIssue", cause)),
+      );
+  });
+
+  const automationStatus: NonNullable<CodexAdapterShape["automationStatus"]> = Effect.fn(
+    "automationStatus",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.automationStatus) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/status",
+        detail: "This Codex runtime does not expose Automation inspection.",
+      });
+    }
+    return yield* session.runtime
+      .automationStatus(input)
+      .pipe(Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/status", cause)));
+  });
+
+  const pauseAutomation: NonNullable<CodexAdapterShape["pauseAutomation"]> = Effect.fn(
+    "pauseAutomation",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.pauseAutomation) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/pause",
+        detail: "This Codex runtime does not expose fenced Automation pause.",
+      });
+    }
+    return yield* session.runtime
+      .pauseAutomation(input)
+      .pipe(Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/pause", cause)));
+  });
+
+  const refreshAutomation: NonNullable<CodexAdapterShape["refreshAutomation"]> = Effect.fn(
+    "refreshAutomation",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.refreshAutomation) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/refresh",
+        detail: "This Codex runtime does not expose Automation reconciliation refresh.",
+      });
+    }
+    return yield* session.runtime
+      .refreshAutomation(input)
+      .pipe(
+        Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/refresh", cause)),
+      );
+  });
+
+  const resumeAutomation: NonNullable<CodexAdapterShape["resumeAutomation"]> = Effect.fn(
+    "resumeAutomation",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.resumeAutomation) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/resume",
+        detail: "This Codex runtime does not expose reconciled Automation resume.",
+      });
+    }
+    return yield* session.runtime
+      .resumeAutomation(input)
+      .pipe(Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/resume", cause)));
+  });
 
   const respondToRequest: CodexAdapterShape["respondToRequest"] = (threadId, requestId, decision) =>
     requireSession(threadId).pipe(
@@ -1699,7 +1928,19 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     sendTurn,
     interruptTurn,
     readThread,
+    readNativeSubagent,
     rollbackThread,
+    queryOrchestra,
+    validateAutomationProfile,
+    runAutomationFixture,
+    readLinearAutomation,
+    readAutomationQueue,
+    automationStatus,
+    pauseAutomation,
+    refreshAutomation,
+    resumeAutomation,
+    cancelAutomationIssue,
+    cancelAutomation,
     respondToRequest,
     respondToUserInput,
     stopSession,

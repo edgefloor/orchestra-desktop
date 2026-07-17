@@ -140,7 +140,7 @@ importers:
         specifier: ^8.2.0
         version: 8.2.0
       electron-updater:
-        specifier: ^6.6.2
+        specifier: 6.8.3
         version: 6.8.3
       playwright-core:
         specifier: 1.60.0

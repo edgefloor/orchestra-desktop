@@ -143,6 +143,28 @@ import {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import {
+  AutomationCancelIssueInput,
+  AutomationCancelInput,
+  AutomationLinearReadInput,
+  AutomationLinearReadResult,
+  AutomationLifecycleInput,
+  AutomationQueueReadInput,
+  AutomationQueueReadResult,
+  AutomationReconcileInput,
+  AutomationRunError,
+  AutomationRunInput,
+  AutomationRunResult,
+  AutomationValidateError,
+  AutomationValidateInput,
+  AutomationValidateResult,
+} from "./automation.ts";
+import { OrchestraQueryError, OrchestraQueryInput, OrchestraQueryResult } from "./orchestra.ts";
+import {
+  NativeSubagentDetail,
+  NativeSubagentReadError,
+  NativeSubagentReadInput,
+} from "./nativeSubagents.ts";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -178,6 +200,20 @@ export const WS_METHODS = {
 
   // Review methods
   reviewGetDiffPreview: "review.getDiffPreview",
+
+  // Codex-native Automation methods
+  automationValidate: "automation.validate",
+  automationRunFixture: "automation.runFixture",
+  automationLinearRead: "automation.linearRead",
+  automationQueueRead: "automation.queueRead",
+  automationStatus: "automation.status",
+  automationPause: "automation.pause",
+  automationRefresh: "automation.refresh",
+  automationResume: "automation.resume",
+  automationCancelIssue: "automation.cancelIssue",
+  automationCancel: "automation.cancel",
+  orchestraQuery: "orchestra.query",
+  nativeSubagentRead: "nativeSubagent.read",
 
   // Terminal methods
   terminalOpen: "terminal.open",
@@ -282,6 +318,78 @@ export const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSetting
   payload: Schema.Struct({ patch: ServerSettingsPatch }),
   success: ServerSettings,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationValidateRpc = Rpc.make(WS_METHODS.automationValidate, {
+  payload: AutomationValidateInput,
+  success: AutomationValidateResult,
+  error: Schema.Union([AutomationValidateError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationRunFixtureRpc = Rpc.make(WS_METHODS.automationRunFixture, {
+  payload: AutomationRunInput,
+  success: AutomationRunResult,
+  error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationLinearReadRpc = Rpc.make(WS_METHODS.automationLinearRead, {
+  payload: AutomationLinearReadInput,
+  success: AutomationLinearReadResult,
+  error: Schema.Union([AutomationValidateError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationQueueReadRpc = Rpc.make(WS_METHODS.automationQueueRead, {
+  payload: AutomationQueueReadInput,
+  success: AutomationQueueReadResult,
+  error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationStatusRpc = Rpc.make(WS_METHODS.automationStatus, {
+  payload: AutomationLifecycleInput,
+  success: AutomationRunResult,
+  error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationPauseRpc = Rpc.make(WS_METHODS.automationPause, {
+  payload: AutomationLifecycleInput,
+  success: AutomationRunResult,
+  error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationRefreshRpc = Rpc.make(WS_METHODS.automationRefresh, {
+  payload: AutomationReconcileInput,
+  success: AutomationRunResult,
+  error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationResumeRpc = Rpc.make(WS_METHODS.automationResume, {
+  payload: AutomationReconcileInput,
+  success: AutomationRunResult,
+  error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationCancelRpc = Rpc.make(WS_METHODS.automationCancel, {
+  payload: AutomationCancelInput,
+  success: AutomationRunResult,
+  error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationCancelIssueRpc = Rpc.make(WS_METHODS.automationCancelIssue, {
+  payload: AutomationCancelIssueInput,
+  success: AutomationRunResult,
+  error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
+});
+
+export const WsOrchestraQueryRpc = Rpc.make(WS_METHODS.orchestraQuery, {
+  payload: OrchestraQueryInput,
+  success: OrchestraQueryResult,
+  error: Schema.Union([OrchestraQueryError, EnvironmentAuthorizationError]),
+});
+
+export const WsNativeSubagentReadRpc = Rpc.make(WS_METHODS.nativeSubagentRead, {
+  payload: NativeSubagentReadInput,
+  success: NativeSubagentDetail,
+  error: Schema.Union([NativeSubagentReadError, EnvironmentAuthorizationError]),
 });
 
 export const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
@@ -719,6 +827,18 @@ export const WsRpcGroup = RpcGroup.make(
   WsVcsSwitchRefRpc,
   WsVcsInitRpc,
   WsReviewGetDiffPreviewRpc,
+  WsAutomationValidateRpc,
+  WsAutomationRunFixtureRpc,
+  WsAutomationLinearReadRpc,
+  WsAutomationQueueReadRpc,
+  WsAutomationStatusRpc,
+  WsAutomationPauseRpc,
+  WsAutomationRefreshRpc,
+  WsAutomationResumeRpc,
+  WsAutomationCancelIssueRpc,
+  WsAutomationCancelRpc,
+  WsOrchestraQueryRpc,
+  WsNativeSubagentReadRpc,
   WsTerminalOpenRpc,
   WsTerminalAttachRpc,
   WsTerminalWriteRpc,

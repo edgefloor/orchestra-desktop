@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "upstreamRevision": "ecb35f75839925dd1ac6f854efeef5c9e291d11b",
+  "capabilities": [
+    {
+      "id": "browser-preview",
+      "requiredFiles": [
+        "apps/desktop/src/preview/BrowserSession.ts",
+        "apps/web/src/components/preview/PreviewPanel.tsx"
+      ],
+      "requiredTests": [
+        "apps/server/src/mcp/PreviewAutomationBroker.test.ts",
+        "apps/web/src/components/preview/openPreviewSession.test.ts",
+        "apps/web/src/lib/previewAnnotation.test.ts"
+      ]
+    },
+    {
+      "id": "composer",
+      "requiredFiles": [
+        "apps/web/src/components/chat/ChatComposer.tsx",
+        "apps/web/src/components/chat/ComposerCommandMenu.tsx"
+      ],
+      "requiredTests": [
+        "apps/web/src/components/chat/ComposerPrimaryActions.test.ts",
+        "apps/web/src/composerDraftStore.test.ts"
+      ]
+    },
+    {
+      "id": "diff-review",
+      "requiredFiles": [
+        "apps/web/src/components/DiffPanel.tsx",
+        "apps/web/src/components/chat/ChangedFilesTree.tsx"
+      ],
+      "requiredTests": [
+        "apps/server/src/review/ReviewService.test.ts",
+        "apps/web/src/lib/diffRendering.test.ts"
+      ]
+    },
+    {
+      "id": "environments",
+      "requiredFiles": [
+        "apps/desktop/src/app/DesktopEnvironment.ts",
+        "apps/desktop/src/ssh/DesktopSshEnvironment.ts",
+        "apps/desktop/src/wsl/DesktopWslEnvironment.ts"
+      ],
+      "requiredTests": [
+        "apps/desktop/src/backend/DesktopBackendPool.test.ts",
+        "apps/desktop/src/ssh/DesktopSshEnvironment.test.ts",
+        "apps/desktop/src/wsl/DesktopWslBackend.test.ts"
+      ]
+    },
+    {
+      "id": "files-editor",
+      "requiredFiles": [
+        "apps/web/src/components/files/FileBrowserPanel.tsx",
+        "apps/web/src/components/files/FilePreviewPanel.tsx"
+      ],
+      "requiredTests": ["apps/web/src/components/files/FilePreviewPanel.test.ts"]
+    },
+    {
+      "id": "responsive-panels",
+      "requiredFiles": [
+        "apps/web/src/components/DiffPanelShell.tsx",
+        "apps/web/src/components/RightPanelSheet.tsx",
+        "apps/web/src/components/RightPanelTabs.tsx"
+      ],
+      "requiredTests": [
+        "apps/web/src/components/files/FilePreviewPanel.test.ts",
+        "apps/web/src/components/preview/previewViewportReadiness.test.ts"
+      ]
+    },
+    {
+      "id": "settings-keybindings",
+      "requiredFiles": [
+        "apps/web/src/components/settings/KeybindingsSettings.tsx",
+        "apps/web/src/components/settings/SettingsPanels.tsx"
+      ],
+      "requiredTests": [
+        "apps/web/src/components/settings/KeybindingsSettings.logic.test.ts",
+        "apps/web/src/components/settings/SettingsPanels.logic.test.ts"
+      ]
+    },
+    {
+      "id": "terminal-context",
+      "requiredFiles": [
+        "apps/server/src/terminal/Manager.ts",
+        "apps/web/src/components/ThreadTerminalDrawer.tsx"
+      ],
+      "requiredTests": [
+        "apps/web/src/components/ThreadTerminalDrawer.test.ts",
+        "apps/web/src/components/chat/userMessageTerminalContexts.test.ts"
+      ]
+    },
+    {
+      "id": "update-recovery",
+      "requiredFiles": [
+        "apps/desktop/src/updates/DesktopUpdates.ts",
+        "apps/web/src/session-logic.ts"
+      ],
+      "requiredTests": [
+        "apps/desktop/src/updates/DesktopUpdates.test.ts",
+        "apps/web/src/session-logic.test.ts"
+      ]
+    },
+    {
+      "id": "vcs",
+      "requiredFiles": [
+        "apps/server/src/git/GitWorkflowService.ts",
+        "apps/server/src/vcs/GitVcsDriver.ts",
+        "apps/web/src/components/GitActionsControl.tsx"
+      ],
+      "requiredTests": [
+        "apps/server/src/git/GitWorkflowService.test.ts",
+        "apps/server/src/vcs/GitVcsDriver.test.ts",
+        "apps/web/src/components/GitActionsControl.logic.test.ts"
+      ]
+    }
+  ]
+}

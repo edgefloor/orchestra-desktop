@@ -27,6 +27,7 @@ import * as ElectronUpdater from "../electron/ElectronUpdater.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as IpcChannels from "../ipc/channels.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
+import * as OrchestraProductLifecycle from "./OrchestraProductLifecycle.ts";
 import { resolveDefaultDesktopUpdateChannel } from "./updateChannels.ts";
 import {
   createInitialDesktopUpdateState,
@@ -129,6 +130,15 @@ export class DesktopUpdateUnexpectedActionError extends Schema.TaggedErrorClass<
 ) {
   override get message(): string {
     return `Desktop update ${this.action} action failed unexpectedly.`;
+  }
+}
+
+export class DesktopUpdateCompatibilityMetadataError extends Schema.TaggedErrorClass<DesktopUpdateCompatibilityMetadataError>()(
+  "DesktopUpdateCompatibilityMetadataError",
+  {},
+) {
+  override get message(): string {
+    return "Update metadata has no Orchestra Product compatibility tuple.";
   }
 }
 
@@ -255,6 +265,10 @@ export const make = Effect.gen(function* () {
   const updateInstallInFlightRef = yield* Ref.make(false);
   const updaterConfiguredRef = yield* Ref.make(false);
   const lastLoggedDownloadMilestoneRef = yield* Ref.make(-1);
+  const downloadedProductReleaseRef = yield* Ref.make<
+    Option.Option<OrchestraProductLifecycle.OrchestraUpdateRelease>
+  >(Option.none());
+  const productUpdateStagedRef = yield* Ref.make(false);
   const updateStateRef = yield* Ref.make<DesktopUpdateState>(
     createInitialDesktopUpdateState(
       environment.appVersion,
@@ -393,9 +407,7 @@ export const make = Effect.gen(function* () {
     yield* Ref.set(updateDownloadInFlightRef, true);
     return yield* Effect.gen(function* () {
       yield* setState(reduceDesktopUpdateStateOnDownloadStart(state));
-      yield* electronUpdater.setDisableDifferentialDownload(
-        isArm64HostRunningIntelBuild(environment.runtimeInfo),
-      );
+      yield* electronUpdater.setDisableDifferentialDownload(true);
       yield* logUpdaterInfo("downloading update");
       yield* electronUpdater.downloadUpdate;
       return { accepted: true, completed: true };
@@ -444,6 +456,13 @@ export const make = Effect.gen(function* () {
     { discard: true },
   );
 
+  const abortStagedProductUpdate = Effect.gen(function* () {
+    if (!(yield* Ref.get(productUpdateStagedRef))) return;
+    yield* OrchestraProductLifecycle.abortUpdate(environment).pipe(
+      Effect.ensuring(Ref.set(productUpdateStagedRef, false)),
+    );
+  });
+
   const installDownloadedUpdate = Effect.gen(function* () {
     const state = yield* Ref.get(updateStateRef);
     if (
@@ -454,10 +473,17 @@ export const make = Effect.gen(function* () {
       return { accepted: false, completed: false };
     }
 
-    yield* Ref.set(desktopState.quitting, true);
     yield* Ref.set(updateInstallInFlightRef, true);
 
     return yield* Effect.gen(function* () {
+      const productReleaseOption = yield* Ref.get(downloadedProductReleaseRef);
+      if (Option.isNone(productReleaseOption)) {
+        return yield* new DesktopUpdateCompatibilityMetadataError();
+      }
+      const productRelease = productReleaseOption.value;
+      yield* OrchestraProductLifecycle.stageUpdate(environment, productRelease);
+      yield* Ref.set(productUpdateStagedRef, true);
+      yield* Ref.set(desktopState.quitting, true);
       // Stop every backend in the pool, not just the primary. With
       // parallel WSL + Windows backends, leaving the WSL instance up
       // means quitAndInstall's app.quit() exits before the pool's
@@ -481,6 +507,7 @@ export const make = Effect.gen(function* () {
       Effect.catchTags({
         ElectronUpdaterQuitAndInstallError: Effect.fn("desktop.updates.handleInstallFailure")(
           function* (error) {
+            yield* abortStagedProductUpdate;
             yield* resetInstallAction;
             yield* updateState((current) =>
               reduceDesktopUpdateStateOnInstallFailure(current, error.message),
@@ -498,9 +525,7 @@ export const make = Effect.gen(function* () {
       Effect.onInterrupt(() => resetInstallAction),
       Effect.catchCause((cause) =>
         Effect.gen(function* () {
-          if (Cause.hasInterruptsOnly(cause)) {
-            return yield* Effect.failCause(cause);
-          }
+          yield* abortStagedProductUpdate.pipe(Effect.catchCause(() => Effect.void));
           yield* resetInstallAction;
           const error = new DesktopUpdateUnexpectedActionError({ action: "install", cause });
           yield* updateState((current) =>
@@ -674,6 +699,10 @@ export const make = Effect.gen(function* () {
     yield* decodeUpdateInfo(raw).pipe(
       Effect.flatMap(
         Effect.fn("desktop.updates.applyUpdateDownloaded")(function* (info) {
+          const productRelease = yield* OrchestraProductLifecycle.decodeUpdateRelease(info).pipe(
+            Effect.option,
+          );
+          yield* Ref.set(downloadedProductReleaseRef, productRelease);
           const state = yield* Ref.get(updateStateRef);
           yield* setState(reduceDesktopUpdateStateOnDownloadComplete(state, info.version));
           yield* logUpdaterInfo("update downloaded", { version: info.version });
@@ -723,9 +752,7 @@ export const make = Effect.gen(function* () {
       yield* electronUpdater.setAutoDownload(false);
       yield* electronUpdater.setAutoInstallOnAppQuit(false);
       yield* applyAutoUpdaterChannel(settings.updateChannel);
-      yield* electronUpdater.setDisableDifferentialDownload(
-        isArm64HostRunningIntelBuild(environment.runtimeInfo),
-      );
+      yield* electronUpdater.setDisableDifferentialDownload(true);
 
       if (isArm64HostRunningIntelBuild(environment.runtimeInfo)) {
         yield* logUpdaterInfo(

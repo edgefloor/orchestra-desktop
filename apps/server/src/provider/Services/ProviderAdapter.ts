@@ -8,6 +8,20 @@
  * @module ProviderAdapter
  */
 import type {
+  AutomationLinearReadInput,
+  AutomationLinearReadResult,
+  AutomationLifecycleInput,
+  AutomationQueueReadInput,
+  AutomationQueueReadResult,
+  AutomationReconcileInput,
+  AutomationRunInput,
+  AutomationRunResult,
+  AutomationCancelInput,
+  AutomationCancelIssueInput,
+  AutomationValidateInput,
+  AutomationValidateResult,
+  OrchestraQueryInput,
+  OrchestraQueryResult,
   ApprovalRequestId,
   ProviderApprovalDecision,
   ProviderDriverKind,
@@ -18,6 +32,7 @@ import type {
   ProviderSessionStartInput,
   ThreadId,
   ProviderTurnStartResult,
+  NativeSubagentDetail,
   TurnId,
 } from "@t3tools/contracts";
 import type * as Effect from "effect/Effect";
@@ -106,6 +121,12 @@ export interface ProviderAdapterShape<TError> {
    */
   readonly readThread: (threadId: ThreadId) => Effect.Effect<ProviderThreadSnapshot, TError>;
 
+  /** Read a direct native child lazily through the parent provider session. */
+  readonly readNativeSubagent?: (
+    threadId: ThreadId,
+    agentThreadId: string,
+  ) => Effect.Effect<NativeSubagentDetail, TError>;
+
   /**
    * Roll back a provider thread by N turns.
    */
@@ -113,6 +134,52 @@ export interface ProviderAdapterShape<TError> {
     threadId: ThreadId,
     numTurns: number,
   ) => Effect.Effect<ProviderThreadSnapshot, TError>;
+
+  /** Codex-native extension point. Other provider adapters leave this absent. */
+  readonly validateAutomationProfile?: (
+    threadId: ThreadId,
+    input: Omit<AutomationValidateInput, "threadId">,
+  ) => Effect.Effect<AutomationValidateResult, TError>;
+  readonly runAutomationFixture?: (
+    threadId: ThreadId,
+    input: Omit<AutomationRunInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, TError>;
+  readonly readLinearAutomation?: (
+    threadId: ThreadId,
+    input: Omit<AutomationLinearReadInput, "threadId">,
+  ) => Effect.Effect<AutomationLinearReadResult, TError>;
+  readonly readAutomationQueue?: (
+    threadId: ThreadId,
+    input: Omit<AutomationQueueReadInput, "threadId">,
+  ) => Effect.Effect<AutomationQueueReadResult, TError>;
+  readonly automationStatus?: (
+    threadId: ThreadId,
+    input: Omit<AutomationLifecycleInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, TError>;
+  readonly pauseAutomation?: (
+    threadId: ThreadId,
+    input: Omit<AutomationLifecycleInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, TError>;
+  readonly refreshAutomation?: (
+    threadId: ThreadId,
+    input: Omit<AutomationReconcileInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, TError>;
+  readonly resumeAutomation?: (
+    threadId: ThreadId,
+    input: Omit<AutomationReconcileInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, TError>;
+  readonly cancelAutomation?: (
+    threadId: ThreadId,
+    input: Omit<AutomationCancelInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, TError>;
+  readonly cancelAutomationIssue?: (
+    threadId: ThreadId,
+    input: Omit<AutomationCancelIssueInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, TError>;
+  readonly queryOrchestra?: (
+    threadId: ThreadId,
+    input: Omit<OrchestraQueryInput, "threadId">,
+  ) => Effect.Effect<OrchestraQueryResult, TError>;
 
   /**
    * Stop all sessions owned by this adapter.

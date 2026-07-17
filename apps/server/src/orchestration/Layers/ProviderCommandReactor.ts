@@ -80,6 +80,10 @@ function mapProviderSessionStatusToOrchestrationStatus(
   }
 }
 
+function isUsableProviderSession(session: ProviderSession | undefined): boolean {
+  return session !== undefined && session.status !== "error" && session.status !== "closed";
+}
+
 const turnStartKeyForEvent = (event: ProviderIntentEvent): string =>
   event.commandId !== null ? `command:${event.commandId}` : `event:${event.eventId}`;
 
@@ -370,7 +374,10 @@ const make = Effect.gen(function* () {
 
     const activeSession = yield* resolveActiveSession(threadId);
     const activeThreadSession =
-      thread.session !== null && thread.session.status !== "stopped" && activeSession
+      thread.session !== null &&
+      thread.session.status !== "stopped" &&
+      activeSession !== undefined &&
+      isUsableProviderSession(activeSession)
         ? thread.session
         : null;
     if (
@@ -512,7 +519,11 @@ const make = Effect.gen(function* () {
       });
 
     const existingSessionThreadId =
-      thread.session && thread.session.status !== "stopped" && activeSession ? thread.id : null;
+      thread.session &&
+      thread.session.status !== "stopped" &&
+      isUsableProviderSession(activeSession)
+        ? thread.id
+        : null;
     if (existingSessionThreadId) {
       const runtimeModeChanged = thread.runtimeMode !== thread.session?.runtimeMode;
       const cwdChanged = effectiveCwd !== activeSession?.cwd;
@@ -578,7 +589,22 @@ const make = Effect.gen(function* () {
       return restartedSession.threadId;
     }
 
-    const startedSession = yield* startProviderSession(undefined);
+    const recoveryResumeCursor =
+      activeSession !== undefined && !isUsableProviderSession(activeSession)
+        ? activeSession.resumeCursor
+        : undefined;
+    if (activeSession !== undefined && !isUsableProviderSession(activeSession)) {
+      yield* Effect.logInfo("provider command reactor recovering exited provider session", {
+        threadId,
+        provider: activeSession.provider,
+        providerInstanceId: activeSession.providerInstanceId,
+        previousStatus: activeSession.status,
+        hasResumeCursor: recoveryResumeCursor !== undefined,
+      });
+    }
+    const startedSession = yield* startProviderSession(
+      recoveryResumeCursor !== undefined ? { resumeCursor: recoveryResumeCursor } : undefined,
+    );
     yield* bindSessionToThread(startedSession);
     return startedSession.threadId;
   });

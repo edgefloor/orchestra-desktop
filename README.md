@@ -1,4 +1,12 @@
-# T3 Code
+# Orchestra Desktop
+
+> [!IMPORTANT]
+> This is the standalone Orchestra product fork of T3 Code. It retains the mature desktop coding
+> surface while adding native Orchestra workflow, Automation, evidence, attention, and task views.
+> Exact upstream and generated Codex protocol identities are sealed in
+> [`orchestra-provenance.json`](./orchestra-provenance.json).
+
+## Upstream foundation
 
 T3 Code is a minimal web GUI for coding agents (currently Codex, Claude, Cursor, and OpenCode, more coming soon).
 

@@ -1,4 +1,21 @@
 import {
+  AutomationLinearReadResult,
+  type AutomationLinearReadInput,
+  AutomationQueueReadResult,
+  AutomationLifecycleInput,
+  AutomationReconcileInput,
+  type AutomationQueueReadInput,
+  AutomationRunResult,
+  type AutomationRunInput,
+  type AutomationCancelInput,
+  type AutomationCancelIssueInput,
+  AutomationValidateResult,
+  type AutomationValidateInput,
+  OrchestraQueryInput,
+  OrchestraQueryResponse,
+  type OrchestraQueryResult,
+  OrchestraReplayEvent,
+  OrchestraTaskReplay,
   ApprovalRequestId,
   DEFAULT_MODEL,
   EventId,
@@ -12,6 +29,10 @@ import {
   type ProviderSession,
   type ProviderTurnStartResult,
   type ProviderUserInputAnswers,
+  type NativeSubagentDetail,
+  type NativeSubagentStatus,
+  NATIVE_SUBAGENT_DETAIL_MAX_ITEMS,
+  NATIVE_SUBAGENT_SUMMARY_MAX_CHARS,
   RuntimeMode,
   ThreadId,
   TurnId,
@@ -42,6 +63,26 @@ import {
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
 const decodeV2TurnStartResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse);
+const decodeAutomationValidateResponse = Schema.decodeUnknownEffect(AutomationValidateResult);
+const decodeAutomationRunResponse = Schema.decodeUnknownEffect(AutomationRunResult);
+const decodeAutomationLinearReadResponse = Schema.decodeUnknownEffect(AutomationLinearReadResult);
+const decodeAutomationQueueReadResponse = Schema.decodeUnknownEffect(AutomationQueueReadResult);
+const decodeOrchestraQueryResponse = Schema.decodeUnknownEffect(OrchestraQueryResponse);
+const OrchestraThreadReadEnvelope = Schema.Struct({
+  orchestra: Schema.optional(OrchestraTaskReplay),
+});
+export const decodeOrchestraThreadReadEnvelope = Schema.decodeUnknownEffect(
+  OrchestraThreadReadEnvelope,
+);
+const OrchestraProductHandshake = Schema.Struct({
+  orchestraProduct: Schema.NullOr(
+    Schema.Struct({
+      manifestSha256: Schema.String,
+      capabilities: Schema.Array(Schema.String),
+    }),
+  ),
+});
+const decodeOrchestraProductHandshake = Schema.decodeUnknownEffect(OrchestraProductHandshake);
 
 const PROVIDER = ProviderDriverKind.make("codex");
 
@@ -54,6 +95,7 @@ const BENIGN_ERROR_LOG_SNIPPETS = [
   "state db record_discrepancy: find_thread_path_by_id_str_in_subdir, falling_back",
 ];
 const CODEX_APP_SERVER_FORCE_KILL_AFTER = "2 seconds" as const;
+const MAX_CODEX_DIAGNOSTIC_CHARS = 4_096;
 const RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS = [
   "not found",
   "missing thread",
@@ -94,6 +136,7 @@ type CodexServiceTier = NonNullable<EffectCodexSchema.V2ThreadStartParams["servi
 type CodexThreadItem =
   | EffectCodexSchema.V2ThreadReadResponse["thread"]["turns"][number]["items"][number]
   | EffectCodexSchema.V2ThreadRollbackResponse["thread"]["turns"][number]["items"][number];
+type CodexNativeThread = EffectCodexSchema.V2ThreadReadResponse["thread"];
 
 export interface CodexSessionRuntimeOptions {
   readonly threadId: ThreadId;
@@ -107,6 +150,7 @@ export interface CodexSessionRuntimeOptions {
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly resumeCursor?: CodexResumeCursor;
   readonly appServerArgs?: ReadonlyArray<string>;
+  readonly expectedProductManifestSha256?: string;
 }
 
 export interface CodexSessionRuntimeSendTurnInput {
@@ -139,9 +183,45 @@ export interface CodexSessionRuntimeShape {
   ) => Effect.Effect<ProviderTurnStartResult, CodexSessionRuntimeError>;
   readonly interruptTurn: (turnId?: TurnId) => Effect.Effect<void, CodexSessionRuntimeError>;
   readonly readThread: Effect.Effect<CodexThreadSnapshot, CodexSessionRuntimeError>;
+  readonly readNativeSubagent: (
+    agentThreadId: string,
+  ) => Effect.Effect<NativeSubagentDetail, CodexSessionRuntimeError>;
   readonly rollbackThread: (
     numTurns: number,
   ) => Effect.Effect<CodexThreadSnapshot, CodexSessionRuntimeError>;
+  readonly validateAutomationProfile?: (
+    input: Omit<AutomationValidateInput, "threadId">,
+  ) => Effect.Effect<AutomationValidateResult, CodexSessionRuntimeError>;
+  readonly runAutomationFixture?: (
+    input: Omit<AutomationRunInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
+  readonly readLinearAutomation?: (
+    input: Omit<AutomationLinearReadInput, "threadId">,
+  ) => Effect.Effect<AutomationLinearReadResult, CodexSessionRuntimeError>;
+  readonly readAutomationQueue?: (
+    input: Omit<AutomationQueueReadInput, "threadId">,
+  ) => Effect.Effect<AutomationQueueReadResult, CodexSessionRuntimeError>;
+  readonly automationStatus?: (
+    input: Omit<AutomationLifecycleInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
+  readonly pauseAutomation?: (
+    input: Omit<AutomationLifecycleInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
+  readonly refreshAutomation?: (
+    input: Omit<AutomationReconcileInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
+  readonly resumeAutomation?: (
+    input: Omit<AutomationReconcileInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
+  readonly cancelAutomation?: (
+    input: Omit<AutomationCancelInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
+  readonly cancelAutomationIssue?: (
+    input: Omit<AutomationCancelIssueInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
+  readonly queryOrchestra?: (
+    input: Omit<OrchestraQueryInput, "threadId">,
+  ) => Effect.Effect<OrchestraQueryResult, CodexSessionRuntimeError>;
   readonly respondToRequest: (
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
@@ -159,7 +239,49 @@ export type CodexSessionRuntimeError =
   | CodexSessionRuntimePendingApprovalNotFoundError
   | CodexSessionRuntimePendingUserInputNotFoundError
   | CodexSessionRuntimeInvalidUserInputAnswersError
-  | CodexSessionRuntimeThreadIdMissingError;
+  | CodexSessionRuntimeThreadIdMissingError
+  | CodexSessionRuntimeSubagentRelationshipError
+  | CodexSessionRuntimeProductMismatchError;
+
+export class CodexSessionRuntimeProductMismatchError extends Schema.TaggedErrorClass<CodexSessionRuntimeProductMismatchError>()(
+  "CodexSessionRuntimeProductMismatchError",
+  {
+    expectedManifestSha256: Schema.String,
+    actualManifestSha256: Schema.optional(Schema.String),
+    detail: Schema.String,
+  },
+) {
+  override get message(): string {
+    return this.detail;
+  }
+}
+
+const REQUIRED_ORCHESTRA_PRODUCT_CAPABILITIES = [
+  "orchestra/query",
+  "orchestra/threadItem",
+] as const;
+
+export function validateOrchestraProductCompatibility(
+  expectedManifestSha256: string,
+  actual: {
+    readonly manifestSha256: string;
+    readonly capabilities: ReadonlyArray<string>;
+  } | null,
+): CodexSessionRuntimeProductMismatchError | undefined {
+  const missingCapabilities = REQUIRED_ORCHESTRA_PRODUCT_CAPABILITIES.filter(
+    (capability) => !actual?.capabilities.includes(capability),
+  );
+  if (actual?.manifestSha256 === expectedManifestSha256 && missingCapabilities.length === 0) {
+    return undefined;
+  }
+  return new CodexSessionRuntimeProductMismatchError({
+    expectedManifestSha256,
+    ...(actual?.manifestSha256 ? { actualManifestSha256: actual.manifestSha256 } : {}),
+    detail: actual
+      ? `Orchestra Product mismatch. Missing capabilities: ${missingCapabilities.join(", ") || "none"}.`
+      : "The selected Codex binary does not expose the Orchestra Product manifest.",
+  });
+}
 
 export class CodexSessionRuntimePendingApprovalNotFoundError extends Schema.TaggedErrorClass<CodexSessionRuntimePendingApprovalNotFoundError>()(
   "CodexSessionRuntimePendingApprovalNotFoundError",
@@ -202,6 +324,18 @@ export class CodexSessionRuntimeThreadIdMissingError extends Schema.TaggedErrorC
 ) {
   override get message(): string {
     return `Codex session is missing a provider thread id for ${this.threadId}`;
+  }
+}
+
+export class CodexSessionRuntimeSubagentRelationshipError extends Schema.TaggedErrorClass<CodexSessionRuntimeSubagentRelationshipError>()(
+  "CodexSessionRuntimeSubagentRelationshipError",
+  {
+    parentThreadId: Schema.String,
+    agentThreadId: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `Codex thread '${this.agentThreadId}' is not a direct child of '${this.parentThreadId}'`;
   }
 }
 
@@ -398,6 +532,19 @@ export function buildTurnStartParams(input: {
   );
 }
 
+export function redactCodexDiagnostic(rawDiagnostic: string): string {
+  const redacted = rawDiagnostic
+    .replace(/(bearer\s+)[a-z0-9._~+/=-]+/giu, "$1[REDACTED]")
+    .replace(
+      /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|secret)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu,
+      "$1[REDACTED]",
+    );
+  if (redacted.length <= MAX_CODEX_DIAGNOSTIC_CHARS) {
+    return redacted;
+  }
+  return `${redacted.slice(0, MAX_CODEX_DIAGNOSTIC_CHARS - 1)}…`;
+}
+
 function classifyCodexStderrLine(rawLine: string): { readonly message: string } | null {
   const line = rawLine.replaceAll(ANSI_ESCAPE_REGEX, "").trim();
   if (!line) {
@@ -415,7 +562,7 @@ function classifyCodexStderrLine(rawLine: string): { readonly message: string } 
     }
   }
 
-  return { message: line };
+  return { message: redactCodexDiagnostic(line) };
 }
 
 export function isRecoverableThreadResumeError(error: unknown): boolean {
@@ -692,6 +839,111 @@ function parseThreadSnapshot(
   };
 }
 
+function boundedNativeSubagentText(value: string, fallback: string): string {
+  const normalized = value.trim().replace(/\s+/g, " ") || fallback;
+  return normalized.length <= NATIVE_SUBAGENT_SUMMARY_MAX_CHARS
+    ? normalized
+    : `${normalized.slice(0, NATIVE_SUBAGENT_SUMMARY_MAX_CHARS - 1)}…`;
+}
+
+function nativeSubagentItemSummary(item: CodexThreadItem): string {
+  switch (item.type) {
+    case "userMessage": {
+      const text = item.content.flatMap((content) =>
+        content.type === "text" ? [content.text] : [],
+      );
+      return boundedNativeSubagentText(text.join(" "), "User message");
+    }
+    case "agentMessage":
+    case "plan":
+      return boundedNativeSubagentText(item.text, item.type === "plan" ? "Plan" : "Agent message");
+    case "reasoning":
+      return boundedNativeSubagentText(
+        item.summary?.join(" ") ?? item.content?.join(" ") ?? "",
+        "Reasoning",
+      );
+    case "commandExecution":
+      return boundedNativeSubagentText(item.command, "Command execution");
+    case "fileChange":
+      return `${item.changes.length} file change${item.changes.length === 1 ? "" : "s"}`;
+    case "mcpToolCall":
+      return boundedNativeSubagentText(`${item.server} · ${item.tool}`, "MCP tool call");
+    case "dynamicToolCall":
+      return boundedNativeSubagentText(item.tool, "Tool call");
+    case "collabAgentToolCall":
+      return boundedNativeSubagentText(item.prompt ?? item.tool, "Agent collaboration");
+    case "subAgentActivity":
+      return boundedNativeSubagentText(`${item.agentPath} · ${item.kind}`, "Subagent activity");
+    case "imageView":
+      return boundedNativeSubagentText(item.path, "Image view");
+    case "enteredReviewMode":
+    case "exitedReviewMode":
+      return boundedNativeSubagentText(item.review, "Review mode");
+    default:
+      return boundedNativeSubagentText(item.type, "Activity");
+  }
+}
+
+function nativeSubagentStatus(thread: CodexNativeThread): NativeSubagentStatus {
+  switch (thread.status.type) {
+    case "active":
+      return thread.status.activeFlags.length > 0 ? "waiting" : "running";
+    case "systemError":
+      return "failed";
+    case "notLoaded":
+      return "unavailable";
+    case "idle": {
+      const lastTurn = thread.turns.at(-1);
+      if (!lastTurn) return "waiting";
+      switch (lastTurn.status) {
+        case "inProgress":
+          return "running";
+        case "failed":
+          return "failed";
+        case "interrupted":
+          return "cancelled";
+        case "completed":
+          return "completed";
+      }
+    }
+  }
+}
+
+export function isDirectNativeSubagent(
+  parentProviderThreadId: string,
+  thread: Pick<CodexNativeThread, "parentThreadId">,
+): boolean {
+  return thread.parentThreadId === parentProviderThreadId;
+}
+
+export function projectNativeSubagentDetail(
+  parentTaskId: ThreadId,
+  thread: CodexNativeThread,
+): NativeSubagentDetail {
+  const allItems = thread.turns.flatMap((turn) => turn.items);
+  const visibleItems = allItems.slice(-NATIVE_SUBAGENT_DETAIL_MAX_ITEMS);
+  return {
+    parentTaskId,
+    agentThreadId: thread.id,
+    status: nativeSubagentStatus(thread),
+    nickname: thread.agentNickname
+      ? boundedNativeSubagentText(thread.agentNickname, "Subagent")
+      : null,
+    role: thread.agentRole ? boundedNativeSubagentText(thread.agentRole, "Subagent") : null,
+    preview: boundedNativeSubagentText(thread.preview || thread.name || "", "Native subagent"),
+    updatedAt: DateTime.formatIso(DateTime.makeUnsafe(thread.updatedAt * 1_000)),
+    items: visibleItems.map((item) => ({
+      id: item.id,
+      type: item.type,
+      summary: nativeSubagentItemSummary(item),
+      ...(typeof ("status" in item ? item.status : undefined) === "string"
+        ? { status: String("status" in item ? item.status : "") }
+        : {}),
+    })),
+    truncated: allItems.length > visibleItems.length,
+  };
+}
+
 export const makeCodexSessionRuntime = (
   options: CodexSessionRuntimeOptions,
 ): Effect.Effect<
@@ -708,6 +960,8 @@ export const makeCodexSessionRuntime = (
     const approvalCorrelationsRef = yield* Ref.make(new Map<string, ApprovalCorrelation>());
     const pendingUserInputsRef = yield* Ref.make(new Map<ApprovalRequestId, PendingUserInput>());
     const collabReceiverTurnsRef = yield* Ref.make(new Map<string, TurnId>());
+    const seenOrchestraEventsRef = yield* Ref.make(new Set<string>());
+    const settledTurnIdsRef = yield* Ref.make(new Set<string>());
     const closedRef = yield* Ref.make(false);
 
     // `~` is not shell-expanded when env vars are set via
@@ -800,6 +1054,91 @@ export const makeCodexSessionRuntime = (
         message,
       });
 
+    const readOrchestraReplay = (providerThreadId: string) =>
+      Effect.gen(function* () {
+        const raw = yield* client.raw.request("thread/read", {
+          threadId: providerThreadId,
+          includeTurns: false,
+        });
+        const envelope = yield* decodeOrchestraThreadReadEnvelope(raw).pipe(
+          Effect.mapError((error) =>
+            CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+              "decode-response-payload",
+              error,
+              { method: "thread/read" },
+            ),
+          ),
+        );
+        return envelope.orchestra;
+      });
+
+    const emitOrchestraLifecycle = (event: OrchestraReplayEvent) =>
+      Ref.modify(seenOrchestraEventsRef, (seen) => {
+        if (seen.has(event.eventId)) {
+          return [false, seen] as const;
+        }
+        const next = new Set(seen);
+        next.add(event.eventId);
+        return [true, next] as const;
+      }).pipe(
+        Effect.flatMap((isNew) =>
+          isNew
+            ? offerEvent({
+                id: EventId.make(`orchestra:${event.eventId}`),
+                provider: PROVIDER,
+                ...(options.providerInstanceId
+                  ? { providerInstanceId: options.providerInstanceId }
+                  : {}),
+                createdAt: DateTime.formatIso(DateTime.nowUnsafe()),
+                kind: "notification",
+                threadId: options.threadId,
+                method: "orchestra/lifecycle",
+                payload: event,
+              })
+            : Effect.void,
+        ),
+      );
+
+    const refreshOrchestraLifecycle = (providerThreadId: string) =>
+      readOrchestraReplay(providerThreadId).pipe(
+        Effect.flatMap((replay) =>
+          replay
+            ? Effect.forEach(
+                replay.events.length > 0 ? replay.events : [replay.latest],
+                emitOrchestraLifecycle,
+                { concurrency: 1, discard: true },
+              )
+            : Effect.void,
+        ),
+      );
+
+    const claimTurnSettlement = (turnId: TurnId) =>
+      Ref.modify(settledTurnIdsRef, (settled) => {
+        if (settled.has(turnId)) {
+          return [false, settled] as const;
+        }
+        const next = new Set(settled);
+        next.add(turnId);
+        return [true, next] as const;
+      });
+
+    const refreshOrchestraLifecycleAfterSettlement = (providerThreadId: string) =>
+      refreshOrchestraLifecycle(providerThreadId).pipe(
+        Effect.catch((cause) =>
+          emitEvent({
+            kind: "notification",
+            threadId: options.threadId,
+            method: "process/stderr",
+            message: `Failed to refresh Orchestra lifecycle: ${cause instanceof Error ? cause.message : String(cause)}`,
+          }),
+        ),
+        // Notification callbacks run on the protocol's serialized incoming
+        // dispatcher. Fork the follow-up request so its response can be routed
+        // after the current notification handler returns.
+        Effect.forkIn(runtimeScope),
+        Effect.asVoid,
+      );
+
     const settlePendingApprovals = (decision: ProviderApprovalDecision) =>
       Ref.get(pendingApprovalsRef).pipe(
         Effect.flatMap((pendingApprovals) =>
@@ -826,6 +1165,14 @@ export const makeCodexSessionRuntime = (
 
     const handleRawNotification = (notification: CodexServerNotification) =>
       Effect.gen(function* () {
+        if (notification.method === "turn/completed") {
+          const isFirstSettlement = yield* claimTurnSettlement(
+            TurnId.make(notification.params.turn.id),
+          );
+          if (!isFirstSettlement) {
+            return;
+          }
+        }
         const payload = notification.params;
         const route = readRouteFields(notification);
         const collabReceiverTurns = yield* Ref.get(collabReceiverTurnsRef);
@@ -927,10 +1274,55 @@ export const makeCodexSessionRuntime = (
             status: payload.turn.status === "failed" ? "error" : "ready",
             activeTurnId: undefined,
             ...(lastError ? { lastError } : {}),
-          });
+          }).pipe(Effect.andThen(refreshOrchestraLifecycleAfterSettlement(payload.threadId)));
         }),
       ),
     );
+
+    // The pinned Orchestra Product currently reports the native thread's
+    // authoritative idle transition without a separate turn/completed frame.
+    // Settle that Product turn at the existing Codex provider seam so T3Code's
+    // normal task timeline cannot remain stuck in "running". Stock Codex is
+    // unchanged, and an eventual native turn/completed frame is deduplicated.
+    if (options.expectedProductManifestSha256) {
+      yield* client.handleServerNotification("thread/status/changed", (payload) =>
+        Effect.gen(function* () {
+          if (payload.status.type !== "idle") {
+            return;
+          }
+          const session = yield* Ref.get(sessionRef);
+          const providerThreadId = currentProviderThreadId(session);
+          if (providerThreadId && payload.threadId !== providerThreadId) {
+            return;
+          }
+          const activeTurnId = session.activeTurnId;
+          if (!activeTurnId || !(yield* claimTurnSettlement(activeTurnId))) {
+            return;
+          }
+          const failed = session.status === "error";
+          yield* updateSession(sessionRef, {
+            status: failed ? "error" : "ready",
+            activeTurnId: undefined,
+          });
+          yield* emitEvent({
+            kind: "notification",
+            threadId: options.threadId,
+            method: "turn/completed",
+            turnId: activeTurnId,
+            payload: {
+              threadId: payload.threadId,
+              turn: {
+                id: activeTurnId,
+                items: [],
+                status: failed ? "failed" : "completed",
+                ...(failed ? { error: { message: session.lastError ?? "Codex turn failed" } } : {}),
+              },
+            } satisfies EffectCodexSchema.V2TurnCompletedNotification,
+          });
+          yield* refreshOrchestraLifecycleAfterSettlement(payload.threadId);
+        }),
+      );
+    }
 
     yield* client.handleServerNotification("error", (payload) =>
       currentSessionProviderThreadId.pipe(
@@ -1170,36 +1562,58 @@ export const makeCodexSessionRuntime = (
       Effect.forkIn(runtimeScope),
     );
 
+    const recordChildExit = (exitCode: number | undefined, failure?: unknown) =>
+      Ref.get(closedRef).pipe(
+        Effect.flatMap((closed) => {
+          if (closed) {
+            return Effect.void;
+          }
+          const failed = failure !== undefined || exitCode !== 0;
+          const message = failure
+            ? `Codex App Server terminated unexpectedly: ${redactCodexDiagnostic(
+                failure instanceof Error ? failure.message : String(failure),
+              )}`
+            : exitCode === 0
+              ? "Codex App Server exited."
+              : `Codex App Server exited with code ${exitCode}.`;
+          return updateSession(sessionRef, {
+            status: failed ? "error" : "closed",
+            activeTurnId: undefined,
+            ...(failed ? { lastError: message } : {}),
+          }).pipe(Effect.andThen(emitSessionEvent("session/exited", message)));
+        }),
+      );
+
     yield* child.exitCode.pipe(
-      Effect.flatMap((exitCode) =>
-        Ref.get(closedRef).pipe(
-          Effect.flatMap((closed) => {
-            if (closed) {
-              return Effect.void;
-            }
-            const nextStatus = exitCode === 0 ? "closed" : "error";
-            return updateSession(sessionRef, {
-              status: nextStatus,
-              activeTurnId: undefined,
-            }).pipe(
-              Effect.andThen(
-                emitSessionEvent(
-                  "session/exited",
-                  exitCode === 0
-                    ? "Codex App Server exited."
-                    : `Codex App Server exited with code ${exitCode}.`,
-                ),
-              ),
-            );
-          }),
-        ),
-      ),
+      Effect.matchEffect({
+        onFailure: (failure) => recordChildExit(undefined, failure),
+        onSuccess: (exitCode) => recordChildExit(exitCode),
+      }),
       Effect.forkIn(runtimeScope),
     );
 
     const start = Effect.fn("CodexSessionRuntime.start")(function* () {
       yield* emitSessionEvent("session/connecting", "Starting Codex App Server session.");
-      yield* client.request("initialize", buildCodexInitializeParams());
+      if (options.expectedProductManifestSha256) {
+        const raw = yield* client.raw.request("initialize", buildCodexInitializeParams());
+        const handshake = yield* decodeOrchestraProductHandshake(raw).pipe(
+          Effect.mapError((error) =>
+            CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+              "decode-response-payload",
+              error,
+              { method: "initialize" },
+            ),
+          ),
+        );
+        const actual = handshake.orchestraProduct;
+        const mismatch = validateOrchestraProductCompatibility(
+          options.expectedProductManifestSha256,
+          actual,
+        );
+        if (mismatch) return yield* mismatch;
+      } else {
+        yield* client.request("initialize", buildCodexInitializeParams());
+      }
       yield* client.notify("initialized", undefined);
 
       const requestedModel = normalizeCodexModelSlug(options.model);
@@ -1224,6 +1638,7 @@ export const makeCodexSessionRuntime = (
         updatedAt: yield* nowIso,
       } satisfies ProviderSession;
       yield* Ref.set(sessionRef, session);
+      yield* refreshOrchestraLifecycle(providerThreadId);
       yield* emitSessionEvent("session/ready", "Codex App Server session ready.");
       return session;
     });
@@ -1333,6 +1748,21 @@ export const makeCodexSessionRuntime = (
         });
         return parseThreadSnapshot(response);
       }),
+      readNativeSubagent: (agentThreadId) =>
+        Effect.gen(function* () {
+          const parentProviderThreadId = yield* readProviderThreadId;
+          const response = yield* client.request("thread/read", {
+            threadId: agentThreadId,
+            includeTurns: true,
+          });
+          if (!isDirectNativeSubagent(parentProviderThreadId, response.thread)) {
+            return yield* new CodexSessionRuntimeSubagentRelationshipError({
+              parentThreadId: parentProviderThreadId,
+              agentThreadId,
+            });
+          }
+          return projectNativeSubagentDetail(options.threadId, response.thread);
+        }),
       rollbackThread: (numTurns) =>
         Effect.gen(function* () {
           const providerThreadId = yield* readProviderThreadId;
@@ -1345,6 +1775,194 @@ export const makeCodexSessionRuntime = (
             activeTurnId: undefined,
           });
           return parseThreadSnapshot(response);
+        }),
+      validateAutomationProfile: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("automation/validate", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          return yield* decodeAutomationValidateResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "automation/validate" },
+              ),
+            ),
+          );
+        }),
+      runAutomationFixture: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("automation/runFixture", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          return yield* decodeAutomationRunResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "automation/runFixture" },
+              ),
+            ),
+          );
+        }),
+      readLinearAutomation: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("automation/linear/read", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          return yield* decodeAutomationLinearReadResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "automation/linear/read" },
+              ),
+            ),
+          );
+        }),
+      readAutomationQueue: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("automation/queue/read", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          return yield* decodeAutomationQueueReadResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "automation/queue/read" },
+              ),
+            ),
+          );
+        }),
+      automationStatus: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("automation/status", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          return yield* decodeAutomationRunResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "automation/status" },
+              ),
+            ),
+          );
+        }),
+      pauseAutomation: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("automation/pause", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          return yield* decodeAutomationRunResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "automation/pause" },
+              ),
+            ),
+          );
+        }),
+      refreshAutomation: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("automation/refresh", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          return yield* decodeAutomationRunResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "automation/refresh" },
+              ),
+            ),
+          );
+        }),
+      resumeAutomation: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("automation/resume", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          return yield* decodeAutomationRunResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "automation/resume" },
+              ),
+            ),
+          );
+        }),
+      cancelAutomationIssue: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("automation/cancelIssue", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          return yield* decodeAutomationRunResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "automation/cancelIssue" },
+              ),
+            ),
+          );
+        }),
+      cancelAutomation: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("automation/cancel", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          return yield* decodeAutomationRunResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "automation/cancel" },
+              ),
+            ),
+          );
+        }),
+      queryOrchestra: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request("orchestra/query", {
+            ...input,
+            threadId: providerThreadId,
+          });
+          const decoded = yield* decodeOrchestraQueryResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: "orchestra/query" },
+              ),
+            ),
+          );
+          return decoded.result;
         }),
       respondToRequest: (requestId, decision) =>
         Effect.gen(function* () {
