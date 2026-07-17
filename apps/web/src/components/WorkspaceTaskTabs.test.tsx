@@ -49,4 +49,20 @@ describe("WorkspaceTaskTabs", () => {
     expect(markup).not.toContain('role="tab"');
     expect(markup).toContain('aria-label="New task"');
   });
+
+  it("renders project overview as a selected peer of native task tabs", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceTaskTabs
+        tasks={[task("task", "Native task")]}
+        activeTaskKey={null}
+        projectOverview={{ title: "Overview", active: true, onSelect: vi.fn() }}
+        onSelectTask={vi.fn()}
+        onNewTask={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain("Overview");
+    expect(markup).toContain("Native task");
+  });
 });

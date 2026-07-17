@@ -25,6 +25,11 @@ const STATUS_PRESENTATION: Record<
 interface WorkspaceTaskTabsProps {
   readonly tasks: ReadonlyArray<WorkspaceTaskTabSource>;
   readonly activeTaskKey: string | null;
+  readonly projectOverview?: {
+    readonly title: string;
+    readonly active: boolean;
+    readonly onSelect: () => void;
+  };
   readonly onSelectTask: (task: WorkspaceTaskTabSource) => void;
   readonly onNewTask: () => void;
 }
@@ -32,6 +37,7 @@ interface WorkspaceTaskTabsProps {
 export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
   tasks,
   activeTaskKey,
+  projectOverview,
   onSelectTask,
   onNewTask,
 }: WorkspaceTaskTabsProps) {
@@ -42,13 +48,20 @@ export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
   );
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
+    const overviewOffset = projectOverview ? 1 : 0;
     const targetIndex = resolveWorkspaceTaskTabNavigation({
       currentIndex,
       key: event.key,
-      taskCount: visibleTasks.length,
+      taskCount: visibleTasks.length + overviewOffset,
     });
     if (targetIndex === null) return;
-    const targetTask = visibleTasks[targetIndex];
+    if (projectOverview && targetIndex === 0) {
+      event.preventDefault();
+      projectOverview.onSelect();
+      tabListRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]').item(0).focus();
+      return;
+    }
+    const targetTask = visibleTasks[targetIndex - overviewOffset];
     if (!targetTask) return;
     event.preventDefault();
     onSelectTask(targetTask);
@@ -70,6 +83,24 @@ export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
         aria-label="Open tasks"
         className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
+        {projectOverview ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={projectOverview.active}
+            tabIndex={projectOverview.active ? 0 : -1}
+            title={projectOverview.title}
+            className={cn(
+              "relative flex w-32 shrink-0 items-center border-r border-border px-3 text-left text-xs text-muted-foreground outline-hidden transition-[color,background-color] hover:bg-background hover:text-foreground focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              projectOverview.active &&
+                "bg-background font-medium text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary",
+            )}
+            onClick={projectOverview.onSelect}
+            onKeyDown={(event) => handleKeyDown(event, 0)}
+          >
+            <span className="truncate">{projectOverview.title}</span>
+          </button>
+        ) : null}
         {visibleTasks.map((task, index) => {
           const taskKey = workspaceTaskTabKey(task);
           const active = taskKey === activeTaskKey;
@@ -88,7 +119,7 @@ export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
                   "w-44 bg-background font-medium text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary",
               )}
               onClick={() => onSelectTask(task)}
-              onKeyDown={(event) => handleKeyDown(event, index)}
+              onKeyDown={(event) => handleKeyDown(event, index + (projectOverview ? 1 : 0))}
             >
               <Tooltip>
                 <TooltipTrigger

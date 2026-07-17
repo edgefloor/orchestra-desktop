@@ -118,6 +118,7 @@ import { threadEnvironment, useEnvironmentThread } from "../state/threads";
 import { vcsEnvironment } from "../state/vcs";
 import { useEnvironment, useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
+import { buildProjectRouteParams, resolveProjectRouteRef } from "../projectRoutes";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
@@ -3155,6 +3156,10 @@ export default function Sidebar() {
     strict: false,
     select: (params) => resolveThreadRouteTarget(params),
   });
+  const routeProjectRef = useParams({
+    strict: false,
+    select: (params) => resolveProjectRouteRef(params),
+  });
   const routeThreadRef = routeTarget?.kind === "server" ? routeTarget.threadRef : null;
   const routeDraftSession = useComposerDraftStore((store) =>
     routeTarget?.kind === "draft" ? store.getDraftSession(routeTarget.draftId) : null,
@@ -3263,8 +3268,12 @@ export default function Sidebar() {
   // sidebar's grouped project entries.
   const activeRouteProjectKey = useMemo(() => {
     const activeThread = routeThreadKey ? sidebarThreadByKey.get(routeThreadKey) : null;
-    const environmentId = activeThread?.environmentId ?? routeDraftSession?.environmentId;
-    const projectId = activeThread?.projectId ?? routeDraftSession?.projectId;
+    const environmentId =
+      activeThread?.environmentId ??
+      routeDraftSession?.environmentId ??
+      routeProjectRef?.environmentId;
+    const projectId =
+      activeThread?.projectId ?? routeDraftSession?.projectId ?? routeProjectRef?.projectId;
     if (!environmentId || !projectId) return null;
     const physicalKey =
       projectPhysicalKeyByScopedRef.get(
@@ -3273,6 +3282,7 @@ export default function Sidebar() {
     return physicalToLogicalKey.get(physicalKey) ?? physicalKey;
   }, [
     routeDraftSession,
+    routeProjectRef,
     routeThreadKey,
     sidebarThreadByKey,
     physicalToLogicalKey,
@@ -3340,26 +3350,16 @@ export default function Sidebar() {
     (projectKey: string) => {
       const project = sidebarProjectByKey.get(projectKey);
       if (!project) return;
-      const latestTask = sortThreads(
-        (threadsByProjectKey.get(projectKey) ?? []).filter((thread) => thread.archivedAt === null),
-        sidebarThreadSortOrder,
-      )[0];
-      if (latestTask) {
-        navigateToThread(scopeThreadRef(latestTask.environmentId, latestTask.id));
-        return;
-      }
       const projectRef = project.memberProjectRefs[0];
-      if (projectRef) {
-        void handleNewThread(projectRef);
-      }
+      if (!projectRef) return;
+      clearSelection();
+      if (isMobile) setOpenMobile(false);
+      void navigate({
+        to: "/project/$environmentId/$projectId",
+        params: buildProjectRouteParams(projectRef),
+      });
     },
-    [
-      handleNewThread,
-      navigateToThread,
-      sidebarProjectByKey,
-      sidebarThreadSortOrder,
-      threadsByProjectKey,
-    ],
+    [clearSelection, isMobile, navigate, sidebarProjectByKey, setOpenMobile],
   );
 
   const projectDnDSensors = useSensors(

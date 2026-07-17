@@ -160,6 +160,7 @@ import {
   selectProjectGroupingSettings,
 } from "../logicalProject";
 import { buildDraftThreadRouteParams, buildThreadRouteParams } from "../threadRoutes";
+import { buildProjectRouteParams } from "../projectRoutes";
 import {
   type ComposerImageAttachment,
   type DraftThreadEnvMode,
@@ -1458,6 +1459,13 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeProjectRef) return;
     void startNewWorkspaceTask(activeProjectRef);
   }, [activeProjectRef, startNewWorkspaceTask]);
+  const handleSelectProjectOverview = useCallback(() => {
+    if (!activeProjectRef) return;
+    void navigate({
+      to: "/project/$environmentId/$projectId",
+      params: buildProjectRouteParams(activeProjectRef),
+    });
+  }, [activeProjectRef, navigate]);
   const activeEnvironmentShell = useEnvironmentQuery(
     activeThread ? environmentShell.stateAtom(activeThread.environmentId) : null,
   );
@@ -5097,6 +5105,11 @@ function ChatViewContent(props: ChatViewProps) {
         <WorkspaceTaskTabs
           tasks={workspaceTaskSources}
           activeTaskKey={activeThreadKey}
+          projectOverview={{
+            title: "Overview",
+            active: false,
+            onSelect: handleSelectProjectOverview,
+          }}
           onSelectTask={handleSelectWorkspaceTask}
           onNewTask={handleNewWorkspaceTask}
         />
