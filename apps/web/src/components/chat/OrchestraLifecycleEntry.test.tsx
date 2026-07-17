@@ -44,7 +44,11 @@ describe("OrchestraLifecycleEntry", () => {
       />,
     );
 
-    expect(markup).toContain('role="tree"');
+    expect(markup).toContain('aria-label="Workflow run run-1"');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toMatch(/aria-controls="[^"]+-run-details"/);
+    expect(markup).not.toContain('role="tree"');
+    expect(markup).not.toContain('role="treeitem"');
     expect(markup).toContain("Recovering");
     expect(markup).toContain("8/9 steps");
     expect(markup).toContain("+3");

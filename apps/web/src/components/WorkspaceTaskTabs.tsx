@@ -138,6 +138,7 @@ export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
                     render={
                       <span
                         aria-label={status.label}
+                        role="img"
                         className="inline-flex size-3 shrink-0 items-center justify-center"
                       />
                     }
@@ -153,7 +154,7 @@ export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
                   type="button"
                   aria-label={`Close ${task.title}`}
                   className={cn(
-                    "mr-1 flex w-5 shrink-0 items-center justify-center self-stretch rounded text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    "mr-1 flex min-w-6 shrink-0 items-center justify-center self-stretch rounded text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                     active ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100",
                   )}
                   onClick={() => onCloseTask(task)}

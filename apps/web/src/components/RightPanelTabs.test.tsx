@@ -47,9 +47,13 @@ describe("RightPanelTabs", () => {
     expect(markup).toContain('role="tab"');
     expect(markup).toContain('aria-selected="true"');
     expect(markup).toContain('aria-selected="false"');
+    expect(markup).toMatch(/aria-controls="[^"]+-surface-panel-0"/);
     expect(markup).toContain('role="tabpanel"');
-    expect(markup).toContain('aria-label="Diff"');
+    expect(markup).toMatch(/id="[^"]+-surface-panel-0"/);
+    expect(markup).toMatch(/aria-labelledby="[^"]+-surface-tab-0"/);
     expect(markup).toContain('aria-label="Close Diff"');
+    expect(markup).toContain('aria-label="Close Diff" tabindex="0"');
+    expect(markup).toContain('aria-label="Close Files" tabindex="-1"');
   });
 
   it("does not claim a tabpanel when no retained surface is active", () => {

@@ -8,6 +8,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -274,8 +275,14 @@ function SurfaceIcon({
 export function RightPanelTabs(props: RightPanelTabsProps) {
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
   const { resolvedTheme } = useTheme();
+  const tabIdPrefix = useId();
   const tabListRef = useRef<HTMLDivElement>(null);
-  const activeSurface = props.surfaces.find((surface) => surface.id === props.activeSurfaceId);
+  const activeSurfaceIndex = props.surfaces.findIndex(
+    (surface) => surface.id === props.activeSurfaceId,
+  );
+  const activeSurface = props.surfaces[activeSurfaceIndex];
+  const tabId = (index: number) => `${tabIdPrefix}-surface-tab-${index}`;
+  const panelId = (index: number) => `${tabIdPrefix}-surface-panel-${index}`;
 
   const handleTabContextMenu = useCallback(
     async (event: ReactMouseEvent, surface: RightPanelSurface) => {
@@ -422,6 +429,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                         <button
                           type="button"
                           role="tab"
+                          id={tabId(index)}
+                          aria-controls={panelId(index)}
                           aria-selected={active}
                           tabIndex={active ? 0 : -1}
                           className="flex min-w-0 flex-1 items-center gap-1.5"
@@ -443,9 +452,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     type="button"
                     className={cn(
                       "relative flex size-4 shrink-0 items-center justify-center rounded hover:bg-muted focus:opacity-100",
-                      pending ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                      active || pending ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                     )}
                     aria-label={`Close ${title}`}
+                    tabIndex={active || pending ? 0 : -1}
                     onClick={() => props.onCloseSurface(surface)}
                   >
                     {pending ? (
@@ -510,11 +520,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       <div
         className="flex min-h-0 flex-1 flex-col"
         role={activeSurface ? "tabpanel" : undefined}
-        aria-label={
-          activeSurface
-            ? surfaceTitle(activeSurface, props.previewSessions, props.terminalLabelsById)
-            : undefined
-        }
+        id={activeSurface ? panelId(activeSurfaceIndex) : undefined}
+        aria-labelledby={activeSurface ? tabId(activeSurfaceIndex) : undefined}
       >
         {props.activeSurfaceId === null ? (
           <RightPanelEmptyState

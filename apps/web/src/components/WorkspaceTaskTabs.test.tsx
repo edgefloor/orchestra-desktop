@@ -35,6 +35,7 @@ describe("WorkspaceTaskTabs", () => {
     expect(markup).toContain('aria-selected="true"');
     expect(markup).toContain("Active task");
     expect(markup).toContain('aria-label="Close Active task"');
+    expect(markup).toContain('aria-label="Idle" role="img"');
     expect(markup).toContain('aria-label="New task"');
   });
 

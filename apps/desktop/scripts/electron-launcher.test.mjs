@@ -1,8 +1,16 @@
 import { assert, describe, it } from "vite-plus/test";
 
-import { makeDevelopmentLauncherScript, resolveElectronBinaryPath } from "./electron-launcher.mjs";
+import {
+  APP_DISPLAY_NAME,
+  makeDevelopmentLauncherScript,
+  resolveElectronBinaryPath,
+} from "./electron-launcher.mjs";
 
 describe("electron development launcher", () => {
+  it("brands the generated Electron bundle as Orchestra", () => {
+    assert.match(APP_DISPLAY_NAME, /^Orchestra \((Dev|Alpha)\)$/);
+  });
+
   it("uses captured values only as fallbacks for a live runner environment", () => {
     const script = makeDevelopmentLauncherScript({
       electronBinaryPath: "/repo/node_modules/electron/Electron",

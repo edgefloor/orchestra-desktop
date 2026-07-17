@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 
 import { RIGHT_PANEL_SHEET_CLASS_NAME } from "../rightPanelLayout";
-import { Sheet, SheetPopup } from "./ui/sheet";
+import { Sheet, SheetDescription, SheetPopup, SheetTitle } from "./ui/sheet";
 
 export function RightPanelSheet(props: {
   children: ReactNode;
@@ -23,6 +23,10 @@ export function RightPanelSheet(props: {
         keepMounted
         className={RIGHT_PANEL_SHEET_CLASS_NAME}
       >
+        <SheetTitle className="sr-only">Workspace panel</SheetTitle>
+        <SheetDescription className="sr-only">
+          Contextual workspace tools and task information.
+        </SheetDescription>
         {props.children}
       </SheetPopup>
     </Sheet>

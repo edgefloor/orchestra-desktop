@@ -490,6 +490,27 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 
+  it.effect("brands the Linux executable and window class as Orchestra", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "linux",
+        "AppImage",
+        "1.2.3",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
+
+      const linux = config.linux as {
+        readonly executableName: string;
+        readonly desktop: { readonly entry: { readonly StartupWMClass: string } };
+      };
+      assert.equal(linux.executableName, "orchestra");
+      assert.equal(linux.desktop.entry.StartupWMClass, "orchestra");
+    }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
+  );
+
   it.effect("embeds the sealed Orchestra Product resources when supplied", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

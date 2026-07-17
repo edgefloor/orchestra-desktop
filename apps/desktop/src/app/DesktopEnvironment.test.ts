@@ -65,7 +65,10 @@ describe("DesktopEnvironment", () => {
       assert.equal(environment.backendEntryPath, "/repo/apps/server/dist/bin.mjs");
       assert.equal(environment.backendCwd, "/repo");
       assert.equal(environment.appUserModelId, "com.edgefloor.orchestra.dev");
-      assert.equal(environment.linuxWmClass, "t3code-dev");
+      assert.equal(environment.linuxWmClass, "orchestra-dev");
+      assert.equal(environment.linuxDesktopEntryName, "orchestra-dev.desktop");
+      assert.equal(environment.userDataDirName, "orchestra-dev");
+      assert.deepEqual(environment.legacyUserDataDirNames, ["t3code-dev", "T3 Code (Dev)"]);
       assert.deepEqual(
         Option.map(environment.devServerUrl, (url) => url.href),
         Option.some("http://localhost:5173/"),

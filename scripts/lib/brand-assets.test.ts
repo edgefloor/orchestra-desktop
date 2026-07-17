@@ -9,6 +9,14 @@ import {
 } from "./brand-assets.ts";
 
 describe("brand-assets", () => {
+  it("uses Orchestra artwork for every release channel", () => {
+    expect(
+      Object.values(BRAND_ASSET_PATHS).filter(
+        (assetPath) => !assetPath.startsWith("assets/orchestra/"),
+      ),
+    ).toEqual([]);
+  });
+
   it("maps server publish web assets to production icons", () => {
     expect(PUBLISH_ICON_OVERRIDES).toEqual([
       {

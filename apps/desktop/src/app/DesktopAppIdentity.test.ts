@@ -153,8 +153,19 @@ describe("DesktopAppIdentity", () => {
     ),
   );
 
+  it.effect("uses the standalone Orchestra userData path for a fresh install", () =>
+    withIdentity(
+      Effect.gen(function* () {
+        const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
+        const userDataPath = yield* identity.resolveUserDataPath;
+
+        assert.equal(userDataPath, "/Users/alice/Library/Application Support/orchestra");
+      }),
+    ),
+  );
+
   it.effect("preserves failures while inspecting the legacy userData path", () => {
-    const legacyPath = "/Users/alice/Library/Application Support/T3 Code (Alpha)";
+    const legacyPath = "/Users/alice/Library/Application Support/t3code";
     const cause = PlatformError.systemError({
       _tag: "PermissionDenied",
       module: "FileSystem",

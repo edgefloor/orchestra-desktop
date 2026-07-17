@@ -59,7 +59,7 @@ export function WorkspaceTaskContextBar({
             aria-selected={activeView === view}
             tabIndex={activeView === view || (activeView === null && index === 0) ? 0 : -1}
             className={cn(
-              "rounded-md px-2 py-1 outline-hidden transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
+              "min-h-6 rounded-md px-2 py-1 outline-hidden transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
               activeView === view && "bg-primary/12 text-primary",
             )}
             onClick={() => onSelectView(view)}

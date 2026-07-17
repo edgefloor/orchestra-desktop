@@ -25,7 +25,7 @@ import {
   HistoryIcon,
   LoaderCircleIcon,
 } from "lucide-react";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useId, useMemo, useState } from "react";
 
 import { queryOrchestra } from "~/state/orchestra";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -104,6 +104,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   const { environmentId, threadId, event } = props;
   const query = useAtomCommand(queryOrchestra, { reportFailure: false });
   const compact = useMemo(() => compactWorkflowStepSummary(event), [event]);
+  const disclosureId = useId();
   const [expanded, setExpanded] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<ReadonlySet<string>>(() => new Set());
   const [historyExpanded, setHistoryExpanded] = useState(false);
@@ -303,14 +304,12 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   const rootUnavailable = Boolean(errors["run:run"] || errors["steps:run"]);
 
   return (
-    <div
-      role="tree"
-      aria-label={`Workflow run ${event.runId}`}
-      className="rounded-md px-0.5 py-0.5"
-    >
-      <div role="treeitem" aria-expanded={expanded}>
+    <section aria-label={`Workflow run ${event.runId}`} className="rounded-md px-0.5 py-0.5">
+      <div>
         <button
           type="button"
+          aria-controls={`${disclosureId}-run-details`}
+          aria-expanded={expanded}
           className="flex w-full items-center gap-1.5 rounded text-left hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
           onClick={toggleRoot}
         >
@@ -360,7 +359,10 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
         ) : null}
 
         {expanded ? (
-          <div role="group" className="mt-1 ms-7 border-s border-border/45 py-1 ps-3 text-[11px]">
+          <div
+            id={`${disclosureId}-run-details`}
+            className="mt-1 ms-7 border-s border-border/45 py-1 ps-3 text-[11px]"
+          >
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
               <span className="font-mono">{event.runId}</span>
               <span>Revision {event.revision}</span>
@@ -379,19 +381,20 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
               <BoundedText value={run.nextAction} className="mt-2 text-foreground/75" />
             ) : null}
 
-            {steps?.map((step) => {
+            {steps?.map((step, stepIndex) => {
               const stepExpanded = expandedSteps.has(step.id);
               const outputKey = `outputs:${step.id}`;
               const evidenceKey = `evidence:${step.id}`;
+              const stepDetailsId = `${disclosureId}-step-${stepIndex}-details`;
               return (
                 <div
                   key={step.id}
-                  role="treeitem"
-                  aria-expanded={stepExpanded}
                   className="mt-2 rounded border border-border/45 bg-background/25"
                 >
                   <button
                     type="button"
+                    aria-controls={stepDetailsId}
+                    aria-expanded={stepExpanded}
                     className="flex w-full items-center gap-2 px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
                     onClick={() => toggleStep(step.id)}
                   >
@@ -409,7 +412,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
 
                   {stepExpanded ? (
                     <div
-                      role="group"
+                      id={stepDetailsId}
                       className="space-y-2 border-t border-border/35 px-3 py-2 text-muted-foreground"
                     >
                       <div className="flex flex-wrap gap-x-3 gap-y-1">
@@ -599,9 +602,11 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
               </button>
             ) : null}
 
-            <div role="treeitem" aria-expanded={historyExpanded} className="mt-2">
+            <div className="mt-2">
               <button
                 type="button"
+                aria-controls={`${disclosureId}-history-details`}
+                aria-expanded={historyExpanded}
                 className="flex items-center gap-2 rounded px-1 py-1 text-muted-foreground hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
                 onClick={toggleHistory}
               >
@@ -614,7 +619,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                 Recovery and decision history
               </button>
               {historyExpanded ? (
-                <div role="group" className="ms-6 mt-1 space-y-1.5">
+                <div id={`${disclosureId}-history-details`} className="ms-6 mt-1 space-y-1.5">
                   {loading.has("history:run") ? <p>Loading rollout-backed history…</p> : null}
                   {history?.length === 0 ? <p>No native history records are available.</p> : null}
                   {history?.map((item) => (
@@ -655,6 +660,6 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
           </div>
         ) : null}
       </div>
-    </div>
+    </section>
   );
 });

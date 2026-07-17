@@ -29,7 +29,7 @@
   --orchestra-on-iris: #ffffff;
   --orchestra-focus-ring: #4359b6;
   --orchestra-success: #087a55;
-  --orchestra-warning: #b06a00;
+  --orchestra-warning: #9a5800;
   --orchestra-danger: #c93640;
   --orchestra-info: #2563eb;
   --orchestra-selection: color-mix(in srgb, var(--orchestra-iris) 24%, transparent);
@@ -312,6 +312,23 @@
   animation-duration: 0s !important;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
 :root {
   color-scheme: light;
   --radius: 0.625rem;
@@ -357,7 +374,7 @@
     --orchestra-iris: #7b8cde;
     --orchestra-iris-hover: #9aa8e8;
     --orchestra-iris-wash: rgb(123 140 222 / 12%);
-    --orchestra-on-iris: #ffffff;
+    --orchestra-on-iris: #111827;
     --orchestra-focus-ring: #a8b4f0;
     --orchestra-success: #34d399;
     --orchestra-warning: #e87532;
