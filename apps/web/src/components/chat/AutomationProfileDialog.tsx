@@ -1,11 +1,11 @@
-import type {
-  AutomationLinearReadResult,
-  AutomationQueueReadInput,
-  AutomationQueueReadResult,
-  AutomationRunResult,
-  AutomationValidateResult,
-  EnvironmentId,
+import {
   ThreadId,
+  type AutomationLinearReadResult,
+  type AutomationQueueReadInput,
+  type AutomationQueueReadResult,
+  type AutomationRunResult,
+  type AutomationValidateResult,
+  type EnvironmentId,
 } from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
@@ -30,12 +30,14 @@ import {
 import { useAtomCommand } from "~/state/use-atom-command";
 import {
   automationLinearRows,
+  automationLinearAvailability,
   automationRunStorageKey,
   automationRunRows,
   automationWorkspaceCapabilities,
   buildAutomationStartInput,
   buildAutomationValidateInput,
   deriveAutomationWorkspaceState,
+  mergeAutomationQueuePage,
   type AutomationWorkspacePendingAction,
 } from "./AutomationProfileDialog.logic";
 import { Badge } from "../ui/badge";
@@ -49,6 +51,7 @@ interface AutomationWorkspaceProps {
   readonly threadId: ThreadId;
   readonly threadTitle: string;
   readonly onClose: () => void;
+  readonly onOpenIssueTask: (threadId: ThreadId) => void;
 }
 
 function readableError(cause: unknown): string {
@@ -60,6 +63,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   threadId,
   threadTitle,
   onClose,
+  onOpenIssueTask,
 }: AutomationWorkspaceProps) {
   const validate = useAtomCommand(validateAutomationProfile, { reportFailure: false });
   const start = useAtomCommand(startAutomation, { reportFailure: false });
@@ -87,6 +91,14 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   const [steeringInputs, setSteeringInputs] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const restoredRunId = useRef<string | null>(null);
+  const requestIdRef = useRef(0);
+
+  useEffect(
+    () => () => {
+      requestIdRef.current += 1;
+    },
+    [],
+  );
 
   const acceptRunResult = useCallback(
     (value: AutomationRunResult) => {
@@ -101,12 +113,15 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
     (candidateRunId = runId) => {
       const normalizedRunId = candidateRunId.trim();
       if (!normalizedRunId) return;
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       setPendingAction("inspecting");
       setError(null);
       void readStatus({
         environmentId,
         input: { threadId, runId: normalizedRunId },
       }).then((commandResult) => {
+        if (requestIdRef.current !== requestId) return;
         setPendingAction(null);
         if (commandResult._tag === "Success") {
           acceptRunResult(commandResult.value);
@@ -130,6 +145,8 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   }, [loadRun, runResult, threadId]);
 
   const submit = useCallback(() => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setPendingAction("validating");
     setError(null);
     setResult(null);
@@ -147,6 +164,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         attempt,
       }),
     }).then((commandResult) => {
+      if (requestIdRef.current !== requestId) return;
       setPendingAction(null);
       if (commandResult._tag === "Success") {
         setResult(commandResult.value);
@@ -169,6 +187,8 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   ]);
 
   const run = useCallback(() => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setPendingAction("starting");
     setError(null);
     setRunResult(null);
@@ -179,6 +199,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         profilePath: profilePath.trim(),
       }),
     }).then((commandResult) => {
+      if (requestIdRef.current !== requestId) return;
       setPendingAction(null);
       if (commandResult._tag === "Success") {
         acceptRunResult(commandResult.value);
@@ -195,12 +216,15 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
       if (!runResult) return;
       const input = steeringInputs[claimId]?.trim() ?? "";
       if (!input) return;
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       setPendingAction("steering");
       setError(null);
       void steerIssue({
         environmentId,
         input: { threadId, runId: runResult.run.runId, claimId, input },
       }).then((commandResult) => {
+        if (requestIdRef.current !== requestId) return;
         setPendingAction(null);
         if (commandResult._tag === "Success") {
           acceptRunResult({ run: commandResult.value.run });
@@ -217,12 +241,15 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
 
   const cancelRun = useCallback(() => {
     if (!runResult) return;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setPendingAction("cancelling");
     setError(null);
     void cancel({
       environmentId,
       input: { threadId, runId: runResult.run.runId },
     }).then((commandResult) => {
+      if (requestIdRef.current !== requestId) return;
       setPendingAction(null);
       if (commandResult._tag === "Success") {
         acceptRunResult(commandResult.value);
@@ -237,12 +264,15 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   const cancelClaim = useCallback(
     (claimId: string) => {
       if (!runResult) return;
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       setPendingAction("cancelling");
       setError(null);
       void cancelIssue({
         environmentId,
         input: { threadId, runId: runResult.run.runId, claimId },
       }).then((commandResult) => {
+        if (requestIdRef.current !== requestId) return;
         setPendingAction(null);
         if (commandResult._tag === "Success") {
           acceptRunResult(commandResult.value);
@@ -259,6 +289,8 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   const runLifecycleAction = useCallback(
     (action: "status" | "pause" | "refresh" | "resume") => {
       if (!runResult) return;
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       setPendingAction(
         action === "pause" ? "pausing" : action === "status" ? "inspecting" : "reconciling",
       );
@@ -282,6 +314,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                   input: { ...base.input, profilePath: profilePath.trim() },
                 });
       void command.then((commandResult) => {
+        if (requestIdRef.current !== requestId) return;
         setPendingAction(null);
         if (commandResult._tag === "Success") {
           acceptRunResult(commandResult.value);
@@ -307,6 +340,8 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
 
   const readLinearIssues = useCallback(
     (kind: "candidates" | "terminal" | "refresh") => {
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       setPendingAction("inspecting");
       setError(null);
       setLinearResult(null);
@@ -320,6 +355,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
           issueIdentifier: kind === "refresh" ? issueIdentifier.trim() : undefined,
         },
       }).then((commandResult) => {
+        if (requestIdRef.current !== requestId) return;
         setPendingAction(null);
         if (commandResult._tag === "Success") {
           setLinearResult(commandResult.value);
@@ -336,6 +372,8 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   const inspectQueue = useCallback(
     (category: AutomationQueueReadInput["category"], offset?: number) => {
       if (!runResult) return;
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       setPendingAction("inspecting");
       setError(null);
       void readQueue({
@@ -348,9 +386,14 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
           limit: 25,
         },
       }).then((commandResult) => {
+        if (requestIdRef.current !== requestId) return;
         setPendingAction(null);
         if (commandResult._tag === "Success") {
-          setQueueResult(commandResult.value);
+          setQueueResult((current) =>
+            offset === undefined
+              ? commandResult.value
+              : mergeAutomationQueuePage(current, commandResult.value),
+          );
           return;
         }
         if (!isAtomCommandInterrupted(commandResult)) {
@@ -372,6 +415,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
     validation: result,
     run: runResult?.run ?? null,
   });
+  const linearAvailability = linearResult ? automationLinearAvailability(linearResult) : null;
 
   return (
     <section
@@ -383,7 +427,9 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold">Symphony automation</h3>
-            <Badge variant="outline">{workspaceState}</Badge>
+            <Badge aria-live="polite" role="status" variant="outline">
+              {workspaceState}
+            </Badge>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             Task-scoped native automation for {threadTitle}. Run state is reloaded from Codex after
@@ -476,7 +522,10 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         </div>
 
         {error ? (
-          <div className="flex gap-2 rounded-lg border border-destructive/40 bg-destructive/8 p-3 text-sm text-destructive">
+          <div
+            className="flex gap-2 rounded-lg border border-destructive/40 bg-destructive/8 p-3 text-sm text-destructive"
+            role="alert"
+          >
             <CircleAlertIcon className="mt-0.5 size-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -508,6 +557,34 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                   <Badge key={effect} variant="secondary">
                     {effect}
                   </Badge>
+                ))}
+              </div>
+            ) : null}
+            {result.preview?.inputs.length ? (
+              <div className="space-y-2 text-xs">
+                <div className="font-medium uppercase tracking-wide text-muted-foreground">
+                  Workflow inputs
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {result.preview.inputs.map((input) => (
+                    <Badge key={input.name} variant="outline">
+                      {input.name} · {input.kind} · {input.required ? "required" : "optional"}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {result.preview?.secretReferences.length ? (
+              <div className="space-y-2 text-xs">
+                <div className="font-medium uppercase tracking-wide text-muted-foreground">
+                  Secret references
+                </div>
+                {result.preview.secretReferences.map((secret) => (
+                  <div className="rounded-md border bg-background p-2" key={secret.digest}>
+                    <span className="font-medium">{secret.kind}</span>{" "}
+                    <code className="select-all">{secret.reference}</code>{" "}
+                    <span className="text-muted-foreground">digest {secret.digest}</span>
+                  </div>
                 ))}
               </div>
             ) : null}
@@ -559,6 +636,20 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
             </div>
             <div className="text-xs text-muted-foreground">
               Root Run <code className="select-all">{runResult.run.runId}</code>
+            </div>
+            <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+              <div>
+                Owner task <code className="select-all">{runResult.run.ownerThreadId}</code>
+              </div>
+              <div>
+                Source revision <code className="select-all">{runResult.run.sourceRevision}</code>
+              </div>
+              <div>
+                Profile digest <code className="select-all">{runResult.run.profileDigest}</code>
+              </div>
+              <div>
+                Claims {runResult.run.claims.length} shown / {runResult.run.claimsTotal} total
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <Badge variant="outline">reconciliation {runResult.run.reconciliation}</Badge>
@@ -613,12 +704,48 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                 </Button>
               ))}
             </div>
+            {runResult.run.queuePreview.length ? (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground">
+                  Native queue preview ({runResult.run.queuePreview.length})
+                  {runResult.run.queuePreviewTruncated ? " · truncated" : ""}
+                </summary>
+                <div className="mt-2 space-y-1.5">
+                  {runResult.run.queuePreview.map((item) => (
+                    <div
+                      className="rounded-md border bg-background p-2"
+                      key={`${item.issueId}:${item.claimId ?? item.category}`}
+                    >
+                      <span className="font-medium">{item.issueIdentifier}</span>{" "}
+                      <Badge variant="outline">{item.category.replace("_", " ")}</Badge>{" "}
+                      <span className="text-muted-foreground">{item.state}</span>
+                      <div className="mt-1 text-muted-foreground">
+                        {item.nextAction.text}
+                        {item.nextAction.truncated ? "…" : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : runResult.run.queuePreviewTruncated ? (
+              <p className="text-xs text-amber-600">
+                Native queue preview is truncated; inspect a category for bounded detail.
+              </p>
+            ) : null}
+            {runResult.run.claimsTotal > runResult.run.claims.length ? (
+              <p className="text-xs text-amber-600">
+                Claim projection is bounded;{" "}
+                {runResult.run.claimsTotal - runResult.run.claims.length} additional claim(s) are
+                not in this snapshot.
+              </p>
+            ) : null}
             {automationRunRows(runResult).map((claim) => (
               <div key={claim.claimId} className="space-y-2 rounded-lg border bg-background p-3">
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-medium">{claim.issueIdentifier}</span>
                   <Badge variant="secondary">{claim.status}</Badge>
                   <Badge variant="outline">profile r{claim.profileRevision}</Badge>
+                  <Badge variant="outline">attempt {claim.attempt}</Badge>
                   {claim.status === "claimed" ||
                   claim.status === "running" ||
                   claim.status === "suspended" ? (
@@ -636,9 +763,38 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                   {claim.issueTitle.text}
                   {claim.issueTitle.truncated ? "…" : ""}
                 </div>
-                {claim.issueTaskThreadId ? (
-                  <div className="text-xs text-muted-foreground">
-                    Issue task <code className="select-all">{claim.issueTaskThreadId}</code>
+                <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                  <div>
+                    Tracker state <span className="text-foreground">{claim.trackerState}</span>
+                  </div>
+                  <div>
+                    Priority <span className="text-foreground">{claim.priority ?? "none"}</span>
+                  </div>
+                  <div>
+                    Source <code className="select-all">{claim.sourceRevision}</code>
+                  </div>
+                  <div>
+                    Profile digest <code className="select-all">{claim.profileDigest}</code>
+                  </div>
+                  <div className="sm:col-span-2">
+                    Worktree <code className="select-all">{claim.worktree}</code>
+                  </div>
+                </div>
+                {claim.issueTask ? (
+                  <div className="space-y-1 rounded-md border bg-muted/20 p-2 text-xs text-muted-foreground">
+                    <div>
+                      Issue task <code className="select-all">{claim.issueTask.threadId}</code>
+                    </div>
+                    <div>
+                      Agent path <code className="select-all">{claim.issueTask.taskPath}</code>
+                    </div>
+                    <Button
+                      onClick={() => onOpenIssueTask(ThreadId.make(claim.issueTask!.threadId))}
+                      size="xs"
+                      variant="outline"
+                    >
+                      Open issue task
+                    </Button>
                   </div>
                 ) : null}
                 {claim.latestSteeringReceipt ? (
@@ -693,6 +849,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                 {claim.workflowRunId ? (
                   <div className="text-xs text-muted-foreground">
                     Workflow Run <code className="select-all">{claim.workflowRunId}</code>
+                    {claim.workflowStatus ? ` · ${claim.workflowStatus}` : ""}
                   </div>
                 ) : null}
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -725,6 +882,23 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                             {hook.status}
                           </Badge>
                           {hook.exitCode !== undefined ? <span>exit {hook.exitCode}</span> : null}
+                          {hook.commandSha256 ? (
+                            <span>
+                              command <code className="select-all">{hook.commandSha256}</code>
+                            </span>
+                          ) : null}
+                          {hook.stdoutPreview.text ? (
+                            <span>
+                              stdout {hook.stdoutPreview.text}
+                              {hook.stdoutPreview.truncated ? "…" : ""}
+                            </span>
+                          ) : null}
+                          {hook.stderrPreview.text ? (
+                            <span>
+                              stderr {hook.stderrPreview.text}
+                              {hook.stderrPreview.truncated ? "…" : ""}
+                            </span>
+                          ) : null}
                           {hook.failure ? (
                             <span className="text-destructive">
                               {hook.failure.text}
@@ -747,6 +921,13 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                         {effect.status}
                       </Badge>
                       <span className="text-muted-foreground">{effect.gatePolicy}</span>
+                    </div>
+                    <div className="text-muted-foreground">
+                      Effect <code className="select-all">{effect.effectId}</code> · request{" "}
+                      <code className="select-all">{effect.requestSha256}</code>
+                    </div>
+                    <div className="text-muted-foreground">
+                      Idempotency <code className="select-all">{effect.idempotencyKey}</code>
                     </div>
                     <div className="text-muted-foreground">
                       {effect.bodyPreview.text}
@@ -821,9 +1002,18 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         {linearResult ? (
           <div className="space-y-3 rounded-xl border bg-muted/25 p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium">Linear intake</span>
+              <span className="text-sm font-medium">{linearAvailability?.title}</span>
               <Badge variant="outline">{linearResult.status}</Badge>
             </div>
+            {linearAvailability?.kind === "warning" ? (
+              <div
+                className="rounded-md border border-amber-500/40 bg-amber-500/8 p-3 text-xs text-amber-700"
+                role="alert"
+              >
+                {linearAvailability.detail.text}
+                {linearAvailability.detail.truncated ? "…" : ""}
+              </div>
+            ) : null}
             {automationLinearRows(linearResult).map((issue) => (
               <div key={issue.id} className="rounded-lg border bg-background p-3 text-xs">
                 <div className="flex flex-wrap items-center gap-2">
@@ -849,9 +1039,14 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                 ) : null}
               </div>
             ))}
+            {linearResult.hasNextPage ? (
+              <p className="text-xs text-amber-600">
+                Linear intake is bounded; more issues are available from the native provider.
+              </p>
+            ) : null}
             <div className="text-xs text-muted-foreground">
-              {linearResult.nextAction.text}
-              {linearResult.nextAction.truncated ? "…" : ""}
+              {linearAvailability?.detail.text}
+              {linearAvailability?.detail.truncated ? "…" : ""}
             </div>
           </div>
         ) : null}

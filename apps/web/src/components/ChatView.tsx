@@ -1309,6 +1309,17 @@ function ChatViewContent(props: ChatViewProps) {
     }
     setAutomationWorkspaceThreadId(activeThreadId);
   }, [activeThreadId, shouldUseWorkspaceContextSheet]);
+  const openAutomationIssueTask = useCallback(
+    (threadId: ThreadId) => {
+      if (!activeThread) return;
+      const issueTaskRef = scopeThreadRef(activeThread.environmentId, threadId);
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(issueTaskRef),
+      });
+    },
+    [activeThread, navigate],
+  );
   const reviewComposerAttention = useCallback(() => {
     if (shouldUseWorkspaceContextSheet) {
       setWorkspaceContextSheetOpen(false);
@@ -5271,10 +5282,12 @@ function ChatViewContent(props: ChatViewProps) {
         />
         {automationWorkspaceOpen ? (
           <AutomationWorkspace
+            key={`${activeThread.environmentId}:${activeThread.id}`}
             environmentId={activeThread.environmentId}
             threadId={activeThread.id}
             threadTitle={activeThread.title}
             onClose={closeAutomationWorkspace}
+            onOpenIssueTask={openAutomationIssueTask}
           />
         ) : null}
         {/* Main content area with optional plan sidebar */}

@@ -1,5 +1,6 @@
 import type {
   AutomationLinearReadResult,
+  AutomationQueueReadResult,
   AutomationRun,
   AutomationRunResult,
   AutomationStartInput,
@@ -67,9 +68,16 @@ export function automationWorkspaceCapabilities(input: {
   readonly run: AutomationRun | null;
 }) {
   const terminal = input.run?.status === "cancelled" || input.run?.status === "failed";
+  const missingRequiredSecret = input.validation?.diagnostics.some(
+    (diagnostic) => diagnostic.code === "missing_secret",
+  );
   return {
     validate: !input.pending,
-    start: !input.pending && input.validation?.valid === true && input.run === null,
+    start:
+      !input.pending &&
+      input.validation?.valid === true &&
+      !missingRequiredSecret &&
+      input.run === null,
     inspect: !input.pending && input.run !== null && !terminal,
     pause: !input.pending && input.run?.status === "running",
     resume: !input.pending && input.run?.status === "suspended",
@@ -117,25 +125,32 @@ export function buildAutomationStartInput(input: {
 }
 
 export function automationRunRows(result: AutomationRunResult) {
-  return result.run.claims.slice(0, 8).map((claim) => ({
+  return result.run.claims.map((claim) => ({
     claimId: claim.claimId,
     issueIdentifier: claim.issueIdentifier,
     issueTitle: claim.issueTitle,
     trackerState: claim.trackerState,
     priority: claim.priority,
+    attempt: claim.attempt,
     status: claim.status,
     profileDigest: claim.profileDigest,
     profileRevision: claim.profileRevision,
+    sourceRevision: claim.sourceRevision,
+    worktree: claim.worktree,
+    issueTask: claim.issueTask,
     issueTaskThreadId: claim.issueTask?.threadId,
     latestSteeringReceipt: claim.latestSteeringReceipt,
     workflowRunId: claim.workflowRunId,
+    workflowStatus: claim.workflowStatus,
     cleanup: claim.cleanup,
-    hookReceipts: claim.hookReceipts.slice(-8),
-    effects: claim.effects.slice(0, 4).map((effect) => ({
+    hookReceipts: claim.hookReceipts,
+    effects: claim.effects.map((effect) => ({
       effectId: effect.effectId,
+      idempotencyKey: effect.idempotencyKey,
       kind: effect.kind,
       status: effect.status,
       gatePolicy: effect.gatePolicy,
+      requestSha256: effect.requestSha256,
       bodyPreview: effect.bodyPreview,
       providerReceipt: effect.providerReceipt,
       failure: effect.failure,
@@ -154,4 +169,32 @@ export function automationLinearRows(result: AutomationLinearReadResult) {
     labels: issue.labels,
     blockedByCount: issue.blockedBy.length,
   }));
+}
+
+export function automationQueueItemKey(item: AutomationQueueReadResult["items"][number]): string {
+  return `${item.issueId}:${item.claimId ?? item.category}`;
+}
+
+export function mergeAutomationQueuePage(
+  current: AutomationQueueReadResult | null,
+  incoming: AutomationQueueReadResult,
+): AutomationQueueReadResult {
+  if (!current || current.category !== incoming.category) return incoming;
+  const items = new Map(current.items.map((item) => [automationQueueItemKey(item), item]));
+  for (const item of incoming.items) items.set(automationQueueItemKey(item), item);
+  return { ...incoming, items: [...items.values()] };
+}
+
+export function automationLinearAvailability(result: AutomationLinearReadResult) {
+  return result.status === "skipped"
+    ? {
+        kind: "warning" as const,
+        title: "Linear intake skipped",
+        detail: result.nextAction,
+      }
+    : {
+        kind: "ready" as const,
+        title: "Linear intake ready",
+        detail: result.nextAction,
+      };
 }

@@ -12,6 +12,7 @@ describe("AutomationWorkspace", () => {
         threadId={ThreadId.make("task-48")}
         threadTitle="Move Symphony into the task workspace"
         onClose={vi.fn()}
+        onOpenIssueTask={vi.fn()}
       />,
     );
 

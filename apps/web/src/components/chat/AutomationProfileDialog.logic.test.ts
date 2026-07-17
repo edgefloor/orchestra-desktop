@@ -1,13 +1,15 @@
-import { ThreadId } from "@t3tools/contracts";
+import { ThreadId, type AutomationQueueReadResult } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   automationLinearRows,
+  automationLinearAvailability,
   automationRunRows,
   automationWorkspaceCapabilities,
   buildAutomationStartInput,
   buildAutomationValidateInput,
   deriveAutomationWorkspaceState,
+  mergeAutomationQueuePage,
 } from "./AutomationProfileDialog.logic";
 
 describe("buildAutomationStartInput", () => {
@@ -183,9 +185,13 @@ describe("automationRunRows", () => {
         issueTitle: { text: "Run one fixture issue", truncated: false },
         trackerState: "Todo",
         priority: 2,
+        attempt: 1,
         status: "completed",
         profileDigest: "claim-profile-digest",
         profileRevision: 1,
+        sourceRevision: "abc123",
+        worktree: "/repo/.worktrees/orc-33-a1",
+        issueTask: { threadId: "issue-task-33", taskPath: "/root/automation_orc_33" },
         issueTaskThreadId: "issue-task-33",
         latestSteeringReceipt: {
           sequence: 2,
@@ -199,6 +205,7 @@ describe("automationRunRows", () => {
           providerReceipt: "submission-2",
         },
         workflowRunId: "workflow-run-33",
+        workflowStatus: "completed",
         cleanup: { status: "retained", attempts: 0 },
         hookReceipts: [
           {
@@ -214,27 +221,33 @@ describe("automationRunRows", () => {
         effects: [
           {
             effectId: "effect-34",
+            idempotencyKey: "idem-34",
             kind: "tracker.comment",
             status: "committed",
             gatePolicy: "auto_accept",
+            requestSha256: "request-sha",
             bodyPreview: { text: "Implemented and verified.", truncated: false },
             providerReceipt: "fixture-comment:idem-34",
             failure: undefined,
           },
           {
             effectId: "effect-transition-41",
+            idempotencyKey: "idem-transition-41",
             kind: "tracker.transition",
             status: "committed",
             gatePolicy: "auto_accept",
+            requestSha256: "transition-sha",
             bodyPreview: { text: "Done", truncated: false },
             providerReceipt: "fixture-transition:idem-transition-41",
             failure: undefined,
           },
           {
             effectId: "effect-pr-41",
+            idempotencyKey: "idem-pr-41",
             kind: "tracker.link_pull_request",
             status: "committed",
             gatePolicy: "auto_accept",
+            requestSha256: "pull-request-sha",
             bodyPreview: {
               text: "https://github.com/edgefloor/codex-orchestra/pull/43",
               truncated: false,
@@ -246,7 +259,7 @@ describe("automationRunRows", () => {
         nextAction: { text: "claim complete", truncated: false },
       },
     ]);
-    expect(rows[0]).not.toHaveProperty("worktree");
+    expect(rows[0]).toHaveProperty("worktree", "/repo/.worktrees/orc-33-a1");
     expect(rows[0]).not.toHaveProperty("outputs");
   });
 });
@@ -285,6 +298,27 @@ describe("automationLinearRows", () => {
     });
     expect(rows[0]).not.toHaveProperty("description");
     expect(rows[0]).not.toHaveProperty("url");
+  });
+
+  it("keeps missing credentials as an explicit skipped warning", () => {
+    expect(
+      automationLinearAvailability({
+        status: "skipped",
+        issues: [],
+        hasNextPage: false,
+        nextAction: {
+          text: "Configure LINEAR_API_KEY to enable live intake.",
+          truncated: false,
+        },
+      }),
+    ).toEqual({
+      kind: "warning",
+      title: "Linear intake skipped",
+      detail: {
+        text: "Configure LINEAR_API_KEY to enable live intake.",
+        truncated: false,
+      },
+    });
   });
 });
 
@@ -386,6 +420,73 @@ describe("Automation workspace lifecycle", () => {
       resume: false,
       refresh: false,
       cancel: false,
+    });
+  });
+
+  it("does not enable production start while required native secrets are missing", () => {
+    expect(
+      automationWorkspaceCapabilities({
+        pending: false,
+        run: null,
+        validation: {
+          valid: true,
+          profileDigest: "profile-digest",
+          diagnostics: [
+            {
+              path: "secrets.LINEAR_API_KEY",
+              code: "missing_secret",
+              severity: "warning",
+              message: "Secret is not configured",
+            },
+          ],
+        },
+      }).start,
+    ).toBe(false);
+  });
+});
+
+describe("mergeAutomationQueuePage", () => {
+  it("appends bounded pages with stable issue/claim identity and replaces newer duplicates", () => {
+    const first: AutomationQueueReadResult = {
+      category: "running" as const,
+      total: 3,
+      items: [
+        {
+          issueId: "issue-1",
+          issueIdentifier: "ORC-1",
+          issueTitle: { text: "First", truncated: false },
+          state: "Started",
+          claimId: "claim-1",
+          category: "running" as const,
+          nextAction: { text: "Continue", truncated: false },
+        },
+      ],
+      nextOffset: 1,
+    };
+    const second: AutomationQueueReadResult = {
+      category: "running" as const,
+      total: 3,
+      items: [
+        {
+          ...first.items[0]!,
+          state: "In Progress",
+        },
+        {
+          issueId: "issue-2",
+          issueIdentifier: "ORC-2",
+          issueTitle: { text: "Second", truncated: false },
+          state: "Started",
+          claimId: "claim-2",
+          category: "running" as const,
+          nextAction: { text: "Continue", truncated: false },
+        },
+      ],
+      nextOffset: 3,
+    };
+
+    expect(mergeAutomationQueuePage(first, second)).toEqual({
+      ...second,
+      items: [second.items[0], second.items[1]],
     });
   });
 });
