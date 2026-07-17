@@ -17,6 +17,8 @@ import {
   AutomationQueueReadInput,
   AutomationReconcileInput,
   AutomationRunInput,
+  AutomationStartInput,
+  AutomationSteerIssueInput,
   AutomationValidateInput,
   OrchestraQueryInput,
   NativeSubagentReadInput,
@@ -1086,6 +1088,27 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     return yield* routed.adapter.runAutomationFixture(routed.threadId, request);
   });
 
+  const startAutomation = Effect.fn("startAutomation")(function* (rawInput: AutomationStartInput) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.startAutomation",
+      schema: AutomationStartInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.startAutomation",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.startAutomation) {
+      return yield* toValidationError(
+        "ProviderService.startAutomation",
+        "Production Automation start requires an active compatible Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.startAutomation(routed.threadId, request);
+  });
+
   const readLinearAutomation = Effect.fn("readLinearAutomation")(function* (
     rawInput: AutomationLinearReadInput,
   ) {
@@ -1176,6 +1199,29 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     }
     const { threadId: _threadId, ...request } = input;
     return yield* routed.adapter.cancelAutomationIssue(routed.threadId, request);
+  });
+
+  const steerAutomationIssue = Effect.fn("steerAutomationIssue")(function* (
+    rawInput: AutomationSteerIssueInput,
+  ) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.steerAutomationIssue",
+      schema: AutomationSteerIssueInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.steerAutomationIssue",
+      allowRecovery: true,
+    });
+    if (routed.adapter.provider !== "codex" || !routed.adapter.steerAutomationIssue) {
+      return yield* toValidationError(
+        "ProviderService.steerAutomationIssue",
+        "Durable issue steering requires an active compatible Codex task.",
+      );
+    }
+    const { threadId: _threadId, ...request } = input;
+    return yield* routed.adapter.steerAutomationIssue(routed.threadId, request);
   });
 
   const automationStatus = Effect.fn("automationStatus")(function* (
@@ -1365,6 +1411,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     readNativeSubagent,
     queryOrchestra,
     validateAutomationProfile,
+    startAutomation,
     runAutomationFixture,
     readLinearAutomation,
     readAutomationQueue,
@@ -1373,6 +1420,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     refreshAutomation,
     resumeAutomation,
     cancelAutomationIssue,
+    steerAutomationIssue,
     cancelAutomation,
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each

@@ -32,6 +32,12 @@ export const AutomationValidateInput = Schema.Struct({
 });
 export type AutomationValidateInput = typeof AutomationValidateInput.Type;
 
+export const AutomationStartInput = Schema.Struct({
+  threadId: ThreadId,
+  profilePath: TrimmedNonEmptyString,
+});
+export type AutomationStartInput = typeof AutomationStartInput.Type;
+
 export const AutomationValidationSeverity = Schema.Literals(["error", "warning"]);
 export const AutomationDiagnosticCode = Schema.Literals([
   "missing_workflow_file",
@@ -182,6 +188,21 @@ export const AutomationEffectReceipt = Schema.Struct({
   failure: Schema.optional(AutomationBoundedText),
 });
 export type AutomationEffectReceipt = typeof AutomationEffectReceipt.Type;
+export const AutomationSteeringStatus = Schema.Literals(["submitted", "delivered", "failed"]);
+export type AutomationSteeringStatus = typeof AutomationSteeringStatus.Type;
+export const AutomationSteeringReceipt = Schema.Struct({
+  sequence: NonNegativeInt,
+  submittedAtMs: NonNegativeInt,
+  initiatorThreadId: TrimmedNonEmptyString,
+  targetThreadId: TrimmedNonEmptyString,
+  authority: TrimmedNonEmptyString,
+  inputSha256: TrimmedNonEmptyString,
+  inputPreview: Schema.String,
+  status: AutomationSteeringStatus,
+  providerReceipt: Schema.optional(Schema.String),
+  failure: Schema.optional(Schema.String),
+});
+export type AutomationSteeringReceipt = typeof AutomationSteeringReceipt.Type;
 export const AutomationHookReceipt = Schema.Struct({
   kind: Schema.Literals(["after_create", "before_run", "after_run", "before_remove"]),
   invocation: NonNegativeInt,
@@ -221,6 +242,7 @@ export const AutomationIssueClaim = Schema.Struct({
     Schema.Literals(["pending", "running", "waitingApproval", "completed", "failed", "cancelled"]),
   ),
   effects: Schema.Array(AutomationEffectReceipt),
+  latestSteeringReceipt: Schema.optional(AutomationSteeringReceipt),
   hookReceipts: Schema.Array(AutomationHookReceipt),
   cleanup: AutomationCleanup,
   nextAction: AutomationBoundedText,
@@ -285,6 +307,20 @@ export type AutomationRunInput = typeof AutomationRunInput.Type;
 
 export const AutomationRunResult = Schema.Struct({ run: AutomationRun });
 export type AutomationRunResult = typeof AutomationRunResult.Type;
+
+export const AutomationSteerIssueInput = Schema.Struct({
+  threadId: ThreadId,
+  runId: TrimmedNonEmptyString,
+  claimId: TrimmedNonEmptyString,
+  input: TrimmedNonEmptyString,
+});
+export type AutomationSteerIssueInput = typeof AutomationSteerIssueInput.Type;
+
+export const AutomationSteerIssueResult = Schema.Struct({
+  run: AutomationRun,
+  receipt: AutomationSteeringReceipt,
+});
+export type AutomationSteerIssueResult = typeof AutomationSteerIssueResult.Type;
 
 export const AutomationLinearReadKind = Schema.Literals(["candidates", "terminal", "refresh"]);
 export const AutomationLinearReadInput = Schema.Struct({

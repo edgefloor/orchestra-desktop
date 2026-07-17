@@ -327,7 +327,7 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.vcsInit, AuthOrchestrationOperateScope],
   [WS_METHODS.reviewGetDiffPreview, AuthReviewWriteScope],
   [WS_METHODS.automationValidate, AuthOrchestrationReadScope],
-  [WS_METHODS.automationRunFixture, AuthOrchestrationOperateScope],
+  [WS_METHODS.automationStart, AuthOrchestrationOperateScope],
   [WS_METHODS.automationLinearRead, AuthOrchestrationReadScope],
   [WS_METHODS.automationQueueRead, AuthOrchestrationReadScope],
   [WS_METHODS.automationStatus, AuthOrchestrationReadScope],
@@ -335,6 +335,7 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.automationRefresh, AuthOrchestrationOperateScope],
   [WS_METHODS.automationResume, AuthOrchestrationOperateScope],
   [WS_METHODS.automationCancelIssue, AuthOrchestrationOperateScope],
+  [WS_METHODS.automationSteerIssue, AuthOrchestrationOperateScope],
   [WS_METHODS.automationCancel, AuthOrchestrationOperateScope],
   [WS_METHODS.orchestraQuery, AuthOrchestrationReadScope],
   [WS_METHODS.nativeSubagentRead, AuthOrchestrationReadScope],
@@ -363,6 +364,14 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.subscribeServerLifecycle, AuthOrchestrationReadScope],
   [WS_METHODS.subscribeAuthAccess, AuthAccessReadScope],
 ]);
+
+export function rpcRequiredScope(method: string): AuthEnvironmentScope {
+  const requiredScope = RPC_REQUIRED_SCOPE.get(method);
+  if (requiredScope === undefined) {
+    throw new Error(`RPC method ${method} has no declared authorization scope.`);
+  }
+  return requiredScope;
+}
 
 function toAuthAccessStreamEvent(
   change: PairingGrantStore.BootstrapCredentialChange | SessionStore.SessionCredentialChange,
@@ -472,13 +481,6 @@ const makeWsRpcLayer = (
         currentSession.scopes.includes(requiredScope)
           ? stream
           : Stream.fail(authorizationError(requiredScope));
-      const requiredScopeForMethod = (method: string): AuthEnvironmentScope => {
-        const requiredScope = RPC_REQUIRED_SCOPE.get(method);
-        if (requiredScope === undefined) {
-          throw new Error(`RPC method ${method} has no declared authorization scope.`);
-        }
-        return requiredScope;
-      };
       const observeRpcEffect = <A, E, R>(
         method: string,
         effect: Effect.Effect<A, E, R>,
@@ -486,7 +488,7 @@ const makeWsRpcLayer = (
       ) =>
         instrumentRpcEffect(
           method,
-          authorizeEffect(requiredScopeForMethod(method), effect),
+          authorizeEffect(rpcRequiredScope(method), effect),
           traceAttributes,
         );
       const observeRpcStream = <A, E, R>(
@@ -496,7 +498,7 @@ const makeWsRpcLayer = (
       ) =>
         instrumentRpcStream(
           method,
-          authorizeStream(requiredScopeForMethod(method), stream),
+          authorizeStream(rpcRequiredScope(method), stream),
           traceAttributes,
         );
       const observeRpcStreamEffect = <A, StreamError, StreamContext, EffectError, EffectContext>(
@@ -510,7 +512,7 @@ const makeWsRpcLayer = (
       ) =>
         instrumentRpcStreamEffect(
           method,
-          authorizeEffect(requiredScopeForMethod(method), effect),
+          authorizeEffect(rpcRequiredScope(method), effect),
           traceAttributes,
         );
       const toDispatchCommandError = (cause: unknown, fallbackMessage: string) =>
@@ -1285,20 +1287,20 @@ const makeWsRpcLayer = (
             }),
             { "rpc.aggregate": "automation", "thread.id": input.threadId },
           ),
-        [WS_METHODS.automationRunFixture]: (input) =>
+        [WS_METHODS.automationStart]: (input) =>
           observeRpcEffect(
-            WS_METHODS.automationRunFixture,
+            WS_METHODS.automationStart,
             Effect.gen(function* () {
               const providerService = Option.getOrUndefined(
                 yield* Effect.serviceOption(ProviderService.ProviderService),
               );
-              if (!providerService?.runAutomationFixture) {
+              if (!providerService?.startAutomation) {
                 return yield* new AutomationRunError({
                   threadId: input.threadId,
-                  message: "Task-owned Automation execution is unavailable.",
+                  message: "Production Automation start is unavailable.",
                 });
               }
-              return yield* providerService.runAutomationFixture(input).pipe(
+              return yield* providerService.startAutomation(input).pipe(
                 Effect.mapError(
                   (cause) =>
                     new AutomationRunError({
@@ -1403,6 +1405,32 @@ const makeWsRpcLayer = (
                 });
               }
               return yield* providerService.cancelAutomationIssue(input).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AutomationRunError({
+                      threadId: input.threadId,
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              );
+            }),
+            { "rpc.aggregate": "automation", "thread.id": input.threadId },
+          ),
+        [WS_METHODS.automationSteerIssue]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.automationSteerIssue,
+            Effect.gen(function* () {
+              const providerService = Option.getOrUndefined(
+                yield* Effect.serviceOption(ProviderService.ProviderService),
+              );
+              if (!providerService?.steerAutomationIssue) {
+                return yield* new AutomationRunError({
+                  threadId: input.threadId,
+                  message: "Durable Automation issue steering is unavailable.",
+                });
+              }
+              return yield* providerService.steerAutomationIssue(input).pipe(
                 Effect.mapError(
                   (cause) =>
                     new AutomationRunError({

@@ -15,6 +15,10 @@ import {
 } from "../CodexDeveloperInstructions.ts";
 import {
   buildTurnStartParams,
+  CODEX_AUTOMATION_START_METHOD,
+  CODEX_AUTOMATION_STEER_ISSUE_METHOD,
+  codexAutomationStartParams,
+  codexAutomationSteerIssueParams,
   decodeOrchestraThreadReadEnvelope,
   hasConfiguredMcpServer,
   isDirectNativeSubagent,
@@ -24,6 +28,34 @@ import {
   redactCodexDiagnostic,
   validateOrchestraProductCompatibility,
 } from "./CodexSessionRuntime.ts";
+
+describe("Automation native requests", () => {
+  it("uses production App Server methods and provider-native task identity", () => {
+    NodeAssert.equal(CODEX_AUTOMATION_START_METHOD, "automation/start");
+    NodeAssert.deepEqual(
+      codexAutomationStartParams("provider-task-60", { profilePath: "WORKFLOW.md" }),
+      {
+        threadId: "provider-task-60",
+        profilePath: "WORKFLOW.md",
+      },
+    );
+
+    NodeAssert.equal(CODEX_AUTOMATION_STEER_ISSUE_METHOD, "automation/steerIssue");
+    NodeAssert.deepEqual(
+      codexAutomationSteerIssueParams("provider-task-60", {
+        runId: "automation-root-60",
+        claimId: "claim-60",
+        input: "Re-run focused tests.",
+      }),
+      {
+        threadId: "provider-task-60",
+        runId: "automation-root-60",
+        claimId: "claim-60",
+        input: "Re-run focused tests.",
+      },
+    );
+  });
+});
 const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequestError);
 
 describe("CodexSessionRuntimeIdentifierGenerationError", () => {

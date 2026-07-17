@@ -153,8 +153,10 @@ import {
   AutomationQueueReadResult,
   AutomationReconcileInput,
   AutomationRunError,
-  AutomationRunInput,
   AutomationRunResult,
+  AutomationStartInput,
+  AutomationSteerIssueInput,
+  AutomationSteerIssueResult,
   AutomationValidateError,
   AutomationValidateInput,
   AutomationValidateResult,
@@ -203,7 +205,7 @@ export const WS_METHODS = {
 
   // Codex-native Automation methods
   automationValidate: "automation.validate",
-  automationRunFixture: "automation.runFixture",
+  automationStart: "automation.start",
   automationLinearRead: "automation.linearRead",
   automationQueueRead: "automation.queueRead",
   automationStatus: "automation.status",
@@ -211,6 +213,7 @@ export const WS_METHODS = {
   automationRefresh: "automation.refresh",
   automationResume: "automation.resume",
   automationCancelIssue: "automation.cancelIssue",
+  automationSteerIssue: "automation.steerIssue",
   automationCancel: "automation.cancel",
   orchestraQuery: "orchestra.query",
   nativeSubagentRead: "nativeSubagent.read",
@@ -326,8 +329,8 @@ export const WsAutomationValidateRpc = Rpc.make(WS_METHODS.automationValidate, {
   error: Schema.Union([AutomationValidateError, EnvironmentAuthorizationError]),
 });
 
-export const WsAutomationRunFixtureRpc = Rpc.make(WS_METHODS.automationRunFixture, {
-  payload: AutomationRunInput,
+export const WsAutomationStartRpc = Rpc.make(WS_METHODS.automationStart, {
+  payload: AutomationStartInput,
   success: AutomationRunResult,
   error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
 });
@@ -377,6 +380,12 @@ export const WsAutomationCancelRpc = Rpc.make(WS_METHODS.automationCancel, {
 export const WsAutomationCancelIssueRpc = Rpc.make(WS_METHODS.automationCancelIssue, {
   payload: AutomationCancelIssueInput,
   success: AutomationRunResult,
+  error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
+});
+
+export const WsAutomationSteerIssueRpc = Rpc.make(WS_METHODS.automationSteerIssue, {
+  payload: AutomationSteerIssueInput,
+  success: AutomationSteerIssueResult,
   error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
 });
 
@@ -828,7 +837,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsVcsInitRpc,
   WsReviewGetDiffPreviewRpc,
   WsAutomationValidateRpc,
-  WsAutomationRunFixtureRpc,
+  WsAutomationStartRpc,
   WsAutomationLinearReadRpc,
   WsAutomationQueueReadRpc,
   WsAutomationStatusRpc,
@@ -836,6 +845,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsAutomationRefreshRpc,
   WsAutomationResumeRpc,
   WsAutomationCancelIssueRpc,
+  WsAutomationSteerIssueRpc,
   WsAutomationCancelRpc,
   WsOrchestraQueryRpc,
   WsNativeSubagentReadRpc,

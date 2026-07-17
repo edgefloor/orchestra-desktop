@@ -2,6 +2,7 @@ import type {
   AutomationLinearReadResult,
   AutomationRun,
   AutomationRunResult,
+  AutomationStartInput,
   AutomationValidateResult,
   AutomationValidateInput,
   ThreadId,
@@ -13,7 +14,8 @@ export type AutomationWorkspacePendingAction =
   | "inspecting"
   | "pausing"
   | "reconciling"
-  | "cancelling";
+  | "cancelling"
+  | "steering";
 
 export type AutomationWorkspaceState =
   | "idle"
@@ -104,6 +106,16 @@ export function buildAutomationValidateInput(input: {
   };
 }
 
+export function buildAutomationStartInput(input: {
+  readonly threadId: ThreadId;
+  readonly profilePath: string;
+}): AutomationStartInput {
+  return {
+    threadId: input.threadId,
+    profilePath: input.profilePath.trim(),
+  };
+}
+
 export function automationRunRows(result: AutomationRunResult) {
   return result.run.claims.slice(0, 8).map((claim) => ({
     claimId: claim.claimId,
@@ -115,6 +127,7 @@ export function automationRunRows(result: AutomationRunResult) {
     profileDigest: claim.profileDigest,
     profileRevision: claim.profileRevision,
     issueTaskThreadId: claim.issueTask?.threadId,
+    latestSteeringReceipt: claim.latestSteeringReceipt,
     workflowRunId: claim.workflowRunId,
     cleanup: claim.cleanup,
     hookReceipts: claim.hookReceipts.slice(-8),

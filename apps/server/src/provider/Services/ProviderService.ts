@@ -20,6 +20,9 @@ import type {
   AutomationReconcileInput,
   AutomationRunInput,
   AutomationRunResult,
+  AutomationStartInput,
+  AutomationSteerIssueInput,
+  AutomationSteerIssueResult,
   AutomationCancelInput,
   AutomationCancelIssueInput,
   AutomationValidateInput,
@@ -131,6 +134,9 @@ export interface ProviderServiceShape {
   readonly runAutomationFixture?: (
     input: AutomationRunInput,
   ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
+  readonly startAutomation?: (
+    input: AutomationStartInput,
+  ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
   readonly readLinearAutomation?: (
     input: AutomationLinearReadInput,
   ) => Effect.Effect<AutomationLinearReadResult, ProviderServiceError>;
@@ -155,6 +161,9 @@ export interface ProviderServiceShape {
   readonly cancelAutomationIssue?: (
     input: AutomationCancelIssueInput,
   ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
+  readonly steerAutomationIssue?: (
+    input: AutomationSteerIssueInput,
+  ) => Effect.Effect<AutomationSteerIssueResult, ProviderServiceError>;
   readonly queryOrchestra?: (
     input: OrchestraQueryInput,
   ) => Effect.Effect<OrchestraQueryResult, ProviderServiceError>;

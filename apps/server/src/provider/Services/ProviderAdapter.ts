@@ -16,6 +16,9 @@ import type {
   AutomationReconcileInput,
   AutomationRunInput,
   AutomationRunResult,
+  AutomationStartInput,
+  AutomationSteerIssueInput,
+  AutomationSteerIssueResult,
   AutomationCancelInput,
   AutomationCancelIssueInput,
   AutomationValidateInput,
@@ -144,6 +147,10 @@ export interface ProviderAdapterShape<TError> {
     threadId: ThreadId,
     input: Omit<AutomationRunInput, "threadId">,
   ) => Effect.Effect<AutomationRunResult, TError>;
+  readonly startAutomation?: (
+    threadId: ThreadId,
+    input: Omit<AutomationStartInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, TError>;
   readonly readLinearAutomation?: (
     threadId: ThreadId,
     input: Omit<AutomationLinearReadInput, "threadId">,
@@ -176,6 +183,10 @@ export interface ProviderAdapterShape<TError> {
     threadId: ThreadId,
     input: Omit<AutomationCancelIssueInput, "threadId">,
   ) => Effect.Effect<AutomationRunResult, TError>;
+  readonly steerAutomationIssue?: (
+    threadId: ThreadId,
+    input: Omit<AutomationSteerIssueInput, "threadId">,
+  ) => Effect.Effect<AutomationSteerIssueResult, TError>;
   readonly queryOrchestra?: (
     threadId: ThreadId,
     input: Omit<OrchestraQueryInput, "threadId">,

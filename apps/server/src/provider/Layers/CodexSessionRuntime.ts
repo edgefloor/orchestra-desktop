@@ -7,6 +7,9 @@ import {
   type AutomationQueueReadInput,
   AutomationRunResult,
   type AutomationRunInput,
+  type AutomationStartInput,
+  AutomationSteerIssueResult,
+  type AutomationSteerIssueInput,
   type AutomationCancelInput,
   type AutomationCancelIssueInput,
   AutomationValidateResult,
@@ -65,6 +68,7 @@ import {
 const decodeV2TurnStartResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse);
 const decodeAutomationValidateResponse = Schema.decodeUnknownEffect(AutomationValidateResult);
 const decodeAutomationRunResponse = Schema.decodeUnknownEffect(AutomationRunResult);
+const decodeAutomationSteerIssueResponse = Schema.decodeUnknownEffect(AutomationSteerIssueResult);
 const decodeAutomationLinearReadResponse = Schema.decodeUnknownEffect(AutomationLinearReadResult);
 const decodeAutomationQueueReadResponse = Schema.decodeUnknownEffect(AutomationQueueReadResult);
 const decodeOrchestraQueryResponse = Schema.decodeUnknownEffect(OrchestraQueryResponse);
@@ -85,6 +89,22 @@ const OrchestraProductHandshake = Schema.Struct({
 const decodeOrchestraProductHandshake = Schema.decodeUnknownEffect(OrchestraProductHandshake);
 
 const PROVIDER = ProviderDriverKind.make("codex");
+export const CODEX_AUTOMATION_START_METHOD = "automation/start" as const;
+export const CODEX_AUTOMATION_STEER_ISSUE_METHOD = "automation/steerIssue" as const;
+
+export function codexAutomationStartParams(
+  providerThreadId: string,
+  input: Omit<AutomationStartInput, "threadId">,
+) {
+  return { ...input, threadId: providerThreadId };
+}
+
+export function codexAutomationSteerIssueParams(
+  providerThreadId: string,
+  input: Omit<AutomationSteerIssueInput, "threadId">,
+) {
+  return { ...input, threadId: providerThreadId };
+}
 
 const ANSI_ESCAPE_CHAR = String.fromCharCode(27);
 const ANSI_ESCAPE_REGEX = new RegExp(`${ANSI_ESCAPE_CHAR}\\[[0-9;]*m`, "g");
@@ -195,6 +215,9 @@ export interface CodexSessionRuntimeShape {
   readonly runAutomationFixture?: (
     input: Omit<AutomationRunInput, "threadId">,
   ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
+  readonly startAutomation?: (
+    input: Omit<AutomationStartInput, "threadId">,
+  ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
   readonly readLinearAutomation?: (
     input: Omit<AutomationLinearReadInput, "threadId">,
   ) => Effect.Effect<AutomationLinearReadResult, CodexSessionRuntimeError>;
@@ -219,6 +242,9 @@ export interface CodexSessionRuntimeShape {
   readonly cancelAutomationIssue?: (
     input: Omit<AutomationCancelIssueInput, "threadId">,
   ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
+  readonly steerAutomationIssue?: (
+    input: Omit<AutomationSteerIssueInput, "threadId">,
+  ) => Effect.Effect<AutomationSteerIssueResult, CodexSessionRuntimeError>;
   readonly queryOrchestra?: (
     input: Omit<OrchestraQueryInput, "threadId">,
   ) => Effect.Effect<OrchestraQueryResult, CodexSessionRuntimeError>;
@@ -1810,6 +1836,23 @@ export const makeCodexSessionRuntime = (
             ),
           );
         }),
+      startAutomation: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request(
+            CODEX_AUTOMATION_START_METHOD,
+            codexAutomationStartParams(providerThreadId, input),
+          );
+          return yield* decodeAutomationRunResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: CODEX_AUTOMATION_START_METHOD },
+              ),
+            ),
+          );
+        }),
       readLinearAutomation: (input) =>
         Effect.gen(function* () {
           const providerThreadId = yield* readProviderThreadId;
@@ -1925,6 +1968,23 @@ export const makeCodexSessionRuntime = (
                 "decode-response-payload",
                 error,
                 { method: "automation/cancelIssue" },
+              ),
+            ),
+          );
+        }),
+      steerAutomationIssue: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.raw.request(
+            CODEX_AUTOMATION_STEER_ISSUE_METHOD,
+            codexAutomationSteerIssueParams(providerThreadId, input),
+          );
+          return yield* decodeAutomationSteerIssueResponse(response).pipe(
+            Effect.mapError((error) =>
+              CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+                "decode-response-payload",
+                error,
+                { method: CODEX_AUTOMATION_STEER_ISSUE_METHOD },
               ),
             ),
           );

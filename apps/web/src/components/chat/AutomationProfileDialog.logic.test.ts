@@ -5,9 +5,21 @@ import {
   automationLinearRows,
   automationRunRows,
   automationWorkspaceCapabilities,
+  buildAutomationStartInput,
   buildAutomationValidateInput,
   deriveAutomationWorkspaceState,
 } from "./AutomationProfileDialog.logic";
+
+describe("buildAutomationStartInput", () => {
+  it("starts production Automation with only the task and profile path", () => {
+    expect(
+      buildAutomationStartInput({
+        threadId: ThreadId.make("task-60"),
+        profilePath: " WORKFLOW.md ",
+      }),
+    ).toEqual({ threadId: "task-60", profilePath: "WORKFLOW.md" });
+  });
+});
 
 describe("buildAutomationValidateInput", () => {
   it("creates only a task-scoped native validation request", () => {
@@ -100,6 +112,17 @@ describe("automationRunRows", () => {
             issueTask: { threadId: "issue-task-33", taskPath: "/root/automation_orc_33" },
             workflowRunId: "workflow-run-33",
             workflowStatus: "completed",
+            latestSteeringReceipt: {
+              sequence: 2,
+              submittedAtMs: 42,
+              initiatorThreadId: "task-33",
+              targetThreadId: "issue-task-33",
+              authority: "automation-claim-native-send-input-v1",
+              inputSha256: "input-sha",
+              inputPreview: "Focus on recovery.",
+              status: "delivered",
+              providerReceipt: "submission-2",
+            },
             effects: [
               {
                 effectId: "effect-34",
@@ -164,6 +187,17 @@ describe("automationRunRows", () => {
         profileDigest: "claim-profile-digest",
         profileRevision: 1,
         issueTaskThreadId: "issue-task-33",
+        latestSteeringReceipt: {
+          sequence: 2,
+          submittedAtMs: 42,
+          initiatorThreadId: "task-33",
+          targetThreadId: "issue-task-33",
+          authority: "automation-claim-native-send-input-v1",
+          inputSha256: "input-sha",
+          inputPreview: "Focus on recovery.",
+          status: "delivered",
+          providerReceipt: "submission-2",
+        },
         workflowRunId: "workflow-run-33",
         cleanup: { status: "retained", attempts: 0 },
         hookReceipts: [

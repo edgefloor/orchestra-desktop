@@ -4,6 +4,10 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import type {
+  AutomationRunResult,
+  AutomationStartInput,
+  AutomationSteerIssueInput,
+  AutomationSteerIssueResult,
   ProviderApprovalDecision,
   ProviderRuntimeEvent,
   ProviderSendTurnInput,
@@ -192,6 +196,22 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
       Effect.succeed({ threadId, turns: [] }),
   );
 
+  const startAutomation = vi.fn(
+    (
+      _threadId: ThreadId,
+      _input: Omit<AutomationStartInput, "threadId">,
+    ): Effect.Effect<AutomationRunResult, ProviderAdapterError> =>
+      Effect.succeed({} as AutomationRunResult),
+  );
+
+  const steerAutomationIssue = vi.fn(
+    (
+      _threadId: ThreadId,
+      _input: Omit<AutomationSteerIssueInput, "threadId">,
+    ): Effect.Effect<AutomationSteerIssueResult, ProviderAdapterError> =>
+      Effect.succeed({} as AutomationSteerIssueResult),
+  );
+
   const stopAll = vi.fn(
     (): Effect.Effect<void, ProviderAdapterError> =>
       Effect.sync(() => {
@@ -214,6 +234,8 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
     hasSession,
     readThread,
     rollbackThread,
+    startAutomation,
+    steerAutomationIssue,
     stopAll,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
@@ -249,6 +271,8 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
     hasSession,
     readThread,
     rollbackThread,
+    startAutomation,
+    steerAutomationIssue,
     stopAll,
   };
 }
@@ -841,6 +865,82 @@ it.effect(
 );
 
 routing.layer("ProviderServiceLive routing", (it) => {
+  it.effect("routes production start and issue steering through the task's Codex binding", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-automation-60");
+      yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        threadId,
+        cwd: "/tmp/project-automation-60",
+        runtimeMode: "full-access",
+      });
+
+      assert.isDefined(provider.startAutomation);
+      yield* provider.startAutomation({ threadId, profilePath: "WORKFLOW.md" });
+      assert.deepEqual(routing.codex.startAutomation.mock.calls.at(-1), [
+        threadId,
+        { profilePath: "WORKFLOW.md" },
+      ]);
+      yield* provider.stopSession({ threadId });
+      routing.codex.startSession.mockClear();
+      routing.codex.startAutomation.mockClear();
+      routing.codex.steerAutomationIssue.mockClear();
+
+      assert.isDefined(provider.steerAutomationIssue);
+      yield* provider.steerAutomationIssue({
+        threadId,
+        runId: "automation-root-60",
+        claimId: "claim-60",
+        input: "Re-run focused tests.",
+      });
+      assert.deepEqual(routing.codex.steerAutomationIssue.mock.calls.at(-1), [
+        threadId,
+        {
+          runId: "automation-root-60",
+          claimId: "claim-60",
+          input: "Re-run focused tests.",
+        },
+      ]);
+
+      yield* provider.stopSession({ threadId });
+      routing.codex.startSession.mockClear();
+      yield* provider.startAutomation({ threadId, profilePath: "WORKFLOW.md" });
+      assert.equal(routing.codex.startSession.mock.calls.length, 1);
+      assert.deepEqual(routing.codex.startAutomation.mock.calls.at(-1), [
+        threadId,
+        { profilePath: "WORKFLOW.md" },
+      ]);
+      yield* provider.stopSession({ threadId });
+      routing.codex.startSession.mockClear();
+      routing.codex.startAutomation.mockClear();
+      routing.codex.steerAutomationIssue.mockClear();
+    }),
+  );
+
+  it.effect("rejects Automation operations for a non-Codex task binding", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-automation-unsupported");
+      yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("claudeAgent"),
+        providerInstanceId: claudeAgentInstanceId,
+        threadId,
+        cwd: "/tmp/project-automation-unsupported",
+        runtimeMode: "full-access",
+      });
+
+      const failure = yield* Effect.flip(
+        provider.startAutomation!({ threadId, profilePath: "WORKFLOW.md" }),
+      );
+      assert.instanceOf(failure, ProviderValidationError);
+      assert.include(failure.issue, "compatible Codex task");
+      yield* provider.stopSession({ threadId });
+      routing.claude.startSession.mockClear();
+    }),
+  );
+
   it.effect("routes provider operations and rollback conversation", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;

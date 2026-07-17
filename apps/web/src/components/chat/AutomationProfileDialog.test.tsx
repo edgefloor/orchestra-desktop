@@ -19,6 +19,7 @@ describe("AutomationWorkspace", () => {
     expect(markup).toContain("Task-scoped native automation");
     expect(markup).toContain("idle");
     expect(markup).toContain('aria-label="Close Symphony workspace"');
+    expect(markup).not.toContain("Start fixture");
     expect(markup).not.toContain('role="dialog"');
   });
 });

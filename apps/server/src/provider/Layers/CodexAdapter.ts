@@ -1706,6 +1706,22 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       );
   });
 
+  const startAutomation: NonNullable<CodexAdapterShape["startAutomation"]> = Effect.fn(
+    "startAutomation",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.startAutomation) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/start",
+        detail: "This Codex runtime does not expose production Automation start.",
+      });
+    }
+    return yield* session.runtime
+      .startAutomation(input)
+      .pipe(Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/start", cause)));
+  });
+
   const readLinearAutomation: NonNullable<CodexAdapterShape["readLinearAutomation"]> = Effect.fn(
     "readLinearAutomation",
   )(function* (threadId, input) {
@@ -1773,6 +1789,24 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       .cancelAutomationIssue(input)
       .pipe(
         Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/cancelIssue", cause)),
+      );
+  });
+
+  const steerAutomationIssue: NonNullable<CodexAdapterShape["steerAutomationIssue"]> = Effect.fn(
+    "steerAutomationIssue",
+  )(function* (threadId, input) {
+    const session = yield* requireSession(threadId);
+    if (!session.runtime.steerAutomationIssue) {
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "automation/steerIssue",
+        detail: "This Codex runtime does not expose durable Automation issue steering.",
+      });
+    }
+    return yield* session.runtime
+      .steerAutomationIssue(input)
+      .pipe(
+        Effect.mapError((cause) => mapCodexRuntimeError(threadId, "automation/steerIssue", cause)),
       );
   });
 
@@ -1932,6 +1966,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     rollbackThread,
     queryOrchestra,
     validateAutomationProfile,
+    startAutomation,
     runAutomationFixture,
     readLinearAutomation,
     readAutomationQueue,
@@ -1940,6 +1975,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     refreshAutomation,
     resumeAutomation,
     cancelAutomationIssue,
+    steerAutomationIssue,
     cancelAutomation,
     respondToRequest,
     respondToUserInput,

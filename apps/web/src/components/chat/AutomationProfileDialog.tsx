@@ -23,7 +23,8 @@ import {
   readAutomationStatus,
   refreshAutomation,
   resumeAutomation,
-  runAutomationFixture,
+  startAutomation,
+  steerAutomationIssue,
   validateAutomationProfile,
 } from "~/state/automation";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -32,6 +33,7 @@ import {
   automationRunStorageKey,
   automationRunRows,
   automationWorkspaceCapabilities,
+  buildAutomationStartInput,
   buildAutomationValidateInput,
   deriveAutomationWorkspaceState,
   type AutomationWorkspacePendingAction,
@@ -50,7 +52,7 @@ interface AutomationWorkspaceProps {
 }
 
 function readableError(cause: unknown): string {
-  return cause instanceof Error ? cause.message : "Could not validate the Automation profile.";
+  return cause instanceof Error ? cause.message : "The Automation request failed.";
 }
 
 export const AutomationWorkspace = memo(function AutomationWorkspace({
@@ -60,7 +62,8 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   onClose,
 }: AutomationWorkspaceProps) {
   const validate = useAtomCommand(validateAutomationProfile, { reportFailure: false });
-  const runFixture = useAtomCommand(runAutomationFixture, { reportFailure: false });
+  const start = useAtomCommand(startAutomation, { reportFailure: false });
+  const steerIssue = useAtomCommand(steerAutomationIssue, { reportFailure: false });
   const cancel = useAtomCommand(cancelAutomation, { reportFailure: false });
   const cancelIssue = useAtomCommand(cancelAutomationIssue, { reportFailure: false });
   const pause = useAtomCommand(pauseAutomation, { reportFailure: false });
@@ -81,6 +84,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   const [runResult, setRunResult] = useState<AutomationRunResult | null>(null);
   const [linearResult, setLinearResult] = useState<AutomationLinearReadResult | null>(null);
   const [queueResult, setQueueResult] = useState<AutomationQueueReadResult | null>(null);
+  const [steeringInputs, setSteeringInputs] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const restoredRunId = useRef<string | null>(null);
 
@@ -168,16 +172,11 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
     setPendingAction("starting");
     setError(null);
     setRunResult(null);
-    void runFixture({
+    void start({
       environmentId,
-      input: buildAutomationValidateInput({
+      input: buildAutomationStartInput({
         threadId,
         profilePath: profilePath.trim(),
-        issueIdentifier,
-        issueTitle: threadTitle,
-        issueState,
-        issueLabels,
-        attempt,
       }),
     }).then((commandResult) => {
       setPendingAction(null);
@@ -189,18 +188,32 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         setError(readableError(squashAtomCommandFailure(commandResult)));
       }
     });
-  }, [
-    attempt,
-    acceptRunResult,
-    environmentId,
-    issueIdentifier,
-    issueLabels,
-    issueState,
-    profilePath,
-    runFixture,
-    threadId,
-    threadTitle,
-  ]);
+  }, [acceptRunResult, environmentId, profilePath, start, threadId]);
+
+  const steerClaim = useCallback(
+    (claimId: string) => {
+      if (!runResult) return;
+      const input = steeringInputs[claimId]?.trim() ?? "";
+      if (!input) return;
+      setPendingAction("steering");
+      setError(null);
+      void steerIssue({
+        environmentId,
+        input: { threadId, runId: runResult.run.runId, claimId, input },
+      }).then((commandResult) => {
+        setPendingAction(null);
+        if (commandResult._tag === "Success") {
+          acceptRunResult({ run: commandResult.value.run });
+          setSteeringInputs((current) => ({ ...current, [claimId]: "" }));
+          return;
+        }
+        if (!isAtomCommandInterrupted(commandResult)) {
+          setError(readableError(squashAtomCommandFailure(commandResult)));
+        }
+      });
+    },
+    [acceptRunResult, environmentId, runResult, steerIssue, steeringInputs, threadId],
+  );
 
   const cancelRun = useCallback(() => {
     if (!runResult) return;
@@ -403,7 +416,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="automation-issue-identifier">Fixture issue</Label>
+            <Label htmlFor="automation-issue-identifier">Preview issue</Label>
             <Input
               id="automation-issue-identifier"
               value={issueIdentifier}
@@ -628,6 +641,55 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                     Issue task <code className="select-all">{claim.issueTaskThreadId}</code>
                   </div>
                 ) : null}
+                {claim.latestSteeringReceipt ? (
+                  <div className="space-y-1 rounded-md border bg-muted/25 p-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Latest guidance</span>
+                      <Badge
+                        variant={
+                          claim.latestSteeringReceipt.status === "failed"
+                            ? "destructive"
+                            : "outline"
+                        }
+                      >
+                        {claim.latestSteeringReceipt.status}
+                      </Badge>
+                    </div>
+                    <div className="text-muted-foreground">
+                      {claim.latestSteeringReceipt.inputPreview}
+                    </div>
+                    {claim.latestSteeringReceipt.failure ? (
+                      <div className="text-destructive">{claim.latestSteeringReceipt.failure}</div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {claim.status === "running" && claim.issueTaskThreadId ? (
+                  <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                    <Label htmlFor={`automation-steer-${claim.claimId}`}>Guide Issue task</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id={`automation-steer-${claim.claimId}`}
+                        maxLength={16_384}
+                        onChange={(event) =>
+                          setSteeringInputs((current) => ({
+                            ...current,
+                            [claim.claimId]: event.target.value,
+                          }))
+                        }
+                        placeholder="Send bounded guidance through native Codex authority"
+                        value={steeringInputs[claim.claimId] ?? ""}
+                      />
+                      <Button
+                        disabled={pending || !(steeringInputs[claim.claimId]?.trim() ?? "")}
+                        onClick={() => steerClaim(claim.claimId)}
+                        size="sm"
+                        variant="outline"
+                      >
+                        Send guidance
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
                 {claim.workflowRunId ? (
                   <div className="text-xs text-muted-foreground">
                     Workflow Run <code className="select-all">{claim.workflowRunId}</code>
@@ -844,7 +906,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         {capabilities.start ? (
           <Button onClick={run} variant="outline">
             {pending ? <Spinner /> : null}
-            Start fixture
+            Start automation
           </Button>
         ) : null}
         <Button

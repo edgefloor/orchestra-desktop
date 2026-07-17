@@ -5,6 +5,10 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import {
   ApprovalRequestId,
+  type AutomationRunResult,
+  type AutomationStartInput,
+  type AutomationSteerIssueInput,
+  type AutomationSteerIssueResult,
   CodexSettings,
   EventId,
   ProviderDriverKind,
@@ -110,6 +114,16 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
       Promise.resolve({ selector: "steps", result: { items: [] } }),
   );
 
+  public readonly startAutomationImpl = vi.fn(
+    (_input: Omit<AutomationStartInput, "threadId">): Promise<AutomationRunResult> =>
+      Promise.resolve({} as AutomationRunResult),
+  );
+
+  public readonly steerAutomationIssueImpl = vi.fn(
+    (_input: Omit<AutomationSteerIssueInput, "threadId">): Promise<AutomationSteerIssueResult> =>
+      Promise.resolve({} as AutomationSteerIssueResult),
+  );
+
   public readonly respondToRequestImpl = vi.fn(
     (_requestId: ApprovalRequestId, _decision: ProviderApprovalDecision): Promise<void> =>
       Promise.resolve(undefined),
@@ -154,6 +168,14 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
 
   queryOrchestra(input: Omit<OrchestraQueryInput, "threadId">) {
     return Effect.promise(() => this.queryOrchestraImpl(input));
+  }
+
+  startAutomation(input: Omit<AutomationStartInput, "threadId">) {
+    return Effect.promise(() => this.startAutomationImpl(input));
+  }
+
+  steerAutomationIssue(input: Omit<AutomationSteerIssueInput, "threadId">) {
+    return Effect.promise(() => this.steerAutomationIssueImpl(input));
   }
 
   respondToRequest(requestId: ApprovalRequestId, decision: ProviderApprovalDecision) {
@@ -463,6 +485,38 @@ function startLifecycleRuntime() {
 }
 
 lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
+  it.effect("routes production Automation start through the active Codex task", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      NodeAssert.ok(adapter.startAutomation);
+
+      yield* adapter.startAutomation(asThreadId("thread-1"), { profilePath: "WORKFLOW.md" });
+
+      NodeAssert.deepEqual(runtime.startAutomationImpl.mock.calls[0]?.[0], {
+        profilePath: "WORKFLOW.md",
+      });
+    }),
+  );
+
+  it.effect("routes durable issue steering through the owning Codex task", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      NodeAssert.ok(adapter.steerAutomationIssue);
+
+      yield* adapter.steerAutomationIssue(asThreadId("thread-1"), {
+        runId: "automation-root-60",
+        claimId: "claim-60",
+        input: "Re-run focused tests.",
+      });
+
+      NodeAssert.deepEqual(runtime.steerAutomationIssueImpl.mock.calls[0]?.[0], {
+        runId: "automation-root-60",
+        claimId: "claim-60",
+        input: "Re-run focused tests.",
+      });
+    }),
+  );
+
   it.effect("routes bounded Orchestra queries through the active Codex task", () =>
     Effect.gen(function* () {
       const { adapter, runtime } = yield* startLifecycleRuntime();

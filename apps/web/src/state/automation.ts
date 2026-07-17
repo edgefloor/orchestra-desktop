@@ -8,9 +8,9 @@ export const validateAutomationProfile = createEnvironmentRpcCommand(connectionA
   tag: WS_METHODS.automationValidate,
 });
 
-export const runAutomationFixture = createEnvironmentRpcCommand(connectionAtomRuntime, {
-  label: "Automation.runFixture",
-  tag: WS_METHODS.automationRunFixture,
+export const startAutomation = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "Automation.start",
+  tag: WS_METHODS.automationStart,
 });
 
 export const readLinearAutomation = createEnvironmentRpcCommand(connectionAtomRuntime, {
@@ -51,4 +51,9 @@ export const cancelAutomation = createEnvironmentRpcCommand(connectionAtomRuntim
 export const cancelAutomationIssue = createEnvironmentRpcCommand(connectionAtomRuntime, {
   label: "Automation.cancelIssue",
   tag: WS_METHODS.automationCancelIssue,
+});
+
+export const steerAutomationIssue = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "Automation.steerIssue",
+  tag: WS_METHODS.automationSteerIssue,
 });
