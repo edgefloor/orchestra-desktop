@@ -35,7 +35,7 @@ import {
   compactWorkflowStepSummary,
   evidenceErrorState,
   formatBoundedOutputValue,
-  sortWorkflowSteps,
+  preserveWorkflowStepOrder,
   workflowDetailDisplayState,
   workflowRunDisplayState,
   workflowStepKind,
@@ -159,7 +159,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
           setRun(response.result);
           break;
         case "steps":
-          setSteps(sortWorkflowSteps(response.result.items));
+          setSteps(preserveWorkflowStepOrder(response.result.items));
           if (response.result.next) setContinuations((current) => new Set(current).add(key));
           break;
         case "outputs":

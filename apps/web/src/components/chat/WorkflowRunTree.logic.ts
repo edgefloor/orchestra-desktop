@@ -56,10 +56,10 @@ export function workflowDetailDisplayState(
   return detailError ? "unavailable" : nativeState;
 }
 
-export function sortWorkflowSteps(
+export function preserveWorkflowStepOrder(
   steps: ReadonlyArray<OrchestraExecutionStepProjection>,
 ): OrchestraExecutionStepProjection[] {
-  return [...steps].sort((left, right) => left.id.localeCompare(right.id));
+  return [...steps];
 }
 
 export function compactWorkflowStepSummary(event: OrchestraReplayEvent): {

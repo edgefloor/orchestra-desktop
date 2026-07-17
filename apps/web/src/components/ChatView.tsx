@@ -212,6 +212,7 @@ import { ChatHeader } from "./chat/ChatHeader";
 import { NativeSubagentsPanel } from "./chat/NativeSubagentsPanel";
 import { AutomationWorkspace } from "./chat/AutomationProfileDialog";
 import { TaskAttentionView } from "./chat/TaskAttentionView";
+import { WorkflowRunsView } from "./chat/WorkflowRunsView";
 import { WorkspaceTaskTabs } from "./WorkspaceTaskTabs";
 import {
   buildWorkspaceTaskTabs,
@@ -5472,6 +5473,13 @@ function ChatViewContent(props: ChatViewProps) {
                   activities={activeThread.activities}
                 />
               }
+              workflow={
+                <WorkflowRunsView
+                  environmentId={activeThread.environmentId}
+                  threadId={activeThread.id}
+                  workLogEntries={workLogEntries}
+                />
+              }
               attention={
                 <TaskAttentionView
                   environmentId={activeThread.environmentId}
@@ -5588,6 +5596,13 @@ function ChatViewContent(props: ChatViewProps) {
                 environmentId={activeThread.environmentId}
                 parentThreadId={activeThread.id}
                 activities={activeThread.activities}
+              />
+            }
+            workflow={
+              <WorkflowRunsView
+                environmentId={activeThread.environmentId}
+                threadId={activeThread.id}
+                workLogEntries={workLogEntries}
               />
             }
             attention={

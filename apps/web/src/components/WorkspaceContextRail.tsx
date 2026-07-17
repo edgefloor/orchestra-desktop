@@ -1,9 +1,17 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { XIcon } from "lucide-react";
 
 import { cn } from "~/lib/utils";
+import { resolveWorkspaceTabNavigation } from "./workspaceTabNavigation";
 
-export type WorkspaceContextRailView = "attention" | "subagents";
+export type WorkspaceContextRailView = "attention" | "subagents" | "workflow";
+
+const VIEW_LABELS: Record<WorkspaceContextRailView, string> = {
+  attention: "Attention",
+  subagents: "Subagents",
+  workflow: "Workflow",
+};
+const CONTEXT_VIEWS = ["subagents", "workflow", "attention"] as const;
 
 interface WorkspaceTaskContextBarProps {
   readonly projectName: string | null;
@@ -18,35 +26,48 @@ export function WorkspaceTaskContextBar({
   activeView,
   onSelectView,
 }: WorkspaceTaskContextBarProps) {
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
+    const targetIndex = resolveWorkspaceTabNavigation({
+      currentIndex,
+      key: event.key,
+      tabCount: CONTEXT_VIEWS.length,
+    });
+    if (targetIndex === null) return;
+    event.preventDefault();
+    const targetView = CONTEXT_VIEWS[targetIndex];
+    if (!targetView) return;
+    onSelectView(targetView);
+    event.currentTarget.parentElement
+      ?.querySelector<HTMLButtonElement>(`#workspace-context-tab-${targetView}`)
+      ?.focus();
+  };
+
   return (
     <div className="flex h-8 min-w-0 shrink-0 items-center gap-2 border-b border-border bg-background px-3 text-[11px] text-muted-foreground">
       <span className="shrink-0 font-medium text-foreground/80">Worktree</span>
       <span className="min-w-0 flex-1 truncate font-mono text-[10px]">
         {workspaceRoot ?? projectName ?? "Current checkout"}
       </span>
-      <div className="flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          aria-pressed={activeView === "subagents"}
-          className={cn(
-            "rounded-md px-2 py-1 outline-hidden transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
-            activeView === "subagents" && "bg-primary/12 text-primary",
-          )}
-          onClick={() => onSelectView("subagents")}
-        >
-          Subagents
-        </button>
-        <button
-          type="button"
-          aria-pressed={activeView === "attention"}
-          className={cn(
-            "rounded-md px-2 py-1 outline-hidden transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
-            activeView === "attention" && "bg-primary/12 text-primary",
-          )}
-          onClick={() => onSelectView("attention")}
-        >
-          Attention
-        </button>
+      <div className="flex shrink-0 items-center gap-1" role="tablist" aria-label="Task context">
+        {CONTEXT_VIEWS.map((view, index) => (
+          <button
+            key={view}
+            type="button"
+            id={`workspace-context-tab-${view}`}
+            role="tab"
+            aria-controls={`workspace-context-panel-${view}`}
+            aria-selected={activeView === view}
+            tabIndex={activeView === view || (activeView === null && index === 0) ? 0 : -1}
+            className={cn(
+              "rounded-md px-2 py-1 outline-hidden transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
+              activeView === view && "bg-primary/12 text-primary",
+            )}
+            onClick={() => onSelectView(view)}
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
+          >
+            {VIEW_LABELS[view]}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -55,6 +76,7 @@ export function WorkspaceTaskContextBar({
 interface WorkspaceContextRailProps {
   readonly activeView: WorkspaceContextRailView;
   readonly subagents: ReactNode;
+  readonly workflow: ReactNode;
   readonly attention: ReactNode;
   readonly onClose: () => void;
   readonly variant?: "rail" | "sheet";
@@ -63,6 +85,7 @@ interface WorkspaceContextRailProps {
 export function WorkspaceContextRail({
   activeView,
   subagents,
+  workflow,
   attention,
   onClose,
   variant = "rail",
@@ -78,9 +101,7 @@ export function WorkspaceContextRail({
       data-workspace-context-variant={variant}
     >
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
-        <span className="text-xs font-semibold text-foreground">
-          {activeView === "subagents" ? "Subagents" : "Attention"}
-        </span>
+        <span className="text-xs font-semibold text-foreground">{VIEW_LABELS[activeView]}</span>
         <button
           type="button"
           aria-label="Close task context"
@@ -90,8 +111,13 @@ export function WorkspaceContextRail({
           <XIcon className="size-3.5" />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {activeView === "subagents" ? subagents : attention}
+      <div
+        id={`workspace-context-panel-${activeView}`}
+        role="tabpanel"
+        aria-labelledby={`workspace-context-tab-${activeView}`}
+        className="min-h-0 flex-1 overflow-y-auto p-2"
+      >
+        {activeView === "subagents" ? subagents : activeView === "workflow" ? workflow : attention}
       </div>
     </aside>
   );

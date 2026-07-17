@@ -13,7 +13,7 @@ import {
   compactWorkflowStepSummary,
   formatBoundedOutputValue,
   evidenceErrorState,
-  sortWorkflowSteps,
+  preserveWorkflowStepOrder,
   workflowDetailDisplayState,
   workflowRunDisplayState,
 } from "./WorkflowRunTree.logic";
@@ -58,7 +58,7 @@ describe("WorkflowRunTree logic", () => {
     expect(summary.omitted).toBe(3);
   });
 
-  it("orders lazily loaded steps deterministically", () => {
+  it("preserves native order for lazily loaded steps", () => {
     const steps = ["zeta", "alpha", "middle"].map(
       (id) =>
         ({
@@ -70,7 +70,11 @@ describe("WorkflowRunTree logic", () => {
         }) satisfies OrchestraExecutionStepProjection,
     );
 
-    expect(sortWorkflowSteps(steps).map((step) => step.id)).toEqual(["alpha", "middle", "zeta"]);
+    expect(preserveWorkflowStepOrder(steps).map((step) => step.id)).toEqual([
+      "zeta",
+      "alpha",
+      "middle",
+    ]);
   });
 
   it("maps only native lifecycle evidence to recovery state", () => {
