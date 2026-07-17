@@ -2,28 +2,24 @@ import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
-import {
-  scopedProjectKey,
-  scopedThreadKey,
-  scopeProjectRef,
-  scopeThreadRef,
-} from "@t3tools/client-runtime/environment";
 import { AlertCircleIcon, ListTodoIcon, PlusIcon, WorkflowIcon, ZapIcon } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
 import { cn } from "~/lib/utils";
-import { useWorkspaceTaskTabsStore } from "~/workspaceTaskTabsStore";
+import {
+  workspaceSurfaceKey,
+  WORKSPACE_SURFACE_SCHEMA_VERSION,
+  type WorkspaceSurface,
+} from "~/workspaceSurface";
+import { useWorkspaceSurfaceStore } from "~/workspaceSurfaceStore";
 
 import { Button } from "./ui/button";
 import { deriveProjectOverviewSummary } from "./ProjectOverview.logic";
 import { WorkspaceTaskTabs } from "./WorkspaceTaskTabs";
 import {
   resolveWorkspaceTaskTabStatus,
-  workspaceTaskTabKey,
   type WorkspaceTaskTabStatus,
 } from "./WorkspaceTaskTabs.logic";
-
-const EMPTY_CLOSED_TASK_KEYS: ReadonlyArray<string> = Object.freeze([]);
 
 interface ProjectOverviewProps {
   readonly project: EnvironmentProject;
@@ -60,48 +56,88 @@ function SummaryCard(props: {
 
 export function ProjectOverview({ project, tasks, onSelectTask, onNewTask }: ProjectOverviewProps) {
   const summary = deriveProjectOverviewSummary(tasks);
-  const projectKey = scopedProjectKey(scopeProjectRef(project.environmentId, project.id));
-  const closedTaskKeys = useWorkspaceTaskTabsStore(
-    (state) => state.closedTaskKeysByProject[projectKey] ?? EMPTY_CLOSED_TASK_KEYS,
+  const projectSurface = useMemo<WorkspaceSurface>(
+    () => ({
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+      kind: "project",
+      environmentId: project.environmentId,
+      projectId: project.id,
+    }),
+    [project.environmentId, project.id],
   );
-  const closedTaskKeySet = useMemo(() => new Set(closedTaskKeys), [closedTaskKeys]);
-  const visibleTabTasks = useMemo(
+  const workspaceEntries = useWorkspaceSurfaceStore((state) => state.entries);
+  const activeSurfaceKey = useWorkspaceSurfaceStore((state) => state.activeSurfaceKey);
+  const projectEntries = useMemo(
     () =>
-      tasks.filter(
-        (task) =>
-          !closedTaskKeySet.has(scopedThreadKey(scopeThreadRef(task.environmentId, task.id))),
+      workspaceEntries.filter(
+        (entry) =>
+          entry.surface.environmentId === project.environmentId &&
+          entry.surface.projectId === project.id &&
+          (entry.surface.kind === "project" || entry.surface.kind === "task"),
       ),
-    [closedTaskKeySet, tasks],
+    [project.environmentId, project.id, workspaceEntries],
   );
 
   useEffect(() => {
-    useWorkspaceTaskTabsStore.getState().reconcileProject(
-      projectKey,
-      tasks
-        .filter((task) => task.archivedAt === null)
-        .map((task) => scopedThreadKey(scopeThreadRef(task.environmentId, task.id))),
+    useWorkspaceSurfaceStore.getState().openSurface(projectSurface);
+  }, [projectSurface]);
+
+  useEffect(() => {
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    useWorkspaceSurfaceStore.getState().reconcileSurfaces(
+      Object.fromEntries(
+        projectEntries.flatMap((entry) => {
+          if (entry.surface.kind !== "task") return [];
+          const task = taskById.get(entry.surface.threadId);
+          return [
+            [
+              workspaceSurfaceKey(entry.surface),
+              !task || task.archivedAt ? "removed" : "available",
+            ],
+          ];
+        }),
+      ),
     );
-  }, [projectKey, tasks]);
+  }, [projectEntries, tasks]);
+
+  const tabs = useMemo(
+    () =>
+      projectEntries.flatMap((entry) => {
+        const key = workspaceSurfaceKey(entry.surface);
+        if (entry.surface.kind === "project") {
+          return [
+            {
+              key,
+              title: "Overview",
+              active: key === activeSurfaceKey,
+              onSelect: () => useWorkspaceSurfaceStore.getState().focusSurface(key),
+            },
+          ];
+        }
+        if (entry.surface.kind !== "task") return [];
+        const taskSurface = entry.surface;
+        const task = tasks.find((candidate) => candidate.id === taskSurface.threadId);
+        if (!task) return [];
+        return [
+          {
+            key,
+            title: task.title,
+            active: key === activeSurfaceKey,
+            status: resolveWorkspaceTaskTabStatus(task),
+            onSelect: () => {
+              useWorkspaceSurfaceStore.getState().focusSurface(key);
+              onSelectTask(task);
+            },
+            onClose: () => useWorkspaceSurfaceStore.getState().closeSurface(key),
+          },
+        ];
+      }),
+    [activeSurfaceKey, onSelectTask, projectEntries, tasks],
+  );
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-      <WorkspaceTaskTabs
-        tasks={visibleTabTasks}
-        activeTaskKey={null}
-        projectOverview={{ title: "Overview", active: true, onSelect: () => undefined }}
-        onSelectTask={(selectedTask) => {
-          const task = tasks.find(
-            (candidate) =>
-              candidate.environmentId === selectedTask.environmentId &&
-              candidate.id === selectedTask.id,
-          );
-          if (task) onSelectTask(task);
-        }}
-        onCloseTask={(task) =>
-          useWorkspaceTaskTabsStore.getState().closeTask(projectKey, workspaceTaskTabKey(task))
-        }
-        onNewTask={onNewTask}
-      />
+      <WorkspaceTaskTabs tabs={tabs} onNewTask={onNewTask} />
       <header className="workspace-topbar border-b border-border px-4 sm:px-6">
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
           <div className="min-w-0">

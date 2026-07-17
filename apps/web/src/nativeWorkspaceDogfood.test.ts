@@ -1,6 +1,7 @@
 import {
   EnvironmentId,
   EventId,
+  ProjectId,
   ThreadId,
   TurnId,
   type AutomationRun,
@@ -12,10 +13,11 @@ import { describe, expect, it } from "vite-plus/test";
 import { deriveNativeSubagents } from "./nativeSubagents";
 import type { WorkLogEntry } from "./session-logic";
 import {
-  buildWorkspaceTaskTabs,
-  workspaceTaskTabKey,
-  type WorkspaceTaskTabSource,
-} from "./components/WorkspaceTaskTabs.logic";
+  createWorkspaceSurfaceState,
+  openWorkspaceSurface,
+  workspaceSurfaceKey,
+  type WorkspaceSurface,
+} from "./workspaceSurface";
 import {
   deriveAutomationWorkspaceState,
   type AutomationWorkspaceState,
@@ -31,18 +33,8 @@ import {
 } from "./components/chat/TaskAttentionView.logic";
 
 const environmentId = EnvironmentId.make("local");
+const projectId = ProjectId.make("orchestra");
 const threadId = ThreadId.make("dogfood-task");
-
-function task(): WorkspaceTaskTabSource {
-  return {
-    environmentId,
-    id: threadId,
-    title: "Dogfood native workspace",
-    updatedAt: "2026-07-17T00:00:00.000Z",
-    archivedAt: null,
-    session: { status: "running" },
-  };
-}
 
 function workflowEvent(
   revision: number,
@@ -147,12 +139,18 @@ function automationRun(overrides: Partial<AutomationRun> = {}): AutomationRun {
 
 describe("redesigned native workspace dogfood contract", () => {
   it("keeps one native task while a child, workflow gate, Attention, and Evidence inspection progress", () => {
-    const activeTask = task();
-    const tabs = buildWorkspaceTaskTabs({
-      tasks: [activeTask],
-      activeTaskKey: workspaceTaskTabKey(activeTask),
-    });
-    expect(tabs.map((entry) => entry.id)).toEqual([threadId]);
+    const surfaces: WorkspaceSurface[] = [
+      { schemaVersion: 1, kind: "project", environmentId, projectId },
+      { schemaVersion: 1, kind: "task", environmentId, projectId, threadId },
+      { schemaVersion: 1, kind: "attention", environmentId, projectId, threadId },
+    ];
+    const workspace = surfaces.reduce(openWorkspaceSurface, createWorkspaceSurfaceState());
+    expect(workspace.entries.map((entry) => entry.surface.kind)).toEqual([
+      "project",
+      "task",
+      "attention",
+    ]);
+    expect(workspace.activeSurfaceKey).toBe(workspaceSurfaceKey(surfaces[2]!));
 
     expect(
       deriveNativeSubagents([subagentActivity("running"), subagentActivity("completed")]).agents,

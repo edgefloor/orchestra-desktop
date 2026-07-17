@@ -2,11 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 
 import {
-  buildWorkspaceTaskTabs,
-  resolveWorkspaceTaskCloseFallback,
   resolveWorkspaceTaskTabNavigation,
   resolveWorkspaceTaskTabStatus,
-  workspaceTaskTabKey,
   type WorkspaceTaskTabSource,
 } from "./WorkspaceTaskTabs.logic";
 
@@ -26,35 +23,6 @@ function task(
 }
 
 describe("workspace task tabs", () => {
-  it("derives bounded recent tabs from native tasks and retains an older active task", () => {
-    const tasks = Array.from({ length: 10 }, (_, index) =>
-      task(`task-${index}`, `2026-07-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
-    );
-    const activeTaskKey = workspaceTaskTabKey(tasks[0]!);
-
-    const tabs = buildWorkspaceTaskTabs({ tasks, activeTaskKey, limit: 4 });
-
-    expect(tabs).toHaveLength(4);
-    expect(tabs.map((entry) => entry.id)).toEqual([
-      ThreadId.make("task-9"),
-      ThreadId.make("task-8"),
-      ThreadId.make("task-7"),
-      ThreadId.make("task-0"),
-    ]);
-  });
-
-  it("deduplicates tasks and excludes archived tasks", () => {
-    const current = task("current", "2026-07-17T00:00:00.000Z");
-    const replacement = { ...current, title: "Canonical title" };
-    const archived = task("archived", "2026-07-18T00:00:00.000Z", {
-      archivedAt: "2026-07-18T01:00:00.000Z",
-    });
-
-    expect(
-      buildWorkspaceTaskTabs({ tasks: [current, replacement, archived], activeTaskKey: null }),
-    ).toEqual([replacement]);
-  });
-
   it("prioritizes error, attention, and running status without inventing task state", () => {
     expect(
       resolveWorkspaceTaskTabStatus(task("error", "2026-07-17", { session: { status: "error" } })),
@@ -85,32 +53,6 @@ describe("workspace task tabs", () => {
     );
     expect(
       resolveWorkspaceTaskTabNavigation({ currentIndex: 1, key: "Enter", taskCount: 3 }),
-    ).toBeNull();
-  });
-
-  it("selects the right neighbor, then left, when closing a task tab", () => {
-    const tasks = [
-      task("first", "2026-07-17T00:00:00.000Z"),
-      task("middle", "2026-07-17T00:00:00.000Z"),
-      task("last", "2026-07-17T00:00:00.000Z"),
-    ];
-    expect(
-      resolveWorkspaceTaskCloseFallback({
-        visibleTasks: tasks,
-        closingTaskKey: workspaceTaskTabKey(tasks[1]!),
-      })?.id,
-    ).toBe(ThreadId.make("last"));
-    expect(
-      resolveWorkspaceTaskCloseFallback({
-        visibleTasks: tasks,
-        closingTaskKey: workspaceTaskTabKey(tasks[2]!),
-      })?.id,
-    ).toBe(ThreadId.make("middle"));
-    expect(
-      resolveWorkspaceTaskCloseFallback({
-        visibleTasks: [tasks[0]!],
-        closingTaskKey: workspaceTaskTabKey(tasks[0]!),
-      }),
     ).toBeNull();
   });
 });

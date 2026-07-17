@@ -27,7 +27,6 @@ import {
 } from "@t3tools/client-runtime/connection";
 import {
   parseScopedThreadKey,
-  scopedProjectKey,
   scopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
@@ -216,12 +215,16 @@ import { WorkflowRunsView } from "./chat/WorkflowRunsView";
 import { deriveWorkspaceWorkflowRuns } from "./chat/WorkflowRunsView.logic";
 import { WorkspaceTaskTabs } from "./WorkspaceTaskTabs";
 import {
-  buildWorkspaceTaskTabs,
-  resolveWorkspaceTaskCloseFallback,
-  workspaceTaskTabKey,
+  resolveWorkspaceTaskTabStatus,
   type WorkspaceTaskTabSource,
 } from "./WorkspaceTaskTabs.logic";
-import { useWorkspaceTaskTabsStore } from "../workspaceTaskTabsStore";
+import {
+  workspaceSurfaceKey,
+  WORKSPACE_SURFACE_SCHEMA_VERSION,
+  type WorkspaceSurface,
+  type WorkspaceSurfaceKey,
+} from "../workspaceSurface";
+import { useWorkspaceSurfaceStore } from "../workspaceSurfaceStore";
 import { deriveNativeSubagents } from "../nativeSubagents";
 import { WorkspaceStatusAnnouncer } from "./WorkspaceStatusAnnouncer";
 import { buildWorkspaceStatusSnapshot } from "./WorkspaceStatusAnnouncer.logic";
@@ -287,7 +290,6 @@ const PreviewPanel = lazy(() =>
 const DiffPanel = lazy(() => import("./DiffPanel"));
 const FilePreviewPanel = lazy(() => import("./files/FilePreviewPanel"));
 const EMPTY_PENDING_FILE_SURFACE_IDS: ReadonlySet<string> = new Set();
-const EMPTY_CLOSED_WORKSPACE_TASK_KEYS: ReadonlyArray<string> = Object.freeze([]);
 const TYPE_TO_FOCUS_EDITABLE_SELECTOR = [
   "input",
   "textarea",
@@ -1157,17 +1159,6 @@ function ChatViewContent(props: ChatViewProps) {
     useState<Record<string, number>>({});
   const shouldUsePlanSidebarSheet = useMediaQuery(NARROW_DESKTOP_SHEET_MEDIA_QUERY);
   const shouldUseWorkspaceContextSheet = useMediaQuery(NARROW_DESKTOP_SHEET_MEDIA_QUERY);
-  const selectWorkspaceContextView = useCallback(
-    (view: WorkspaceContextRailView) => {
-      setWorkspaceContextRailView(view);
-      if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
-    },
-    [shouldUseWorkspaceContextSheet],
-  );
-  const openWorkflowWorkspace = useCallback(
-    () => selectWorkspaceContextView("workflow"),
-    [selectWorkspaceContextView],
-  );
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
   // When set, the thread-change reset effect will open the sidebar instead of closing it.
@@ -1466,15 +1457,20 @@ function ChatViewContent(props: ChatViewProps) {
     ? scopeProjectRef(activeThread.environmentId, activeThread.projectId)
     : null;
   const activeProject = useProject(activeProjectRef);
-  const workspaceProjectKey = activeProjectRef ? scopedProjectKey(activeProjectRef) : null;
-  const closedWorkspaceTaskKeys = useWorkspaceTaskTabsStore((state) =>
-    workspaceProjectKey
-      ? (state.closedTaskKeysByProject[workspaceProjectKey] ?? EMPTY_CLOSED_WORKSPACE_TASK_KEYS)
-      : EMPTY_CLOSED_WORKSPACE_TASK_KEYS,
-  );
-  const closedWorkspaceTaskKeySet = useMemo(
-    () => new Set(closedWorkspaceTaskKeys),
-    [closedWorkspaceTaskKeys],
+  const workspaceEntries = useWorkspaceSurfaceStore((state) => state.entries);
+  const activeWorkspaceSurfaceKey = useWorkspaceSurfaceStore((state) => state.activeSurfaceKey);
+  const activeTaskSurface = useMemo<Extract<WorkspaceSurface, { kind: "task" }> | null>(
+    () =>
+      activeThread
+        ? {
+            schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+            kind: "task",
+            environmentId: activeThread.environmentId,
+            projectId: activeThread.projectId,
+            threadId: activeThread.id,
+          }
+        : null,
+    [activeThread],
   );
   const workspaceTaskSources = useMemo<WorkspaceTaskTabSource[]>(() => {
     if (!activeThread) return [];
@@ -1489,38 +1485,76 @@ function ChatViewContent(props: ChatViewProps) {
           scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) === activeThreadKey,
       )
     ) {
-      return projectTasks.filter(
-        (thread) =>
-          !closedWorkspaceTaskKeySet.has(
-            scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-          ),
-      );
+      return projectTasks;
     }
-    return [activeThread, ...projectTasks].filter(
-      (thread) =>
-        !closedWorkspaceTaskKeySet.has(
-          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-        ),
+    return [activeThread, ...projectTasks];
+  }, [activeThread, activeThreadKey, serverThreadShells]);
+  useEffect(() => {
+    if (!activeTaskSurface) return;
+    const activeEntry = workspaceEntries.find(
+      (entry) => workspaceSurfaceKey(entry.surface) === activeWorkspaceSurfaceKey,
     );
-  }, [activeThread, activeThreadKey, closedWorkspaceTaskKeySet, serverThreadShells]);
+    if (
+      activeEntry?.surface.kind === "attention" &&
+      activeEntry.surface.environmentId === activeTaskSurface.environmentId &&
+      activeEntry.surface.projectId === activeTaskSurface.projectId &&
+      activeEntry.surface.threadId === activeTaskSurface.threadId
+    ) {
+      setWorkspaceContextRailView("attention");
+      if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
+      return;
+    }
+    useWorkspaceSurfaceStore.getState().openSurface(activeTaskSurface);
+  }, [
+    activeTaskSurface,
+    activeWorkspaceSurfaceKey,
+    shouldUseWorkspaceContextSheet,
+    workspaceEntries,
+  ]);
   useEffect(() => {
-    if (!workspaceProjectKey || !activeThreadKey) return;
-    useWorkspaceTaskTabsStore.getState().reopenTask(workspaceProjectKey, activeThreadKey);
-  }, [activeThreadKey, workspaceProjectKey]);
-  useEffect(() => {
-    if (!workspaceProjectKey || !activeThread) return;
-    const validTaskKeys = serverThreadShells
-      .filter(
-        (thread) =>
-          thread.environmentId === activeThread.environmentId &&
-          thread.projectId === activeThread.projectId &&
-          thread.archivedAt === null,
-      )
-      .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)));
-    useWorkspaceTaskTabsStore.getState().reconcileProject(workspaceProjectKey, validTaskKeys);
-  }, [activeThread, serverThreadShells, workspaceProjectKey]);
+    if (!activeThread) return;
+    const validTaskIds = new Set(
+      serverThreadShells
+        .filter(
+          (thread) =>
+            thread.environmentId === activeThread.environmentId &&
+            thread.projectId === activeThread.projectId &&
+            thread.archivedAt === null,
+        )
+        .map((thread) => thread.id),
+    );
+    useWorkspaceSurfaceStore.getState().reconcileSurfaces(
+      Object.fromEntries(
+        workspaceEntries.flatMap((entry) => {
+          if (
+            entry.surface.environmentId !== activeThread.environmentId ||
+            entry.surface.projectId !== activeThread.projectId ||
+            (entry.surface.kind !== "task" && entry.surface.kind !== "attention")
+          ) {
+            return [];
+          }
+          return [
+            [
+              workspaceSurfaceKey(entry.surface),
+              validTaskIds.has(entry.surface.threadId) ? "available" : "removed",
+            ],
+          ];
+        }),
+      ),
+    );
+  }, [activeThread, serverThreadShells, workspaceEntries]);
   const handleSelectWorkspaceTask = useCallback(
     (task: WorkspaceTaskTabSource) => {
+      if (!activeThread) return;
+      useWorkspaceSurfaceStore.getState().openSurface({
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+        kind: "task",
+        environmentId: task.environmentId,
+        projectId: activeThread.projectId,
+        threadId: task.id,
+      });
+      setWorkspaceContextRailView(null);
+      setWorkspaceContextSheetOpen(false);
       const taskRef = scopeThreadRef(task.environmentId, task.id);
       if (scopedThreadKey(taskRef) === routeThreadKey) return;
       void navigate({
@@ -1528,7 +1562,7 @@ function ChatViewContent(props: ChatViewProps) {
         params: buildThreadRouteParams(taskRef),
       });
     },
-    [navigate, routeThreadKey],
+    [activeThread, navigate, routeThreadKey],
   );
   const handleNewWorkspaceTask = useCallback(() => {
     if (!activeProjectRef) return;
@@ -1536,36 +1570,152 @@ function ChatViewContent(props: ChatViewProps) {
   }, [activeProjectRef, startNewWorkspaceTask]);
   const handleSelectProjectOverview = useCallback(() => {
     if (!activeProjectRef) return;
+    useWorkspaceSurfaceStore.getState().openSurface({
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+      kind: "project",
+      environmentId: activeProjectRef.environmentId,
+      projectId: activeProjectRef.projectId,
+    });
     void navigate({
       to: "/project/$environmentId/$projectId",
       params: buildProjectRouteParams(activeProjectRef),
     });
   }, [activeProjectRef, navigate]);
-  const handleCloseWorkspaceTask = useCallback(
-    (task: WorkspaceTaskTabSource) => {
-      if (!workspaceProjectKey) return;
-      const taskKey = workspaceTaskTabKey(task);
-      const visibleTasks = buildWorkspaceTaskTabs({
-        tasks: workspaceTaskSources,
-        activeTaskKey: activeThreadKey,
-      });
-      useWorkspaceTaskTabsStore.getState().closeTask(workspaceProjectKey, taskKey);
-      if (taskKey !== activeThreadKey) return;
-      const fallbackTask = resolveWorkspaceTaskCloseFallback({
-        visibleTasks,
-        closingTaskKey: taskKey,
-      });
-      if (fallbackTask) {
-        handleSelectWorkspaceTask(fallbackTask);
-      } else {
-        handleSelectProjectOverview();
+  const selectWorkspaceContextView = useCallback(
+    (view: WorkspaceContextRailView) => {
+      if (view === "attention" && activeThread) {
+        useWorkspaceSurfaceStore.getState().openSurface({
+          schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+          kind: "attention",
+          environmentId: activeThread.environmentId,
+          projectId: activeThread.projectId,
+          threadId: activeThread.id,
+        });
+      } else if (activeTaskSurface) {
+        useWorkspaceSurfaceStore.getState().openSurface(activeTaskSurface);
+      }
+      setWorkspaceContextRailView(view);
+      if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
+    },
+    [activeTaskSurface, activeThread, shouldUseWorkspaceContextSheet],
+  );
+  const openWorkflowWorkspace = useCallback(
+    () => selectWorkspaceContextView("workflow"),
+    [selectWorkspaceContextView],
+  );
+  const activateWorkspaceSurface = useCallback(
+    (key: WorkspaceSurfaceKey) => {
+      const entry = useWorkspaceSurfaceStore
+        .getState()
+        .entries.find((candidate) => workspaceSurfaceKey(candidate.surface) === key);
+      if (!entry) return;
+      useWorkspaceSurfaceStore.getState().focusSurface(key);
+      const surface = entry.surface;
+      switch (surface.kind) {
+        case "project":
+          void navigate({
+            to: "/project/$environmentId/$projectId",
+            params: buildProjectRouteParams(surface),
+          });
+          return;
+        case "task": {
+          const task = workspaceTaskSources.find(
+            (candidate) =>
+              candidate.environmentId === surface.environmentId &&
+              candidate.id === surface.threadId,
+          );
+          if (task) handleSelectWorkspaceTask(task);
+          return;
+        }
+        case "attention":
+          if (surface.threadId === activeThread?.id) selectWorkspaceContextView("attention");
+          return;
+        default:
+          return;
       }
     },
     [
-      activeThreadKey,
-      handleSelectProjectOverview,
+      activeThread?.id,
       handleSelectWorkspaceTask,
-      workspaceProjectKey,
+      navigate,
+      selectWorkspaceContextView,
+      workspaceTaskSources,
+    ],
+  );
+  const closeWorkspaceSurface = useCallback(
+    (key: WorkspaceSurfaceKey) => {
+      const wasActive = useWorkspaceSurfaceStore.getState().activeSurfaceKey === key;
+      useWorkspaceSurfaceStore.getState().closeSurface(key);
+      if (!wasActive) return;
+      const fallbackKey = useWorkspaceSurfaceStore.getState().activeSurfaceKey;
+      if (fallbackKey) activateWorkspaceSurface(fallbackKey);
+      else handleSelectProjectOverview();
+    },
+    [activateWorkspaceSurface, handleSelectProjectOverview],
+  );
+  const closeWorkspaceContextView = useCallback(() => {
+    setWorkspaceContextSheetOpen(false);
+    setWorkspaceContextRailView(null);
+    if (activeTaskSurface) useWorkspaceSurfaceStore.getState().openSurface(activeTaskSurface);
+  }, [activeTaskSurface]);
+  const workspaceTabs = useMemo(
+    () =>
+      activeThread
+        ? workspaceEntries.flatMap((entry) => {
+            if (
+              entry.surface.environmentId !== activeThread.environmentId ||
+              entry.surface.projectId !== activeThread.projectId
+            ) {
+              return [];
+            }
+            const key = workspaceSurfaceKey(entry.surface);
+            if (entry.surface.kind === "project") {
+              return [
+                {
+                  key,
+                  title: "Overview",
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                },
+              ];
+            }
+            if (entry.surface.kind === "task") {
+              const taskSurface = entry.surface;
+              const task = workspaceTaskSources.find(
+                (candidate) => candidate.id === taskSurface.threadId,
+              );
+              if (!task) return [];
+              return [
+                {
+                  key,
+                  title: task.title,
+                  active: key === activeWorkspaceSurfaceKey,
+                  status: resolveWorkspaceTaskTabStatus(task),
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
+            if (entry.surface.kind === "attention" && entry.surface.threadId === activeThread.id) {
+              return [
+                {
+                  key,
+                  title: "Attention",
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
+            return [];
+          })
+        : [],
+    [
+      activateWorkspaceSurface,
+      activeThread,
+      activeWorkspaceSurfaceKey,
+      closeWorkspaceSurface,
+      workspaceEntries,
       workspaceTaskSources,
     ],
   );
@@ -5240,18 +5390,7 @@ function ChatViewContent(props: ChatViewProps) {
         )}
         data-chat-column-maximized-away={rightPanelMaximized ? "true" : "false"}
       >
-        <WorkspaceTaskTabs
-          tasks={workspaceTaskSources}
-          activeTaskKey={activeThreadKey}
-          projectOverview={{
-            title: "Overview",
-            active: false,
-            onSelect: handleSelectProjectOverview,
-          }}
-          onSelectTask={handleSelectWorkspaceTask}
-          onCloseTask={handleCloseWorkspaceTask}
-          onNewTask={handleNewWorkspaceTask}
-        />
+        <WorkspaceTaskTabs tabs={workspaceTabs} onNewTask={handleNewWorkspaceTask} />
         <WorkspaceStatusAnnouncer snapshot={workspaceStatusSnapshot} />
 
         {/* Native task header */}
@@ -5533,7 +5672,7 @@ function ChatViewContent(props: ChatViewProps) {
           !shouldUseWorkspaceContextSheet ? (
             <WorkspaceContextRail
               activeView={workspaceContextRailView}
-              onClose={() => setWorkspaceContextRailView(null)}
+              onClose={closeWorkspaceContextView}
               subagents={
                 <NativeSubagentsPanel
                   key={`subagents:${activeThreadKey}`}
@@ -5651,20 +5790,11 @@ function ChatViewContent(props: ChatViewProps) {
       workspaceContextSheetOpen &&
       workspaceContextRailView !== null &&
       !rightPanelOpen ? (
-        <RightPanelSheet
-          open
-          onClose={() => {
-            setWorkspaceContextSheetOpen(false);
-            setWorkspaceContextRailView(null);
-          }}
-        >
+        <RightPanelSheet open onClose={closeWorkspaceContextView}>
           <WorkspaceContextRail
             variant="sheet"
             activeView={workspaceContextRailView}
-            onClose={() => {
-              setWorkspaceContextSheetOpen(false);
-              setWorkspaceContextRailView(null);
-            }}
+            onClose={closeWorkspaceContextView}
             subagents={
               <NativeSubagentsPanel
                 key={`subagents:${activeThreadKey}`}

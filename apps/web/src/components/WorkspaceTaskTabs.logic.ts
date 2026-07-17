@@ -3,8 +3,6 @@ import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 
 import { resolveWorkspaceTabNavigation } from "./workspaceTabNavigation";
 
-export const MAX_WORKSPACE_TASK_TABS = 8;
-
 export interface WorkspaceTaskTabSource {
   readonly environmentId: EnvironmentId;
   readonly id: ThreadId;
@@ -34,37 +32,6 @@ export function workspaceTaskTabKey(
   return scopedThreadKey(scopeThreadRef(task.environmentId, task.id));
 }
 
-export function buildWorkspaceTaskTabs(input: {
-  readonly tasks: ReadonlyArray<WorkspaceTaskTabSource>;
-  readonly activeTaskKey: string | null;
-  readonly limit?: number;
-}): WorkspaceTaskTabSource[] {
-  const uniqueTasks = new Map<string, WorkspaceTaskTabSource>();
-  for (const task of input.tasks) {
-    if (task.archivedAt !== null) continue;
-    uniqueTasks.set(workspaceTaskTabKey(task), task);
-  }
-
-  const orderedTasks = [...uniqueTasks.values()].sort((left, right) => {
-    const updatedOrder = Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
-    return updatedOrder !== 0
-      ? updatedOrder
-      : workspaceTaskTabKey(left).localeCompare(workspaceTaskTabKey(right));
-  });
-  const limit = Math.max(1, input.limit ?? MAX_WORKSPACE_TASK_TABS);
-  const visibleTasks = orderedTasks.slice(0, limit);
-  if (
-    input.activeTaskKey === null ||
-    visibleTasks.some((task) => workspaceTaskTabKey(task) === input.activeTaskKey)
-  ) {
-    return visibleTasks;
-  }
-
-  const activeTask = uniqueTasks.get(input.activeTaskKey);
-  if (!activeTask) return visibleTasks;
-  return [...visibleTasks.slice(0, limit - 1), activeTask];
-}
-
 export function resolveWorkspaceTaskTabStatus(
   task: WorkspaceTaskTabSource,
 ): WorkspaceTaskTabStatus {
@@ -86,15 +53,4 @@ export function resolveWorkspaceTaskTabNavigation(input: {
     key: input.key,
     tabCount: input.taskCount,
   });
-}
-
-export function resolveWorkspaceTaskCloseFallback(input: {
-  readonly visibleTasks: ReadonlyArray<WorkspaceTaskTabSource>;
-  readonly closingTaskKey: string;
-}): WorkspaceTaskTabSource | null {
-  const closingIndex = input.visibleTasks.findIndex(
-    (task) => workspaceTaskTabKey(task) === input.closingTaskKey,
-  );
-  if (closingIndex < 0) return null;
-  return input.visibleTasks[closingIndex + 1] ?? input.visibleTasks[closingIndex - 1] ?? null;
 }

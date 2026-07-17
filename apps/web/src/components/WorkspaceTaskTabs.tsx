@@ -1,13 +1,9 @@
 import { PlusIcon, XIcon } from "lucide-react";
-import { memo, useMemo, useRef, type KeyboardEvent } from "react";
+import { memo, useRef, type KeyboardEvent } from "react";
 
 import { cn } from "~/lib/utils";
 import {
-  buildWorkspaceTaskTabs,
   resolveWorkspaceTaskTabNavigation,
-  resolveWorkspaceTaskTabStatus,
-  workspaceTaskTabKey,
-  type WorkspaceTaskTabSource,
   type WorkspaceTaskTabStatus,
 } from "./WorkspaceTaskTabs.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
@@ -22,51 +18,37 @@ const STATUS_PRESENTATION: Record<
   running: { label: "Running", className: "animate-status-pulse bg-success" },
 };
 
+export interface WorkspaceTabDescriptor {
+  readonly key: string;
+  readonly title: string;
+  readonly active: boolean;
+  readonly status?: WorkspaceTaskTabStatus;
+  readonly onSelect: () => void;
+  readonly onClose?: () => void;
+}
+
 interface WorkspaceTaskTabsProps {
-  readonly tasks: ReadonlyArray<WorkspaceTaskTabSource>;
-  readonly activeTaskKey: string | null;
-  readonly projectOverview?: {
-    readonly title: string;
-    readonly active: boolean;
-    readonly onSelect: () => void;
-  };
-  readonly onSelectTask: (task: WorkspaceTaskTabSource) => void;
-  readonly onCloseTask?: (task: WorkspaceTaskTabSource) => void;
+  readonly tabs: ReadonlyArray<WorkspaceTabDescriptor>;
   readonly onNewTask: () => void;
 }
 
 export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
-  tasks,
-  activeTaskKey,
-  projectOverview,
-  onSelectTask,
-  onCloseTask,
+  tabs,
   onNewTask,
 }: WorkspaceTaskTabsProps) {
   const tabListRef = useRef<HTMLDivElement>(null);
-  const visibleTasks = useMemo(
-    () => buildWorkspaceTaskTabs({ tasks, activeTaskKey }),
-    [activeTaskKey, tasks],
-  );
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
-    const overviewOffset = projectOverview ? 1 : 0;
     const targetIndex = resolveWorkspaceTaskTabNavigation({
       currentIndex,
       key: event.key,
-      taskCount: visibleTasks.length + overviewOffset,
+      taskCount: tabs.length,
     });
     if (targetIndex === null) return;
-    if (projectOverview && targetIndex === 0) {
-      event.preventDefault();
-      projectOverview.onSelect();
-      tabListRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]').item(0).focus();
-      return;
-    }
-    const targetTask = visibleTasks[targetIndex - overviewOffset];
-    if (!targetTask) return;
+    const targetTab = tabs[targetIndex];
+    if (!targetTab) return;
     event.preventDefault();
-    onSelectTask(targetTask);
+    targetTab.onSelect();
     tabListRef.current
       ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
       .item(targetIndex)
@@ -85,79 +67,63 @@ export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
         aria-label="Open tasks"
         className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {projectOverview ? (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={projectOverview.active}
-            tabIndex={projectOverview.active ? 0 : -1}
-            title={projectOverview.title}
-            className={cn(
-              "relative flex w-32 shrink-0 items-center border-r border-border px-3 text-left text-xs text-muted-foreground outline-hidden transition-[color,background-color] hover:bg-background hover:text-foreground focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-              projectOverview.active &&
-                "bg-background font-medium text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary",
-            )}
-            onClick={projectOverview.onSelect}
-            onKeyDown={(event) => handleKeyDown(event, 0)}
-          >
-            <span className="truncate">{projectOverview.title}</span>
-          </button>
-        ) : null}
-        {visibleTasks.map((task, index) => {
-          const taskKey = workspaceTaskTabKey(task);
-          const active = taskKey === activeTaskKey;
-          const status = STATUS_PRESENTATION[resolveWorkspaceTaskTabStatus(task)];
+        {tabs.map((tab, index) => {
+          const status = tab.status ? STATUS_PRESENTATION[tab.status] : null;
           return (
             <div
-              key={taskKey}
+              key={tab.key}
               className={cn(
                 "group relative flex w-36 shrink-0 items-stretch border-r border-border text-xs text-muted-foreground transition-[width,color,background-color] hover:bg-background hover:text-foreground",
-                active &&
+                tab.active &&
                   "w-44 bg-background font-medium text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary",
               )}
             >
               <button
                 type="button"
                 role="tab"
-                aria-selected={active}
-                tabIndex={active ? 0 : -1}
-                title={task.title}
+                aria-selected={tab.active}
+                tabIndex={tab.active ? 0 : -1}
+                title={tab.title}
                 className="flex min-w-0 flex-1 items-center gap-2 px-3 text-left outline-hidden focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                onClick={() => onSelectTask(task)}
+                onClick={tab.onSelect}
                 onKeyDown={(event) => {
-                  if (event.key === "Delete" && onCloseTask) {
+                  if (event.key === "Delete" && tab.onClose) {
                     event.preventDefault();
-                    onCloseTask(task);
+                    tab.onClose();
                     return;
                   }
-                  handleKeyDown(event, index + (projectOverview ? 1 : 0));
+                  handleKeyDown(event, index);
                 }}
               >
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <span
-                        aria-label={status.label}
-                        role="img"
-                        className="inline-flex size-3 shrink-0 items-center justify-center"
-                      />
-                    }
-                  >
-                    <span className={cn("size-1.5 rounded-full", status.className)} />
-                  </TooltipTrigger>
-                  <TooltipPopup side="bottom">{status.label}</TooltipPopup>
-                </Tooltip>
-                <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                {status ? (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span
+                          aria-label={status.label}
+                          role="img"
+                          className="inline-flex size-3 shrink-0 items-center justify-center"
+                        />
+                      }
+                    >
+                      <span className={cn("size-1.5 rounded-full", status.className)} />
+                    </TooltipTrigger>
+                    <TooltipPopup side="bottom">{status.label}</TooltipPopup>
+                  </Tooltip>
+                ) : null}
+                <span className="min-w-0 flex-1 truncate">{tab.title}</span>
               </button>
-              {onCloseTask ? (
+              {tab.onClose ? (
                 <button
                   type="button"
-                  aria-label={`Close ${task.title}`}
+                  aria-label={`Close ${tab.title}`}
                   className={cn(
                     "mr-1 flex min-w-6 shrink-0 items-center justify-center self-stretch rounded text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                    active ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100",
+                    tab.active
+                      ? "opacity-100"
+                      : "opacity-0 group-hover:opacity-100 focus:opacity-100",
                   )}
-                  onClick={() => onCloseTask(task)}
+                  onClick={tab.onClose}
                 >
                   <XIcon className="size-3" />
                 </button>

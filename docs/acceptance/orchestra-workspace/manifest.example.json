@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "id": "orchestra-workspace-acceptance-v1",
+  "role": "product-acceptance-evidence",
+  "desktop": {
+    "repository": "edgefloor/orchestra-desktop",
+    "commit": "0000000000000000000000000000000000000000",
+    "tree": "0000000000000000000000000000000000000000"
+  },
+  "capture": {
+    "electronVersion": "41.5.0",
+    "platform": {
+      "os": "darwin",
+      "arch": "arm64"
+    }
+  },
+  "screenshots": [
+    {
+      "scenario": "workspace-1024x768-light",
+      "file": "docs/acceptance/orchestra-workspace/workspace-1024x768-light.png",
+      "width": 1024,
+      "height": 768,
+      "deviceScaleFactor": 1,
+      "theme": "light",
+      "state": "workspace",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "assertions": {
+        "activeTaskVisible": true,
+        "composerVisible": true,
+        "contextTabsReachable": true,
+        "narrowLayoutActive": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "taskTabsReachable": true
+      }
+    },
+    {
+      "scenario": "workspace-1024x768-dark",
+      "file": "docs/acceptance/orchestra-workspace/workspace-1024x768-dark.png",
+      "width": 1024,
+      "height": 768,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "state": "workspace",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "assertions": {
+        "activeTaskVisible": true,
+        "composerVisible": true,
+        "contextTabsReachable": true,
+        "narrowLayoutActive": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "taskTabsReachable": true
+      }
+    },
+    {
+      "scenario": "workspace-1440x900-light",
+      "file": "docs/acceptance/orchestra-workspace/workspace-1440x900-light.png",
+      "width": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "theme": "light",
+      "state": "workspace",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "assertions": {
+        "activeTaskVisible": true,
+        "composerVisible": true,
+        "contextTabsReachable": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "taskTabsReachable": true,
+        "wideLayoutActive": true
+      }
+    },
+    {
+      "scenario": "workspace-1440x900-dark",
+      "file": "docs/acceptance/orchestra-workspace/workspace-1440x900-dark.png",
+      "width": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "state": "workspace",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "assertions": {
+        "activeTaskVisible": true,
+        "composerVisible": true,
+        "contextTabsReachable": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "taskTabsReachable": true,
+        "wideLayoutActive": true
+      }
+    },
+    {
+      "scenario": "attention-sheet-1024x768-dark",
+      "file": "docs/acceptance/orchestra-workspace/attention-sheet-1024x768-dark.png",
+      "width": 1024,
+      "height": 768,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "state": "attention-sheet",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "assertions": {
+        "activeTaskVisible": true,
+        "attentionItemsPresent": true,
+        "attentionPanelVisible": true,
+        "composerVisible": true,
+        "contextSheetLabelled": true,
+        "contextSheetVisible": true,
+        "contextTabsReachable": true,
+        "narrowLayoutActive": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "taskTabsReachable": true
+      }
+    },
+    {
+      "scenario": "symphony-1440x900-dark",
+      "file": "docs/acceptance/orchestra-workspace/symphony-1440x900-dark.png",
+      "width": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "state": "symphony",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "assertions": {
+        "activeTaskVisible": true,
+        "composerVisible": true,
+        "contextTabsReachable": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "symphonyHeightBounded": true,
+        "symphonyScrollsInternally": true,
+        "symphonyWorkspaceVisible": true,
+        "taskTabsReachable": true,
+        "wideLayoutActive": true
+      }
+    }
+  ]
+}
