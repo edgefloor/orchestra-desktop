@@ -4,8 +4,8 @@
   "role": "product-acceptance-evidence",
   "desktop": {
     "repository": "edgefloor/orchestra-desktop",
-    "commit": "4b82672f374c842a6799709c673f8f846b9fb9ef",
-    "tree": "07471275c55aa451c5eb01ca9c9a70b4fc13f015"
+    "commit": "36d00e1e32b395ba4bb8ddc0902c0a26712d7df3",
+    "tree": "d870d561e29f0806e9a0d9bfefdc19fa79d0a53b"
   },
   "capture": {
     "electronVersion": "41.5.0",
@@ -122,7 +122,7 @@
       "deviceScaleFactor": 1,
       "theme": "dark",
       "state": "symphony",
-      "sha256": "18b1af096bf0729ecb2c8cfa6f960031cf78bb95a19912c36267b2983b23acbe",
+      "sha256": "d875c29fe20ba86c5b1364dd5f608a8e8b60ee840ecd865cb30c0d5f793f5d8c",
       "assertions": {
         "activeTaskVisible": true,
         "composerVisible": true,
@@ -148,7 +148,7 @@
       "deviceScaleFactor": 1,
       "theme": "dark",
       "state": "symphony-activity",
-      "sha256": "300e5cda62ed2573a94e486ccfad7360d6dc45330e574a770238108bdf6e5a4e",
+      "sha256": "cae9ac6239522fa7fabed654d65adeebaa7b2d63a69c70019ac333f1fa005be4",
       "assertions": {
         "activeTaskVisible": true,
         "composerVisible": true,
@@ -170,7 +170,7 @@
       "deviceScaleFactor": 1,
       "theme": "dark",
       "state": "symphony-events",
-      "sha256": "b93c0c92284f7d616669198209a32786c20939a79ab480cebe415a5938c458a5",
+      "sha256": "3ecfbce0f5197728c3d0d0f00aff8c09f6aeae6ea9017ea3f6540a1e73a77fa9",
       "assertions": {
         "activeTaskVisible": true,
         "composerVisible": true,
@@ -182,6 +182,64 @@
         "symphonyWorkspaceVisible": true,
         "taskTabsReachable": true,
         "wideLayoutActive": true
+      }
+    },
+    {
+      "scenario": "symphony-recovery-1440x900-dark",
+      "file": "docs/acceptance/orchestra-workspace/symphony-recovery-1440x900-dark.png",
+      "width": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "state": "symphony-recovery",
+      "sha256": "2394aa8eb3da73d328a808d8e01029fc619a3b6bd652e743648d42caab9421cb",
+      "assertions": {
+        "activeTaskVisible": true,
+        "composerVisible": true,
+        "contextTabsReachable": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "symphonyEffectResolutionUnavailable": true,
+        "symphonyHeightBounded": true,
+        "symphonyRecoveryActionWired": true,
+        "symphonyRecoveryContentVisibleAtCapture": true,
+        "symphonyRecoveryLifecycleActionsWired": true,
+        "symphonyRecoverySelectedAtCapture": true,
+        "symphonyRecoveryVisible": true,
+        "symphonyScrollsInternally": true,
+        "symphonyStaleFeedbackVisible": true,
+        "symphonyWorkspaceVisible": true,
+        "taskTabsReachable": true,
+        "wideLayoutActive": true
+      }
+    },
+    {
+      "scenario": "symphony-recovery-1024x768-dark",
+      "file": "docs/acceptance/orchestra-workspace/symphony-recovery-1024x768-dark.png",
+      "width": 1024,
+      "height": 768,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "state": "symphony-recovery",
+      "sha256": "c21bd82c5ea181e5a52ce06a8de6ee9e03e95bbdc323b275e7b4a81cad733db2",
+      "assertions": {
+        "activeTaskVisible": true,
+        "composerVisible": true,
+        "contextTabsReachable": true,
+        "narrowLayoutActive": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "symphonyEffectResolutionUnavailable": true,
+        "symphonyHeightBounded": true,
+        "symphonyRecoveryActionWired": true,
+        "symphonyRecoveryContentVisibleAtCapture": true,
+        "symphonyRecoveryLifecycleActionsWired": true,
+        "symphonyRecoverySelectedAtCapture": true,
+        "symphonyRecoveryVisible": true,
+        "symphonyScrollsInternally": true,
+        "symphonyStaleFeedbackVisible": true,
+        "symphonyWorkspaceVisible": true,
+        "taskTabsReachable": true
       }
     },
     {
