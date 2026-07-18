@@ -142,15 +142,53 @@ describe("redesigned native workspace dogfood contract", () => {
     const surfaces: WorkspaceSurface[] = [
       { schemaVersion: 2, kind: "project", environmentId, projectId },
       { schemaVersion: 2, kind: "task", environmentId, projectId, threadId },
+      {
+        schemaVersion: 2,
+        kind: "child",
+        environmentId,
+        projectId,
+        parentThreadId: threadId,
+        agentThreadId: ThreadId.make("child-51"),
+      },
+      {
+        schemaVersion: 2,
+        kind: "workflowRun",
+        environmentId,
+        projectId,
+        threadId,
+        runId: "workflow-51",
+      },
       { schemaVersion: 2, kind: "attention", environmentId, projectId, threadId },
+      {
+        schemaVersion: 2,
+        kind: "evidence",
+        environmentId,
+        projectId,
+        threadId,
+        runId: "workflow-51",
+        stepId: "accept",
+        evidenceId: "opaque-evidence-51",
+      },
     ];
     const workspace = surfaces.reduce(openWorkspaceSurface, createWorkspaceSurfaceState());
     expect(workspace.entries.map((entry) => entry.surface.kind)).toEqual([
       "project",
       "task",
+      "child",
+      "workflowRun",
       "attention",
+      "evidence",
     ]);
-    expect(workspace.activeSurfaceKey).toBe(workspaceSurfaceKey(surfaces[2]!));
+    expect(workspace.activeSurfaceKey).toBe(workspaceSurfaceKey(surfaces[5]!));
+    expect(
+      workspace.entries.every(
+        (entry) =>
+          entry.surface.kind === "project" ||
+          ("threadId" in entry.surface
+            ? entry.surface.threadId === threadId
+            : entry.surface.parentThreadId === threadId),
+      ),
+    ).toBe(true);
 
     expect(
       deriveNativeSubagents([subagentActivity("running"), subagentActivity("completed")]).agents,
