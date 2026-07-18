@@ -122,6 +122,71 @@ const scenarios = [
       "wideLayoutActive",
     ].sort(),
   },
+  {
+    scenario: "browser-preview-1440x900-dark",
+    width: 1440,
+    height: 900,
+    theme: "dark",
+    state: "browser-preview",
+    assertions: [
+      ...workspaceAssertions,
+      "browserPreviewVisible",
+      "browserPreviewTablistVisible",
+      "browserPreviewChromeVisible",
+      "browserPreviewTaskAssociated",
+      "browserPreviewResponsiveMode",
+      "browserPreviewTabKeyboardNavigation",
+      "browserPreviewAddressSubmissionWired",
+      "browserPreviewNavigationWired",
+      "browserPreviewAnnotationWired",
+      "browserPreviewCaptureWired",
+      "browserPreviewFailureRecoveryWired",
+      "browserPreviewContentActionWired",
+      "browserPreviewCloseReopenWired",
+      "wideLayoutActive",
+    ].sort(),
+  },
+  {
+    scenario: "browser-preview-1024x768-dark",
+    width: 1024,
+    height: 768,
+    theme: "dark",
+    state: "browser-preview-narrow",
+    assertions: [
+      ...workspaceAssertions,
+      "browserPreviewVisible",
+      "browserPreviewTablistVisible",
+      "browserPreviewChromeVisible",
+      "browserPreviewTaskAssociated",
+      "browserPreviewResponsiveMode",
+      "browserPreviewTabKeyboardNavigation",
+      "browserPreviewAddressSubmissionWired",
+      "browserPreviewNavigationWired",
+      "browserPreviewAnnotationWired",
+      "browserPreviewCaptureWired",
+      "browserPreviewFailureRecoveryWired",
+      "browserPreviewContentActionWired",
+      "browserPreviewCloseReopenWired",
+      "browserPreviewSheetCloseReopenWired",
+      "narrowLayoutActive",
+    ].sort(),
+  },
+  {
+    scenario: "file-preview-1440x900-dark",
+    width: 1440,
+    height: 900,
+    theme: "dark",
+    state: "file-preview",
+    assertions: [
+      ...workspaceAssertions,
+      "filePreviewVisible",
+      "filePreviewActionVisible",
+      "filePreviewTaskAssociated",
+      "filePreviewResponsiveMode",
+      "filePreviewContentActionWired",
+      "wideLayoutActive",
+    ].sort(),
+  },
 ];
 
 function runGit(args) {
@@ -253,6 +318,135 @@ async function probeSymphonyInteractions(webContents) {
   );
 }
 
+async function probeBrowserPreviewInteractions(webContents, narrow) {
+  const assertions = await webContents.executeJavaScript(
+    `(async () => {
+      const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const exactButton = (text) => [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === text);
+      const buttonStartingWith = (text) => [...document.querySelectorAll('button')].find((button) => button.textContent?.trim().startsWith(text));
+      const tabByLabel = (text) => [...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.trim() === text);
+      const browserTab = tabByLabel('Browser');
+      const input = document.querySelector('[data-preview-url-input]');
+      if (input) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        setter?.call(input, 'http://127.0.0.1:4173/cycle-4');
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '4' }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      }
+      await settle();
+      document.querySelector('[aria-label="Back"]')?.click();
+      document.querySelector('[aria-label="Annotate preview"]')?.click();
+      await settle();
+      document.querySelector('[aria-label="Cancel annotation"]')?.click();
+      const capture = document.querySelector('[aria-label="Capture screenshot"]');
+      capture?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+      await settle();
+      document.querySelector('[aria-label="Stop recording"]')?.click();
+      exactButton('Simulate unreachable page')?.click();
+      await settle();
+      exactButton('Details')?.click();
+      await settle();
+      const failureDetailsVisible = document.body.textContent?.includes('Confirming the dev server is running') ?? false;
+      exactButton('Reload')?.click();
+      await settle();
+      browserTab?.focus();
+      browserTab?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await settle();
+      const previewTab = tabByLabel('README.md');
+      const previewSelected = previewTab?.getAttribute('aria-selected') === 'true';
+      const previewFocused = document.activeElement === previewTab;
+      const previewVisible = document.querySelector('[aria-label="README.md Preview"]') !== null;
+      document.querySelector('[aria-label="Show rendered markdown"]')?.click();
+      await settle();
+      const renderedPreviewVisible = document.querySelector('[aria-label="Rendered README.md content"]') !== null;
+      document.querySelector('[aria-label="Close README.md"]')?.click();
+      await settle();
+      document.querySelector('[aria-label="Close Browser"]')?.click();
+      await settle();
+      const emptyVisible = document.body.textContent?.includes('Open a surface') ?? false;
+      buttonStartingWith('Browser')?.click();
+      await settle();
+      const reopened = tabByLabel('Browser')?.getAttribute('aria-selected') === 'true';
+      const actions = window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {};
+      return {
+        browserPreviewTabKeyboardNavigation: Boolean(previewSelected && previewFocused && previewVisible),
+        browserPreviewAddressSubmissionWired: actions.browserUrl === 'http://127.0.0.1:4173/cycle-4',
+        browserPreviewNavigationWired: actions.browserNavigation === 'back',
+        browserPreviewAnnotationWired: actions.browserAnnotation === 'cancelled',
+        browserPreviewCaptureWired: actions.browserCapture === 'screenshot',
+        browserPreviewFailureRecoveryWired: failureDetailsVisible && actions.browserFailureRecovery === 'reload',
+        browserPreviewContentActionWired: renderedPreviewVisible && actions.previewContentMode === 'rendered',
+        browserPreviewCloseReopenWired: emptyVisible && reopened && actions.closedSurfaceId === 'browser:new' && actions.reopenedSurfaceId === 'browser:new',
+      };
+    })()`,
+    true,
+  );
+  if (!narrow) return assertions;
+
+  webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+  webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const sheetClosedState = await webContents.executeJavaScript(
+    `(() => {
+      const dialog = document.querySelector('[role="dialog"]');
+      const reopenButton = document.querySelector('[aria-label="Open Browser and Preview"]');
+      const actions = window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {};
+      return {
+        actionRecorded: actions.sheetClosed === 'true',
+        dialogHidden: dialog instanceof HTMLElement
+          && (dialog.hidden || dialog.getAttribute('aria-hidden') === 'true' || getComputedStyle(dialog).display === 'none'),
+        focusRestored: document.activeElement === reopenButton,
+        taskReachable: document.querySelector('[data-acceptance-composer]') !== null,
+      };
+    })()`,
+    true,
+  );
+  webContents.sendInputEvent({ type: "rawKeyDown", keyCode: "Enter" });
+  webContents.sendInputEvent({ type: "char", keyCode: "Enter" });
+  webContents.sendInputEvent({ type: "keyUp", keyCode: "Enter" });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const sheetReopenedState = await webContents.executeJavaScript(
+    `(() => {
+      const dialog = document.querySelector('[role="dialog"]');
+      const actions = window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {};
+      return {
+        actionRecorded: actions.sheetReopened === 'true',
+        dialogVisible: dialog instanceof HTMLElement
+          && !dialog.hidden
+          && dialog.getAttribute('aria-hidden') !== 'true'
+          && getComputedStyle(dialog).display !== 'none',
+      };
+    })()`,
+    true,
+  );
+  process.stdout.write(
+    `Browser/Preview narrow sheet probe: ${JSON.stringify({ sheetClosedState, sheetReopenedState })}\n`,
+  );
+  return {
+    ...assertions,
+    browserPreviewSheetCloseReopenWired:
+      Object.values(sheetClosedState).every(Boolean) &&
+      Object.values(sheetReopenedState).every(Boolean),
+  };
+}
+
+async function probeFilePreviewInteraction(webContents) {
+  return webContents.executeJavaScript(
+    `(async () => {
+      document.querySelector('[aria-label="Show rendered markdown"]')?.click();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const actions = window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {};
+      return {
+        filePreviewContentActionWired:
+          actions.previewContentMode === 'rendered'
+          && document.querySelector('[aria-label="Rendered README.md content"]') !== null
+          && document.querySelector('[aria-label="Show markdown source"]') !== null,
+      };
+    })()`,
+    true,
+  );
+}
+
 function validateRendererState(state, scenario) {
   if (state.width !== scenario.width || state.height !== scenario.height) {
     throw new Error(
@@ -317,6 +511,25 @@ async function captureScenario(BrowserWindow, scenario, stagingDir) {
       rendererState.assertions = {
         ...rendererState.assertions,
         ...(await probeSymphonyInteractions(window.webContents)),
+      };
+    }
+    if (scenario.state === "browser-preview" || scenario.state === "browser-preview-narrow") {
+      const browserPreviewAssertions = await probeBrowserPreviewInteractions(
+        window.webContents,
+        scenario.state === "browser-preview-narrow",
+      );
+      process.stdout.write(
+        `Browser/Preview interaction probe ${scenario.scenario}: ${JSON.stringify(browserPreviewAssertions)}\n`,
+      );
+      rendererState.assertions = {
+        ...rendererState.assertions,
+        ...browserPreviewAssertions,
+      };
+    }
+    if (scenario.state === "file-preview") {
+      rendererState.assertions = {
+        ...rendererState.assertions,
+        ...(await probeFilePreviewInteraction(window.webContents)),
       };
     }
     const assertions = validateRendererState(rendererState, scenario);

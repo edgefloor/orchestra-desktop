@@ -44,15 +44,28 @@
     {
       "id": "browser-preview",
       "requiredFiles": [
+        "apps/desktop/scripts/capture-orchestra-acceptance.mjs",
         "apps/desktop/src/preview/BrowserSession.ts",
+        "apps/desktop/src/preview/Manager.ts",
         "apps/server/src/mcp/PreviewAutomationBroker.ts",
+        "apps/web/src/acceptance/BrowserPreviewAcceptanceSurface.tsx",
+        "apps/web/src/components/files/FilePreviewModeToggle.tsx",
+        "apps/web/src/components/preview/PreviewAutomationHosts.tsx",
+        "apps/web/src/components/preview/PreviewChromeRow.tsx",
         "apps/web/src/components/preview/PreviewPanel.tsx",
+        "apps/web/src/components/preview/PreviewUnreachable.tsx",
+        "apps/web/src/components/preview/PreviewView.tsx",
         "apps/web/src/components/preview/openPreviewSession.ts"
       ],
       "requiredTests": [
         "apps/desktop/src/preview/BrowserSession.test.ts",
+        "apps/desktop/src/preview/Manager.test.ts",
         "apps/server/src/mcp/PreviewAutomationBroker.test.ts",
-        "apps/web/src/components/preview/openPreviewSession.test.ts"
+        "apps/web/src/acceptance/BrowserPreviewAcceptanceSurface.test.tsx",
+        "apps/web/src/components/RightPanelTabs.test.tsx",
+        "apps/web/src/components/files/FilePreviewModeToggle.test.tsx",
+        "apps/web/src/components/preview/openPreviewSession.test.ts",
+        "scripts/verify-orchestra-acceptance.test.ts"
       ]
     },
     {

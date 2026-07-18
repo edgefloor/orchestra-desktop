@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - Contract tests generate isolated PNG fixtures.
+import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
@@ -132,13 +133,13 @@ afterEach(async () => {
 });
 
 describe("Orchestra workspace acceptance verifier", () => {
-  it("accepts the exact eight-scenario Product evidence contract", async () => {
+  it("accepts the exact eleven-scenario Product evidence contract", async () => {
     const { rootDir } = await makeFixture();
 
     await expect(verifyOrchestraAcceptance({ rootDir })).resolves.toBeUndefined();
   });
 
-  it("requires all eight scenarios in their sealed order", async () => {
+  it("requires all eleven scenarios in their sealed order", async () => {
     const { rootDir } = await makeFixture((manifest) => {
       manifest.screenshots.pop();
     });
@@ -239,6 +240,38 @@ describe("Orchestra workspace acceptance verifier", () => {
       const { rootDir } = await makeFixture(invalidCase.mutate);
       await expect(verifyOrchestraAcceptance({ rootDir })).rejects.toThrow(invalidCase.message);
     }
+  });
+
+  it("rejects a desktop tree that does not belong to the resolved source commit", async () => {
+    const { rootDir, manifest } = await makeFixture();
+    const git = (args: ReadonlyArray<string>): string =>
+      NodeChildProcess.execFileSync("git", args, {
+        cwd: rootDir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+
+    git(["init"]);
+    git(["add", "."]);
+    git([
+      "-c",
+      "user.name=Orchestra Acceptance",
+      "-c",
+      "user.email=acceptance@example.invalid",
+      "commit",
+      "-m",
+      "acceptance fixture",
+    ]);
+    manifest.desktop.commit = git(["rev-parse", "HEAD"]);
+    manifest.desktop.tree = "f".repeat(40);
+    await NodeFSP.writeFile(
+      NodePath.join(rootDir, acceptanceDirectory, "manifest.json"),
+      JSON.stringify(manifest),
+    );
+
+    await expect(verifyOrchestraAcceptance({ rootDir })).rejects.toThrow(
+      "manifest.desktop.tree does not match manifest.desktop.commit",
+    );
   });
 
   it("requires every scenario-specific semantic assertion to be exactly true", async () => {

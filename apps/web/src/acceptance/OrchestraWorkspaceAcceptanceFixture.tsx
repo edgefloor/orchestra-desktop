@@ -1,6 +1,6 @@
 import { EnvironmentId, ThreadId, type AutomationRunResult } from "@t3tools/contracts";
 import { BotIcon, CheckCircle2Icon, FolderGit2Icon, GitBranchIcon, SearchIcon } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { AutomationRunWorkspace } from "../components/chat/AutomationRunWorkspace";
 import { ChatComposerFrame } from "../components/chat/ChatComposerFrame";
@@ -9,6 +9,7 @@ import { RightPanelSheet } from "../components/RightPanelSheet";
 import { WorkspaceContextRail, WorkspaceTaskContextBar } from "../components/WorkspaceContextRail";
 import { WorkspaceTaskTabs } from "../components/WorkspaceTaskTabs";
 import { Button } from "../components/ui/button";
+import { BrowserPreviewAcceptanceSurface } from "./BrowserPreviewAcceptanceSurface";
 import {
   Sidebar,
   SidebarContent,
@@ -22,7 +23,10 @@ type AcceptanceState =
   | "attention-sheet"
   | "symphony"
   | "symphony-activity"
-  | "symphony-events";
+  | "symphony-events"
+  | "browser-preview"
+  | "browser-preview-narrow"
+  | "file-preview";
 
 declare global {
   interface Window {
@@ -303,6 +307,35 @@ function semanticAssertions(state: AcceptanceState): Readonly<Record<string, boo
       symphonyWorkspaceVisible: Boolean(symphony),
     });
   }
+  if (state.startsWith("browser-preview")) {
+    Object.assign(assertions, {
+      browserPreviewVisible:
+        document.querySelector('[aria-label="Task Browser and Preview"]') !== null,
+      browserPreviewTablistVisible:
+        document.querySelector('[aria-label="Open panel surfaces"]') !== null,
+      browserPreviewChromeVisible: document.querySelector("[data-preview-url-input]") !== null,
+      browserPreviewTaskAssociated:
+        document.querySelector('[data-task-association="acceptance-task"]') !== null,
+      browserPreviewResponsiveMode:
+        document
+          .querySelector("[data-preview-panel-mode]")
+          ?.getAttribute("data-preview-panel-mode") ===
+        (state === "browser-preview-narrow" ? "sheet" : "inline"),
+    });
+  }
+  if (state === "file-preview") {
+    Object.assign(assertions, {
+      filePreviewVisible: document.querySelector('[aria-label="README.md Preview"]') !== null,
+      filePreviewActionVisible:
+        document.querySelector('[aria-label="Show rendered markdown"]') !== null,
+      filePreviewTaskAssociated:
+        document.querySelector('[data-task-association="acceptance-task"]') !== null,
+      filePreviewResponsiveMode:
+        document
+          .querySelector("[data-preview-panel-mode]")
+          ?.getAttribute("data-preview-panel-mode") === "inline",
+    });
+  }
   return assertions;
 }
 
@@ -311,6 +344,8 @@ export function OrchestraWorkspaceAcceptanceFixture({
 }: {
   readonly state: AcceptanceState;
 }) {
+  const openBrowserPreviewButtonRef = useRef<HTMLButtonElement>(null);
+  const [browserPreviewSheetOpen, setBrowserPreviewSheetOpen] = useState(true);
   const symphonyView =
     state === "symphony-activity" ? "activity" : state === "symphony-events" ? "events" : "issues";
   useEffect(() => {
@@ -416,12 +451,51 @@ export function OrchestraWorkspaceAcceptanceFixture({
               </div>
             </ContextRail>
           ) : null}
+          {state === "browser-preview" || state === "file-preview" ? (
+            <BrowserPreviewAcceptanceSurface
+              initialSurface={state === "file-preview" ? "file" : "browser"}
+              mode="inline"
+            />
+          ) : null}
         </div>
       </SidebarInset>
       {state === "attention-sheet" ? (
         <RightPanelSheet open onClose={() => undefined}>
           <ContextRail variant="sheet" />
         </RightPanelSheet>
+      ) : null}
+      {state === "browser-preview-narrow" ? (
+        <>
+          <Button
+            ref={openBrowserPreviewButtonRef}
+            aria-label="Open Browser and Preview"
+            className="fixed bottom-4 right-4 z-40"
+            onClick={() => {
+              setBrowserPreviewSheetOpen(true);
+              window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                sheetReopened: "true",
+              };
+            }}
+            size="sm"
+            variant="outline"
+          >
+            Open Browser and Preview
+          </Button>
+          <RightPanelSheet
+            open={browserPreviewSheetOpen}
+            onClose={() => {
+              setBrowserPreviewSheetOpen(false);
+              requestAnimationFrame(() => openBrowserPreviewButtonRef.current?.focus());
+              window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                sheetClosed: "true",
+              };
+            }}
+          >
+            <BrowserPreviewAcceptanceSurface mode="sheet" />
+          </RightPanelSheet>
+        </>
       ) : null}
     </SidebarProvider>
   );

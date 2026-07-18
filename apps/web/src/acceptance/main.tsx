@@ -13,7 +13,10 @@ const state =
   requestedState === "attention-sheet" ||
   requestedState === "symphony" ||
   requestedState === "symphony-activity" ||
-  requestedState === "symphony-events"
+  requestedState === "symphony-events" ||
+  requestedState === "browser-preview" ||
+  requestedState === "browser-preview-narrow" ||
+  requestedState === "file-preview"
     ? requestedState
     : "workspace";
 document.documentElement.classList.toggle("dark", theme === "dark");

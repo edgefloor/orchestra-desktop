@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 // @effect-diagnostics nodeBuiltinImport:off - Standalone repository verifier.
+import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
@@ -12,6 +13,12 @@ const DEFAULT_ROOT = NodePath.resolve(
 );
 const DEFAULT_MANIFEST = "docs/acceptance/orchestra-workspace/manifest.json";
 const ACCEPTANCE_DIRECTORY = "docs/acceptance/orchestra-workspace";
+const REQUIRED_BROWSER_PREVIEW_SOURCE_FILES = [
+  "apps/desktop/scripts/capture-orchestra-acceptance.mjs",
+  "apps/web/src/acceptance/BrowserPreviewAcceptanceSurface.tsx",
+  "apps/web/src/components/files/FilePreviewModeToggle.tsx",
+  "scripts/verify-orchestra-acceptance.ts",
+] as const;
 
 interface ScenarioContract {
   readonly width: number;
@@ -22,7 +29,10 @@ interface ScenarioContract {
     | "attention-sheet"
     | "symphony"
     | "symphony-activity"
-    | "symphony-events";
+    | "symphony-events"
+    | "browser-preview"
+    | "browser-preview-narrow"
+    | "file-preview";
   readonly assertions: ReadonlyArray<string>;
 }
 
@@ -121,6 +131,68 @@ export const ORCHESTRA_ACCEPTANCE_SCENARIOS = {
       "wideLayoutActive",
     ].sort(),
   },
+  "browser-preview-1440x900-dark": {
+    width: 1440,
+    height: 900,
+    theme: "dark",
+    state: "browser-preview",
+    assertions: [
+      ...WORKSPACE_ASSERTIONS,
+      "browserPreviewVisible",
+      "browserPreviewTablistVisible",
+      "browserPreviewChromeVisible",
+      "browserPreviewTaskAssociated",
+      "browserPreviewResponsiveMode",
+      "browserPreviewTabKeyboardNavigation",
+      "browserPreviewAddressSubmissionWired",
+      "browserPreviewNavigationWired",
+      "browserPreviewAnnotationWired",
+      "browserPreviewCaptureWired",
+      "browserPreviewFailureRecoveryWired",
+      "browserPreviewContentActionWired",
+      "browserPreviewCloseReopenWired",
+      "wideLayoutActive",
+    ].sort(),
+  },
+  "browser-preview-1024x768-dark": {
+    width: 1024,
+    height: 768,
+    theme: "dark",
+    state: "browser-preview-narrow",
+    assertions: [
+      ...WORKSPACE_ASSERTIONS,
+      "browserPreviewVisible",
+      "browserPreviewTablistVisible",
+      "browserPreviewChromeVisible",
+      "browserPreviewTaskAssociated",
+      "browserPreviewResponsiveMode",
+      "browserPreviewTabKeyboardNavigation",
+      "browserPreviewAddressSubmissionWired",
+      "browserPreviewNavigationWired",
+      "browserPreviewAnnotationWired",
+      "browserPreviewCaptureWired",
+      "browserPreviewFailureRecoveryWired",
+      "browserPreviewContentActionWired",
+      "browserPreviewCloseReopenWired",
+      "browserPreviewSheetCloseReopenWired",
+      "narrowLayoutActive",
+    ].sort(),
+  },
+  "file-preview-1440x900-dark": {
+    width: 1440,
+    height: 900,
+    theme: "dark",
+    state: "file-preview",
+    assertions: [
+      ...WORKSPACE_ASSERTIONS,
+      "filePreviewVisible",
+      "filePreviewActionVisible",
+      "filePreviewTaskAssociated",
+      "filePreviewResponsiveMode",
+      "filePreviewContentActionWired",
+      "wideLayoutActive",
+    ].sort(),
+  },
 } as const satisfies Readonly<Record<string, ScenarioContract>>;
 
 export const ORCHESTRA_ACCEPTANCE_SCENARIO_NAMES = Object.freeze(
@@ -174,6 +246,59 @@ function requireSafeRelativePath(value: unknown, context: string): asserts value
 
 function sha256(bytes: Uint8Array): string {
   return NodeCrypto.createHash("sha256").update(bytes).digest("hex");
+}
+
+function runGit(rootDir: string, args: ReadonlyArray<string>): string {
+  return NodeChildProcess.execFileSync("git", args, {
+    cwd: rootDir,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+async function verifyDesktopSourceIdentity(
+  rootDir: string,
+  commit: string,
+  tree: string,
+): Promise<void> {
+  try {
+    await NodeFSP.stat(NodePath.join(rootDir, ".git"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+
+  try {
+    runGit(rootDir, ["rev-parse", "--verify", `${commit}^{commit}`]);
+  } catch {
+    throw new Error("manifest.desktop.commit does not resolve to a commit in this repository");
+  }
+
+  let resolvedTree: string;
+  try {
+    resolvedTree = runGit(rootDir, ["rev-parse", `${commit}^{tree}`]);
+  } catch {
+    throw new Error("manifest.desktop.commit tree could not be resolved in this repository");
+  }
+  if (resolvedTree !== tree) {
+    throw new Error("manifest.desktop.tree does not match manifest.desktop.commit");
+  }
+
+  try {
+    runGit(rootDir, ["merge-base", "--is-ancestor", commit, "HEAD"]);
+  } catch {
+    throw new Error("manifest.desktop.commit must be an ancestor of repository HEAD");
+  }
+
+  for (const sourceFile of REQUIRED_BROWSER_PREVIEW_SOURCE_FILES) {
+    try {
+      runGit(rootDir, ["cat-file", "-e", `${commit}:${sourceFile}`]);
+    } catch {
+      throw new Error(
+        `manifest.desktop.commit must contain Browser/Preview evidence source ${sourceFile}`,
+      );
+    }
+  }
 }
 
 export function readPngDimensions(
@@ -244,6 +369,7 @@ export async function verifyOrchestraAcceptance(
   }
   requireGitObjectId(desktop.commit, "manifest.desktop.commit");
   requireGitObjectId(desktop.tree, "manifest.desktop.tree");
+  await verifyDesktopSourceIdentity(rootDir, desktop.commit, desktop.tree);
 
   requireFields(typedManifest.capture, ["electronVersion", "platform"], "manifest.capture");
   const capture = typedManifest.capture as Record<string, unknown>;

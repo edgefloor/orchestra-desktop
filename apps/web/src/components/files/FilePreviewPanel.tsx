@@ -11,7 +11,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronRight, Code2, Eye, FolderTree, Globe2, LoaderCircle } from "lucide-react";
+import { ChevronRight, FolderTree, Globe2, LoaderCircle } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -52,6 +52,7 @@ import { installFileEditorDismissal } from "./fileEditorDismissal";
 import { LocalCommentAnnotation } from "./LocalCommentAnnotation";
 import { projectFileCacheKey } from "./fileContentRevision";
 import { fileBreadcrumbs } from "./filePath";
+import { FilePreviewModeToggle } from "./FilePreviewModeToggle";
 import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
 import { FileSaveCoordinator } from "./fileSaveCoordinator";
 import {
@@ -741,30 +742,15 @@ export default function FilePreviewPanel({
             />
           ) : null}
           {isMarkdown ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Toggle
-                    className="shrink-0"
-                    pressed={renderMarkdown}
-                    onPressedChange={(pressed) => {
-                      setMarkdownView({
-                        path: pressed ? relativePath : null,
-                        revealRequestId: pressed ? revealRequestId : null,
-                      });
-                    }}
-                    aria-label={renderMarkdown ? "Show markdown source" : "Show rendered markdown"}
-                    variant="ghost"
-                    size="sm"
-                  >
-                    {renderMarkdown ? <Code2 className="size-3.5" /> : <Eye className="size-3.5" />}
-                  </Toggle>
-                }
-              />
-              <TooltipPopup>
-                {renderMarkdown ? "Show markdown source" : "Show rendered markdown"}
-              </TooltipPopup>
-            </Tooltip>
+            <FilePreviewModeToggle
+              rendered={renderMarkdown}
+              onRenderedChange={(pressed) => {
+                setMarkdownView({
+                  path: pressed ? relativePath : null,
+                  revealRequestId: pressed ? revealRequestId : null,
+                });
+              }}
+            />
           ) : null}
           {canOpenInBrowser ? (
             <Tooltip>
