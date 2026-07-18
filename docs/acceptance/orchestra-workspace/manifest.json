@@ -4,8 +4,8 @@
   "role": "product-acceptance-evidence",
   "desktop": {
     "repository": "edgefloor/orchestra-desktop",
-    "commit": "36d00e1e32b395ba4bb8ddc0902c0a26712d7df3",
-    "tree": "d870d561e29f0806e9a0d9bfefdc19fa79d0a53b"
+    "commit": "01a6df3d451143f97edb917b8b6015c09120daa5",
+    "tree": "8d88dcc440af830df807d952c395921fd7cfa0fe"
   },
   "capture": {
     "electronVersion": "41.5.0",
@@ -122,7 +122,7 @@
       "deviceScaleFactor": 1,
       "theme": "dark",
       "state": "symphony",
-      "sha256": "d875c29fe20ba86c5b1364dd5f608a8e8b60ee840ecd865cb30c0d5f793f5d8c",
+      "sha256": "9359c89838b7870e9a72b1bf6b00e54f0c09ed587ed53737344d9159f658d0a9",
       "assertions": {
         "activeTaskVisible": true,
         "composerVisible": true,
@@ -148,7 +148,7 @@
       "deviceScaleFactor": 1,
       "theme": "dark",
       "state": "symphony-activity",
-      "sha256": "cae9ac6239522fa7fabed654d65adeebaa7b2d63a69c70019ac333f1fa005be4",
+      "sha256": "53bd101b206e28df85cd3ca6fd18c6c79bdfd6e86341cbff95df10b95c53e922",
       "assertions": {
         "activeTaskVisible": true,
         "composerVisible": true,
@@ -170,7 +170,7 @@
       "deviceScaleFactor": 1,
       "theme": "dark",
       "state": "symphony-events",
-      "sha256": "3ecfbce0f5197728c3d0d0f00aff8c09f6aeae6ea9017ea3f6540a1e73a77fa9",
+      "sha256": "9be5d0377f6e9d4d045bcb5ea084c17aede022876efc4117b1fb79b65583966e",
       "assertions": {
         "activeTaskVisible": true,
         "composerVisible": true,
@@ -192,7 +192,7 @@
       "deviceScaleFactor": 1,
       "theme": "dark",
       "state": "symphony-recovery",
-      "sha256": "2394aa8eb3da73d328a808d8e01029fc619a3b6bd652e743648d42caab9421cb",
+      "sha256": "4cfa2b9f1596b3cc87f94eef9a48f31379c73458f7b4eecfbeab780442093001",
       "assertions": {
         "activeTaskVisible": true,
         "composerVisible": true,
@@ -221,7 +221,7 @@
       "deviceScaleFactor": 1,
       "theme": "dark",
       "state": "symphony-recovery",
-      "sha256": "c21bd82c5ea181e5a52ce06a8de6ee9e03e95bbdc323b275e7b4a81cad733db2",
+      "sha256": "d40fe8eb1c8380d2e24307014f7bebe8ce7eaba980a1d47a8edd04e9da341029",
       "assertions": {
         "activeTaskVisible": true,
         "composerVisible": true,
@@ -239,6 +239,34 @@
         "symphonyScrollsInternally": true,
         "symphonyStaleFeedbackVisible": true,
         "symphonyWorkspaceVisible": true,
+        "taskTabsReachable": true
+      }
+    },
+    {
+      "scenario": "selected-issue-1024x768-dark",
+      "file": "docs/acceptance/orchestra-workspace/selected-issue-1024x768-dark.png",
+      "width": 1024,
+      "height": 768,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "state": "selected-issue",
+      "sha256": "348f3e0af1d89e3213100a12235f82b25c4a6877e98656400b4e4f8cf5f3a1ac",
+      "assertions": {
+        "activeTaskVisible": true,
+        "composerVisible": true,
+        "contextTabsReachable": true,
+        "issueActivityRegionVisible": true,
+        "narrowLayoutActive": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "selectedIssueActionsNamedFocusable": true,
+        "selectedIssueComposerReachable": true,
+        "selectedIssueContextBounded": true,
+        "selectedIssueContextScrollsInternally": true,
+        "selectedIssueNavigationActionsWired": true,
+        "selectedIssueOpenWired": true,
+        "selectedIssueParentExact": true,
+        "selectedIssueSteeringWired": true,
         "taskTabsReachable": true
       }
     },
