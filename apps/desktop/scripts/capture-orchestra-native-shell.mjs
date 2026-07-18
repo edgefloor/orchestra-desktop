@@ -382,6 +382,49 @@ export async function executeNativeShellRendererStep(renderer, source, context) 
   }
 }
 
+export function createNativeShellResponsesRequestJournal({
+  maxEntries = 8,
+  now = () => Date.now(),
+} = {}) {
+  const entries = [];
+  return Object.freeze({
+    begin({ requestIndex, method, pathname }) {
+      if (entries.length >= maxEntries) {
+        return Object.freeze({ addBytes() {}, finish() {} });
+      }
+      const startedAt = now();
+      const entry = {
+        requestIndex: Number.isInteger(requestIndex) ? requestIndex : null,
+        method: String(method ?? "").slice(0, 16),
+        pathname: String(pathname ?? "").slice(0, 160),
+        status: "started",
+        bytes: 0,
+        elapsedMs: 0,
+      };
+      entries.push(entry);
+      let finished = false;
+      return Object.freeze({
+        addBytes(byteLength) {
+          if (finished) return;
+          entry.bytes = Math.min(
+            Number.MAX_SAFE_INTEGER,
+            entry.bytes + Math.max(0, Number(byteLength) || 0),
+          );
+        },
+        finish(status) {
+          if (finished) return;
+          finished = true;
+          entry.status = ["ended", "aborted", "error"].includes(status) ? status : "error";
+          entry.elapsedMs = Math.min(300_000, Math.max(0, Math.round(now() - startedAt)));
+        },
+      });
+    },
+    snapshot() {
+      return entries.map((entry) => ({ ...entry }));
+    },
+  });
+}
+
 function scrubProviderCredentials(environment) {
   for (const key of Object.keys(environment)) {
     if (
@@ -1271,6 +1314,65 @@ function boundedThreadSessionObservation(snapshot) {
   };
 }
 
+export async function readNativeDogfoodRunStateSummaries(repository) {
+  const runsDirectory = NodePath.join(repository, ".codex", "orchestra", "runs");
+  const entries = await NodeFSP.readdir(runsDirectory, { withFileTypes: true }).catch(() => []);
+  return Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .slice(0, 8)
+      .map(async (entry) => {
+        try {
+          const statePath = NodePath.join(runsDirectory, entry.name, "state.json");
+          const stateStat = await NodeFSP.stat(statePath);
+          if (stateStat.size > 65_536) {
+            throw new Error(`state.json exceeded 65536 bytes (${stateStat.size})`);
+          }
+          const state = JSON.parse(await NodeFSP.readFile(statePath, "utf8"));
+          const rawSteps = Array.isArray(state.steps)
+            ? state.steps
+            : Object.values(state.steps ?? {});
+          return {
+            runId: String(state.runId ?? state.run_id ?? entry.name).slice(0, 160),
+            status: String(state.status ?? "unknown").slice(0, 80),
+            nextAction: JSON.stringify(state.nextAction ?? state.next_action ?? null).slice(0, 320),
+            steps: rawSteps.slice(0, 16).map((step) => ({
+              id: String(step?.id ?? step?.stepId ?? step?.step_id ?? "unknown").slice(0, 120),
+              status: String(step?.status ?? "unknown").slice(0, 80),
+            })),
+          };
+        } catch (error) {
+          return {
+            runId: entry.name.slice(0, 160),
+            readError: String(error instanceof Error ? error.message : error).slice(0, 320),
+          };
+        }
+      }),
+  );
+}
+
+async function collectNativeDogfoodTimeoutDiagnostic({
+  baseUrl,
+  token,
+  targetThreadId,
+  repository,
+  requestCounter,
+  requestJournal,
+}) {
+  const thread = await fetchThreadSnapshot(baseUrl, token, targetThreadId)
+    .then(boundedThreadSessionObservation)
+    .catch((error) => ({
+      readError: String(error instanceof Error ? error.message : error).slice(0, 320),
+    }));
+  return {
+    responsesRequestCount: requestCounter.count,
+    requests: requestJournal.snapshot(),
+    thread,
+    runs: await readNativeDogfoodRunStateSummaries(repository),
+  };
+}
+
 async function runElectronChild() {
   const { app, BrowserWindow, webContents } = await import("electron");
   const runtimeDirectory = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_RUNTIME_DIR;
@@ -1331,6 +1433,7 @@ async function runElectronChild() {
   });
 
   const responsesRequestCounter = createNativeShellRequestCountWaiter();
+  const responsesRequestJournal = createNativeShellResponsesRequestJournal();
   const responsesServer = NodeHttp.createServer((request, response) => {
     const url = new URL(request.url ?? "/", `http://127.0.0.1:${responsesPort}`);
     if (request.method === "GET" && url.pathname === "/v1/models") {
@@ -1338,9 +1441,20 @@ async function runElectronChild() {
       response.end(JSON.stringify({ object: "list", data: [] }));
       return;
     }
+    const requestReceipt = responsesRequestJournal.begin({
+      requestIndex: responsesRequestCounter.count,
+      method: request.method,
+      pathname: url.pathname,
+    });
     const chunks = [];
-    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("data", (chunk) => {
+      chunks.push(chunk);
+      requestReceipt.addBytes(chunk.byteLength);
+    });
+    request.on("aborted", () => requestReceipt.finish("aborted"));
+    request.on("error", () => requestReceipt.finish("error"));
     request.on("end", () => {
+      requestReceipt.finish("ended");
       try {
         const matched = matchNativeDogfoodResponsesRequest(responsesRequestCounter.count, {
           method: request.method,
@@ -1561,7 +1675,22 @@ async function runElectronChild() {
     if (!Number.isInteger(waitingTurnReceipt?.sequence)) {
       throw new Error("native dogfood waiting turn did not return a typed receipt sequence");
     }
-    await responsesRequestCounter.waitFor(3, "native dogfood waiting workflow");
+    try {
+      await responsesRequestCounter.waitFor(3, "native dogfood waiting workflow");
+    } catch (error) {
+      const diagnostic = await collectNativeDogfoodTimeoutDiagnostic({
+        baseUrl: bootstrap.bootstrap.httpBaseUrl,
+        token: bootstrap.token,
+        targetThreadId: threadId,
+        repository: dogfoodRepository,
+        requestCounter: responsesRequestCounter,
+        requestJournal: responsesRequestJournal,
+      });
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${message}; bounded diagnostic ${JSON.stringify(diagnostic).slice(0, 4_000)}`,
+      );
+    }
     const waitingAssistantEvent = await awaitNativeShellAssistantMessageEvent({
       baseUrl: bootstrap.bootstrap.httpBaseUrl,
       token: bootstrap.token,

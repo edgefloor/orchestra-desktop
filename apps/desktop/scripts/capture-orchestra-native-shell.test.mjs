@@ -16,8 +16,10 @@ import {
   NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS,
   NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES,
   NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS,
+  createNativeShellResponsesRequestJournal,
   executeNativeShellRendererStep,
   prepareNativeShellGitFixture,
+  readNativeDogfoodRunStateSummaries,
   withNativeShellEventTimeout,
 } from "./capture-orchestra-native-shell.mjs";
 
@@ -51,6 +53,63 @@ import {
 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 
 describe("native-shell acceptance capture contract", () => {
+  it("journals Responses request timing without retaining bodies", () => {
+    let now = 1_000;
+    const journal = createNativeShellResponsesRequestJournal({
+      maxEntries: 1,
+      now: () => now,
+    });
+    const request = journal.begin({
+      requestIndex: 2,
+      method: "POST-TOO-LONG-FOR-THE-BOUND",
+      pathname: `/${"p".repeat(300)}`,
+    });
+    request.addBytes(64);
+    now = 1_125;
+    request.finish("ended");
+    journal.begin({ requestIndex: 3, method: "POST", pathname: "/ignored" });
+
+    expect(journal.snapshot()).toEqual([
+      {
+        requestIndex: 2,
+        method: "POST-TOO-LONG-FO",
+        pathname: `/${"p".repeat(159)}`,
+        status: "ended",
+        bytes: 64,
+        elapsedMs: 125,
+      },
+    ]);
+    expect(JSON.stringify(journal.snapshot())).not.toContain("body");
+  });
+
+  it("summarizes bounded runtime-owned workflow state without retaining outputs", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "native-run-summary-"));
+    const runs = NodePath.join(root, ".codex", "orchestra", "runs");
+    try {
+      await NodeFSP.mkdir(NodePath.join(runs, "run-1"), { recursive: true });
+      await NodeFSP.writeFile(
+        NodePath.join(runs, "run-1", "state.json"),
+        JSON.stringify({
+          run_id: "run-1",
+          status: "waiting",
+          next_action: { type: "approval" },
+          steps: [{ step_id: "child", status: "completed", output: "not retained" }],
+        }),
+      );
+
+      expect(await readNativeDogfoodRunStateSummaries(root)).toEqual([
+        {
+          runId: "run-1",
+          status: "waiting",
+          nextAction: '{"type":"approval"}',
+          steps: [{ id: "child", status: "completed" }],
+        },
+      ]);
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("attributes renderer script failures to a bounded native capture step", async () => {
     const renderer = {
       executeJavaScript: () => Promise.reject(new Error(`Script failed ${"y".repeat(1_000)}`)),
