@@ -53,15 +53,21 @@ import {
 describe("native-shell acceptance capture contract", () => {
   it("attributes renderer script failures to a bounded native capture step", async () => {
     const renderer = {
-      executeJavaScript: () => Promise.reject(new Error("Script failed to execute")),
+      executeJavaScript: () => Promise.reject(new Error(`Script failed ${"y".repeat(1_000)}`)),
       getURL: () => `t3code://app/${"x".repeat(300)}`,
     };
 
-    await expect(
-      executeNativeShellRendererStep(renderer, "window.fixture()", "attach guard probe"),
-    ).rejects.toThrow(
-      /^attach guard probe renderer script failed at .{1,256}: Script failed to execute$/,
-    );
+    const failure = await executeNativeShellRendererStep(
+      renderer,
+      "window.fixture()",
+      `attach guard probe ${"z".repeat(300)}`,
+    ).catch((error) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toMatch(/^attach guard probe z+… renderer script failed at .+…: /);
+    expect(failure.message).not.toContain("x".repeat(300));
+    expect(failure.message).not.toContain("y".repeat(1_000));
+    expect(failure.message.length).toBeLessThanOrEqual(160 + 27 + 256 + 2 + 512);
   });
 
   it("accepts assistant text only after typed deltas reach the matching terminal event", () => {

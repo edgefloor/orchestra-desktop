@@ -371,9 +371,14 @@ export async function executeNativeShellRendererStep(renderer, source, context) 
   try {
     return await renderer.executeJavaScript(source, true);
   } catch (error) {
-    const rendererUrl = renderer.getURL().slice(0, 256);
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`${context} renderer script failed at ${rendererUrl}: ${message}`);
+    const bound = (value, maxChars) => {
+      const normalized = String(value);
+      return normalized.length <= maxChars ? normalized : `${normalized.slice(0, maxChars - 1)}…`;
+    };
+    const boundedContext = bound(context, 160);
+    const rendererUrl = bound(renderer.getURL(), 256);
+    const message = bound(error instanceof Error ? error.message : error, 512);
+    throw new Error(`${boundedContext} renderer script failed at ${rendererUrl}: ${message}`);
   }
 }
 
