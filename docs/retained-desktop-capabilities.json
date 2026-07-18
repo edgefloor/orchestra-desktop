@@ -45,6 +45,7 @@
       "id": "browser-preview",
       "requiredFiles": [
         "apps/desktop/scripts/capture-orchestra-acceptance.mjs",
+        "apps/desktop/scripts/capture-orchestra-native-shell.mjs",
         "apps/desktop/src/preview/BrowserSession.ts",
         "apps/desktop/src/preview/Manager.ts",
         "apps/server/src/mcp/PreviewAutomationBroker.ts",
@@ -55,9 +56,11 @@
         "apps/web/src/components/preview/PreviewPanel.tsx",
         "apps/web/src/components/preview/PreviewUnreachable.tsx",
         "apps/web/src/components/preview/PreviewView.tsx",
-        "apps/web/src/components/preview/openPreviewSession.ts"
+        "apps/web/src/components/preview/openPreviewSession.ts",
+        "scripts/verify-orchestra-native-shell.ts"
       ],
       "requiredTests": [
+        "apps/desktop/scripts/capture-orchestra-native-shell.test.mjs",
         "apps/desktop/src/preview/BrowserSession.test.ts",
         "apps/desktop/src/preview/Manager.test.ts",
         "apps/server/src/mcp/PreviewAutomationBroker.test.ts",
@@ -65,7 +68,8 @@
         "apps/web/src/components/RightPanelTabs.test.tsx",
         "apps/web/src/components/files/FilePreviewModeToggle.test.tsx",
         "apps/web/src/components/preview/openPreviewSession.test.ts",
-        "scripts/verify-orchestra-acceptance.test.ts"
+        "scripts/verify-orchestra-acceptance.test.ts",
+        "scripts/verify-orchestra-native-shell.test.ts"
       ]
     },
     {
