@@ -340,6 +340,14 @@ describe("native-shell acceptance capture contract", () => {
     );
   });
 
+  it("retains an object-shaped primary failure without emitting its nested detail", () => {
+    const original = { code: "NATIVE_CAPTURE_FAILED", detail: "private nested detail" };
+    const failure = normalizeNativeShellFailure(original);
+
+    expect(failure.cause).toBe(original);
+    expect(formatNativeShellFailureForOutput(failure)).not.toContain(original.detail);
+  });
+
   it("accepts assistant text only after typed deltas reach the matching terminal event", () => {
     const event = (messageId, text, streaming) => ({
       kind: "event",

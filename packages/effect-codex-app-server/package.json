@@ -22,10 +22,6 @@
     "./errors": {
       "types": "./src/errors.ts",
       "import": "./src/errors.ts"
-    },
-    "./diagnostics": {
-      "types": "./src/diagnostics.ts",
-      "import": "./src/diagnostics.ts"
     }
   },
   "scripts": {

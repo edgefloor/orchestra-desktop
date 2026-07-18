@@ -528,6 +528,7 @@ export function normalizeNativeShellFailure(value) {
   if (value instanceof Error) return value;
   return new Error(
     `native-shell capture failed with non-Error value: ${truncateDiagnosticText(String(value), 512)}`,
+    { cause: value },
   );
 }
 
