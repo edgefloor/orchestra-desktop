@@ -1314,7 +1314,7 @@ async function addRightPanelSurface(
   return observeActiveRightPanelSurface(renderer, expectedTitle, `active ${label} surface`);
 }
 
-function boundedThreadSessionObservation(snapshot) {
+export function boundedThreadSessionObservation(snapshot, { includeLastError = false } = {}) {
   const session = snapshot?.thread?.session ?? null;
   return {
     snapshotSequence: snapshot?.snapshotSequence ?? null,
@@ -1328,6 +1328,16 @@ function boundedThreadSessionObservation(snapshot) {
             runtimeMode: session.runtimeMode ?? null,
             activeTurnId: session.activeTurnId ?? null,
             hasLastError: typeof session.lastError === "string" && session.lastError.length > 0,
+            ...(includeLastError
+              ? {
+                  lastError:
+                    typeof session.lastError === "string"
+                      ? session.lastError.slice(0, 1_000)
+                      : null,
+                  lastErrorTruncated:
+                    typeof session.lastError === "string" && session.lastError.length > 1_000,
+                }
+              : {}),
             updatedAt: session.updatedAt ?? null,
           },
   };
@@ -1381,7 +1391,7 @@ async function collectNativeDogfoodTimeoutDiagnostic({
 }) {
   return withNativeShellDiagnosticDeadline(async (signal) => {
     const thread = await fetchThreadSnapshot(baseUrl, token, targetThreadId, signal)
-      .then(boundedThreadSessionObservation)
+      .then((snapshot) => boundedThreadSessionObservation(snapshot, { includeLastError: true }))
       .catch((error) => ({
         readError: String(error instanceof Error ? error.message : error).slice(0, 320),
       }));

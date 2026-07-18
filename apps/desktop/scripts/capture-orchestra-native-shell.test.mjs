@@ -16,6 +16,7 @@ import {
   NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS,
   NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES,
   NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS,
+  boundedThreadSessionObservation,
   createNativeShellResponsesRequestJournal,
   executeNativeShellRendererStep,
   prepareNativeShellGitFixture,
@@ -54,6 +55,29 @@ import {
 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 
 describe("native-shell acceptance capture contract", () => {
+  it("includes provider failure text only for an explicitly bounded diagnostic", () => {
+    const snapshot = {
+      snapshotSequence: 8,
+      thread: {
+        session: {
+          status: "ready",
+          lastError: `provider failed ${"x".repeat(2_000)}`,
+        },
+      },
+    };
+
+    expect(boundedThreadSessionObservation(snapshot).session).not.toHaveProperty("lastError");
+    expect(
+      boundedThreadSessionObservation(snapshot, { includeLastError: true }).session,
+    ).toMatchObject({
+      hasLastError: true,
+      lastErrorTruncated: true,
+    });
+    expect(
+      boundedThreadSessionObservation(snapshot, { includeLastError: true }).session.lastError,
+    ).toHaveLength(1_000);
+  });
+
   it("bounds a never-settling timeout diagnostic and aborts its snapshot work", async () => {
     let signal;
     const diagnostic = await withNativeShellDiagnosticDeadline(
