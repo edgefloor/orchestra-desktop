@@ -376,17 +376,32 @@ export async function executeNativeShellRendererStep(
   try {
     return await renderer.executeJavaScript(source, userGesture);
   } catch (error) {
-    const bound = (value, maxChars) => {
-      const normalized = String(value);
-      return normalized.length <= maxChars ? normalized : `${normalized.slice(0, maxChars - 1)}…`;
-    };
-    const boundedContext = bound(context, 160);
-    const rendererUrl = bound(renderer.getURL(), 256);
-    const message = bound(error instanceof Error ? error.message : error, 512);
+    const boundedContext = boundNativeShellDiagnostic(context, 160);
+    let rendererUrl = "<renderer-url-unavailable>";
+    try {
+      rendererUrl = boundNativeShellDiagnostic(renderer.getURL(), 256);
+    } catch {}
+    const message = boundNativeShellDiagnostic(error instanceof Error ? error.message : error, 512);
     throw new Error(`${boundedContext} renderer script failed at ${rendererUrl}: ${message}`, {
       cause: error,
     });
   }
+}
+
+export function boundNativeShellDiagnostic(value, maxChars) {
+  const normalized = String(value);
+  if (normalized.length <= maxChars) return normalized;
+  if (maxChars <= 0) return "";
+  const sliced = normalized.slice(0, maxChars - 1);
+  const lastCodeUnit = sliced.charCodeAt(sliced.length - 1);
+  const completePrefix =
+    lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff ? sliced.slice(0, -1) : sliced;
+  return `${completePrefix}…`;
+}
+
+export function formatNativeShellFailureForOutput(error) {
+  const diagnostic = error instanceof Error ? (error.stack ?? error.message) : error;
+  return boundNativeShellDiagnostic(diagnostic, 4_096);
 }
 
 export function withNativeShellRendererDiagnostics(renderer) {
@@ -396,7 +411,10 @@ export function withNativeShellRendererDiagnostics(renderer) {
       if (property === "executeJavaScript") {
         return async (source, userGesture) => {
           scriptSequence += 1;
-          const sourceLabel = String(source).replace(/\s+/g, " ").trim().slice(0, 120);
+          const sourceLabel = boundNativeShellDiagnostic(
+            String(source).replace(/\s+/g, " ").trim(),
+            120,
+          );
           return executeNativeShellRendererStep(
             target,
             source,
@@ -416,6 +434,63 @@ export async function destroyNativeShellWindow(mainWindow) {
   mainWindow.destroy();
   await new Promise((resolve) => setImmediate(resolve));
   return true;
+}
+
+export async function settleNativeShellChildCleanup({
+  mainWindow,
+  guestServer,
+  responsesServer,
+  manifestWritten,
+  runtimeDirectory,
+  evidenceDirectory,
+  app,
+  cleanupFailedCapture = cleanupFailedNativeShellCapture,
+}) {
+  const failures = [];
+  const settle = async (step, operation) => {
+    try {
+      await operation();
+    } catch (error) {
+      failures.push({ step, error });
+    }
+  };
+  const closeServer = (server) =>
+    new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+
+  await settle("renderer-window", () => destroyNativeShellWindow(mainWindow));
+  await Promise.all([
+    settle("guest-server", () => closeServer(guestServer)),
+    settle("responses-server", () => closeServer(responsesServer)),
+  ]);
+  if (!manifestWritten) {
+    await settle("failed-capture", () =>
+      cleanupFailedCapture({
+        runtimeDirectory,
+        evidenceDirectory,
+        removeRuntime: false,
+      }),
+    );
+  }
+  await settle("electron-app", () => Promise.resolve(app.quit()));
+  return failures;
+}
+
+export function resolveNativeShellChildFailure(primaryFailure, cleanupFailures) {
+  if (cleanupFailures.length === 0) {
+    return { failure: primaryFailure, cleanupDiagnostic: null };
+  }
+  const cleanupError = new Error(
+    `native-shell child cleanup failed at ${cleanupFailures.map(({ step }) => step).join(", ")}`,
+    { cause: cleanupFailures[0].error },
+  );
+  return primaryFailure
+    ? {
+        failure: primaryFailure,
+        cleanupDiagnostic: formatNativeShellFailureForOutput(cleanupError),
+      }
+    : { failure: cleanupError, cleanupDiagnostic: null };
 }
 
 export function createNativeShellResponsesRequestJournal({
@@ -1552,6 +1627,8 @@ async function runElectronChild() {
 
   let manifestWritten = false;
   let mainWindow = null;
+  let primaryFailure = null;
+  let terminalFailure = null;
   try {
     await import(NodeURL.pathToFileURL(mainBundle).href);
     mainWindow = await waitFor(
@@ -3029,21 +3106,25 @@ async function runElectronChild() {
         guestArtifact,
       }),
     );
+  } catch (error) {
+    primaryFailure = error;
   } finally {
-    await destroyNativeShellWindow(mainWindow);
-    await Promise.all([
-      new Promise((resolve) => guestServer.close(() => resolve())),
-      new Promise((resolve) => responsesServer.close(() => resolve())),
-    ]);
-    if (!manifestWritten) {
-      await cleanupFailedNativeShellCapture({
-        runtimeDirectory,
-        evidenceDirectory,
-        removeRuntime: false,
-      });
+    const cleanupFailures = await settleNativeShellChildCleanup({
+      mainWindow,
+      guestServer,
+      responsesServer,
+      manifestWritten,
+      runtimeDirectory,
+      evidenceDirectory,
+      app,
+    });
+    const resolution = resolveNativeShellChildFailure(primaryFailure, cleanupFailures);
+    if (resolution.cleanupDiagnostic) {
+      console.error(resolution.cleanupDiagnostic);
     }
-    app.quit();
+    terminalFailure = resolution.failure;
   }
+  if (terminalFailure) throw terminalFailure;
 }
 
 async function main() {
@@ -3059,13 +3140,11 @@ if (
   NodePath.resolve(process.argv[1] ?? "") === scriptPath
 ) {
   main().catch((error) => {
-    console.error(error);
+    const diagnostic = formatNativeShellFailureForOutput(error);
+    console.error(diagnostic);
     const runtimeDirectory = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_RUNTIME_DIR;
     if (shouldRunNativeShellElectronChild(process.env) && runtimeDirectory) {
-      NodeFS.writeFileSync(
-        NodePath.join(runtimeDirectory, "capture-error.txt"),
-        error instanceof Error ? (error.stack ?? error.message) : String(error),
-      );
+      NodeFS.writeFileSync(NodePath.join(runtimeDirectory, "capture-error.txt"), diagnostic);
     }
     process.exitCode = 1;
   });

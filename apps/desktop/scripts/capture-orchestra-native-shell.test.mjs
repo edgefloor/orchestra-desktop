@@ -17,11 +17,15 @@ import {
   NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES,
   NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS,
   boundedThreadSessionObservation,
+  boundNativeShellDiagnostic,
   createNativeShellResponsesRequestJournal,
   destroyNativeShellWindow,
   executeNativeShellRendererStep,
+  formatNativeShellFailureForOutput,
   prepareNativeShellGitFixture,
   readNativeDogfoodRunStateSummaries,
+  resolveNativeShellChildFailure,
+  settleNativeShellChildCleanup,
   withNativeShellDiagnosticDeadline,
   withNativeShellEventTimeout,
   withNativeShellRendererDiagnostics,
@@ -170,6 +174,44 @@ describe("native-shell acceptance capture contract", () => {
     expect(failure.message.length).toBeLessThanOrEqual(160 + 27 + 256 + 2 + 512);
   });
 
+  it("preserves renderer failure attribution when its URL is unavailable", async () => {
+    const original = new Error("renderer crashed");
+    const renderer = {
+      executeJavaScript: () => Promise.reject(original),
+      getURL: () => {
+        throw new Error("renderer was destroyed");
+      },
+    };
+
+    const failure = await executeNativeShellRendererStep(
+      renderer,
+      "window.fixture()",
+      "crashed renderer probe",
+    ).catch((error) => error);
+
+    expect(failure.message).toContain("crashed renderer probe renderer script failed");
+    expect(failure.message).toContain("<renderer-url-unavailable>");
+    expect(failure.cause).toBe(original);
+  });
+
+  it("bounds actual emitted renderer output without rendering a raw nested cause", async () => {
+    const secret = `raw-renderer-detail-${"x".repeat(5_000)}`;
+    const failure = await executeNativeShellRendererStep(
+      {
+        executeJavaScript: () => Promise.reject(new Error(secret)),
+        getURL: () => "t3code://app/",
+      },
+      "window.fixture()",
+      "bounded output probe",
+    ).catch((error) => error);
+
+    const output = formatNativeShellFailureForOutput(failure);
+    expect(output.length).toBeLessThanOrEqual(4_096);
+    expect(output).not.toContain(secret);
+    expect(output).toContain("bounded output probe");
+    expect(boundNativeShellDiagnostic("xx😀later", 4)).toBe("xx…");
+  });
+
   it("attributes otherwise raw renderer failures to their sequence and bounded source", async () => {
     const renderer = withNativeShellRendererDiagnostics({
       executeJavaScript: () => Promise.reject(new Error("Script failed to execute")),
@@ -195,6 +237,54 @@ describe("native-shell acceptance capture contract", () => {
 
     expect(destroyed).toBe(true);
     expect(calls).toEqual(["destroy"]);
+  });
+
+  it("settles every child cleanup stage after window destruction throws", async () => {
+    const calls = [];
+    const server = (label) => ({
+      close: (complete) => {
+        calls.push(label);
+        complete();
+      },
+    });
+
+    const failures = await settleNativeShellChildCleanup({
+      mainWindow: {
+        isDestroyed: () => false,
+        destroy: () => {
+          calls.push("renderer-window");
+          throw new Error("window teardown failed");
+        },
+      },
+      guestServer: server("guest-server"),
+      responsesServer: server("responses-server"),
+      manifestWritten: false,
+      runtimeDirectory: "/tmp/runtime",
+      evidenceDirectory: "/tmp/evidence",
+      cleanupFailedCapture: async () => {
+        calls.push("failed-capture");
+      },
+      app: {
+        quit: () => calls.push("electron-app"),
+      },
+    });
+
+    expect(failures.map(({ step }) => step)).toEqual(["renderer-window"]);
+    expect(calls).toEqual([
+      "renderer-window",
+      "guest-server",
+      "responses-server",
+      "failed-capture",
+      "electron-app",
+    ]);
+
+    const primaryFailure = new Error("authoritative renderer failure");
+    const resolution = resolveNativeShellChildFailure(primaryFailure, failures);
+    expect(resolution.failure).toBe(primaryFailure);
+    expect(resolution.cleanupDiagnostic).toContain(
+      "native-shell child cleanup failed at renderer-window",
+    );
+    expect(resolution.cleanupDiagnostic).not.toContain("window teardown failed");
   });
 
   it("accepts assistant text only after typed deltas reach the matching terminal event", () => {
