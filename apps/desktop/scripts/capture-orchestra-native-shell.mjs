@@ -1044,7 +1044,7 @@ async function interactWithVisibleMenu(
   renderer,
   { triggerSelector, requiredLabels, selectLabel = null, context },
 ) {
-  return renderer.executeJavaScript(
+  const serializedReceipt = await renderer.executeJavaScript(
     `new Promise((resolve, reject) => {
       const requiredLabels = ${JSON.stringify(requiredLabels)};
       const selectLabel = ${JSON.stringify(selectLabel)};
@@ -1064,7 +1064,7 @@ async function interactWithVisibleMenu(
           if (closingPopup.isConnected && closingPopup.getClientRects().length > 0) return;
           window.clearTimeout(deadline);
           observer.disconnect();
-          resolve(pendingResult);
+          resolve(JSON.stringify(pendingResult));
           return;
         }
         const popup = [...document.querySelectorAll('[data-slot="menu-popup"]')]
@@ -1091,8 +1091,10 @@ async function interactWithVisibleMenu(
         closingPopup = popup;
         pendingResult = {
           popupVisible: true,
-          items: items.map(({ label, disabled }) => ({ label, disabled })),
-          selectedLabel: selected?.label ?? null,
+          items: items
+            .slice(0, 32)
+            .map(({ label, disabled }) => ({ label: label.slice(0, 160), disabled })),
+          selectedLabel: selected?.label.slice(0, 160) ?? null,
         };
         if (selected) {
           selected.element.click();
@@ -1118,6 +1120,10 @@ async function interactWithVisibleMenu(
     })`,
     true,
   );
+  if (typeof serializedReceipt !== "string") {
+    throw new Error(`${context} menu returned a non-serialized receipt`);
+  }
+  return JSON.parse(serializedReceipt);
 }
 
 async function observeDocumentText(renderer, requiredTexts, context) {

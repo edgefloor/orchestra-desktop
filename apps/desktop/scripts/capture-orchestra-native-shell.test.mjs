@@ -357,7 +357,10 @@ describe("native-shell acceptance capture contract", () => {
     expect(helperSource).toContain("key: 'ArrowDown'");
     expect(helperSource).toContain("popup.dispatchEvent(new KeyboardEvent('keydown'");
     expect(helperSource).toContain("closingPopup.isConnected");
-    expect(helperSource).toContain("resolve(pendingResult)");
+    expect(helperSource).toContain("resolve(JSON.stringify(pendingResult))");
+    expect(helperSource).toContain(".slice(0, 32)");
+    expect(helperSource).toContain("label.slice(0, 160)");
+    expect(helperSource).toContain("JSON.parse(serializedReceipt)");
     expect(helperSource).not.toContain(
       "window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape'",
     );
