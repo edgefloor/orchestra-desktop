@@ -43,6 +43,7 @@ import {
   workflowContinuationAdvanced,
   workflowRunDisplayState,
   workflowStepKind,
+  type EvidenceContentDisplayState,
   type WorkflowRunDisplayState,
 } from "./WorkflowRunTree.logic";
 
@@ -83,9 +84,16 @@ export function findRequestedEvidenceReference(
   return null;
 }
 
+export type WorkflowEvidenceObservationState =
+  | "collapsed"
+  | "loading"
+  | "error"
+  | "pending"
+  | EvidenceContentDisplayState["kind"];
+
 export function workflowEvidenceObservationAttributes(
   item: OrchestraEvidenceReference,
-  contentState: string,
+  contentState: WorkflowEvidenceObservationState,
 ) {
   return {
     "data-workflow-evidence-availability": item.availability,

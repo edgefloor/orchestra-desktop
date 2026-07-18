@@ -7,6 +7,7 @@ import {
   findRequestedEvidenceReference,
   OrchestraLifecycleEntry,
   readOrchestraReplayEvent,
+  type WorkflowEvidenceObservationState,
   workflowEvidenceObservationAttributes,
 } from "./OrchestraLifecycleEntry";
 import lifecycleSource from "./OrchestraLifecycleEntry.tsx?raw";
@@ -97,6 +98,25 @@ describe("OrchestraLifecycleEntry", () => {
   });
 
   it("renders canonical evidence metadata in the structural observation boundary", () => {
+    type ExpectedObservationState =
+      | "collapsed"
+      | "loading"
+      | "error"
+      | "pending"
+      | "text"
+      | "empty"
+      | "content_too_large"
+      | "malformed"
+      | "integrity_failure"
+      | "unsupported_media";
+    type ExactObservationState = [WorkflowEvidenceObservationState] extends [
+      ExpectedObservationState,
+    ]
+      ? [ExpectedObservationState] extends [WorkflowEvidenceObservationState]
+        ? true
+        : false
+      : false;
+    const observationStateIsExhaustive: ExactObservationState = true;
     const markup = renderToStaticMarkup(
       <div
         {...workflowEvidenceObservationAttributes(
@@ -114,6 +134,7 @@ describe("OrchestraLifecycleEntry", () => {
       />,
     );
 
+    expect(observationStateIsExhaustive).toBe(true);
     expect(markup).toContain('data-workflow-evidence-provenance="runtime_check"');
     expect(markup).toContain('data-workflow-evidence-availability="content_too_large"');
     expect(markup).not.toContain('data-workflow-evidence-provenance="runtime check"');
