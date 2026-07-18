@@ -4,6 +4,12 @@ import * as NodePath from "node:path";
 import * as NodeProcess from "node:process";
 
 import { sha256 } from "./orchestra-evidence-primitives.mjs";
+import {
+  ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME,
+  ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH,
+  ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID,
+  ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,
+} from "./orchestra-native-dogfood-contract.mjs";
 
 export const ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY = "docs/acceptance/orchestra-native-shell";
 
@@ -107,7 +113,68 @@ export function makeNativeShellAssertion(observed, passed = Boolean(observed)) {
 }
 
 export function isExactNativeDogfoodResponseCount(requestCount) {
-  return requestCount === 5;
+  return requestCount === ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT;
+}
+
+export function createNativeShellRequestCountWaiter() {
+  let count = 0;
+  let failure = null;
+  const waiters = new Set();
+
+  const settle = () => {
+    for (const waiter of waiters) {
+      if (failure) {
+        waiters.delete(waiter);
+        clearTimeout(waiter.timeout);
+        waiter.reject(failure);
+      } else if (count >= waiter.target) {
+        waiters.delete(waiter);
+        clearTimeout(waiter.timeout);
+        waiter.resolve(count);
+      }
+    }
+  };
+
+  return Object.freeze({
+    get count() {
+      return count;
+    },
+    increment() {
+      count += 1;
+      settle();
+      return count;
+    },
+    fail(error) {
+      failure = error instanceof Error ? error : new Error(String(error));
+      settle();
+    },
+    waitFor(target, context, timeoutMs = 60_000) {
+      return new Promise((resolve, reject) => {
+        if (failure) {
+          reject(failure);
+          return;
+        }
+        if (count >= target) {
+          resolve(count);
+          return;
+        }
+        const waiter = {
+          target,
+          resolve,
+          reject,
+          timeout: setTimeout(() => {
+            waiters.delete(waiter);
+            reject(
+              new Error(
+                `${context} did not reach ${target} Responses requests within ${timeoutMs}ms`,
+              ),
+            );
+          }, timeoutMs),
+        };
+        waiters.add(waiter);
+      });
+    },
+  });
 }
 
 export function isNativeWorkflowLifecycleObservation(observation) {
@@ -126,6 +193,38 @@ export function isNativeEvidenceObservation(observation) {
     observation.before.contentAbsentBeforeExpand === true &&
     observation.after?.expanded === true &&
     observation.after.contentState === "text"
+  );
+}
+
+export function isNativeGitCheckEvidenceObservation(observation) {
+  const expectedEvidenceId = sha256(
+    Buffer.from(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH),
+  );
+  return (
+    observation?.stepId === ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID &&
+    observation.evidenceName === ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME &&
+    observation.evidenceId === expectedEvidenceId &&
+    observation.displayedEvidenceIdPrefix === expectedEvidenceId.slice(0, 12) &&
+    observation.kind === "check" &&
+    observation.provenance === "runtime_check" &&
+    observation.availability === "available" &&
+    observation.expanded === true &&
+    observation.contentState === "text" &&
+    Array.isArray(observation.content?.argv) &&
+    JSON.stringify(observation.content.argv) ===
+      JSON.stringify(["git", "rev-parse", "--is-inside-work-tree"]) &&
+    observation.content.exit_code === 0 &&
+    observation.content.stdout?.trim() === "true" &&
+    observation.content.stderr === ""
+  );
+}
+
+export function isUniqueNativeSymphonyInspection(started, inspected) {
+  return (
+    typeof started?.runId === "string" &&
+    inspected?.runId === started.runId &&
+    inspected.instanceCount === 1 &&
+    inspected.totalRootCount === 1
   );
 }
 

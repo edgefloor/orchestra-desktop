@@ -11,10 +11,13 @@ import {
   buildNativeGuestFixture,
   canConnectToNativeShellPort,
   cleanupFailedNativeShellCapture,
+  createNativeShellRequestCountWaiter,
   isExactNativeDogfoodResponseCount,
+  isNativeGitCheckEvidenceObservation,
   isNarrowDrawerOpenedObservation,
   isNativeEvidenceObservation,
   isNativeWorkflowLifecycleObservation,
+  isUniqueNativeSymphonyInspection,
   makeNativeShellAssertion,
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
@@ -101,6 +104,65 @@ describe("native-shell acceptance capture contract", () => {
     assertions[assertion] = makeNativeShellAssertion(observed, passed);
 
     expect(() => assertNativeShellAssertions(assertions)).toThrow(assertion);
+  });
+
+  it("rejects a real production-shared request-count waiter timeout and contract failure", async () => {
+    const timeoutWaiter = createNativeShellRequestCountWaiter();
+    await expect(timeoutWaiter.waitFor(1, "timeout fixture", 5)).rejects.toThrow(
+      "timeout fixture did not reach 1 Responses requests within 5ms",
+    );
+
+    const failedWaiter = createNativeShellRequestCountWaiter();
+    const pending = failedWaiter.waitFor(1, "failure fixture", 1_000);
+    failedWaiter.fail(new Error("sealed Responses contract failed"));
+    await expect(pending).rejects.toThrow("sealed Responses contract failed");
+  });
+
+  it("requires a real unique Symphony inspection and exact git check Evidence", () => {
+    const started = { runId: "automation-cycle8" };
+    expect(isUniqueNativeSymphonyInspection(started, null)).toBe(false);
+    expect(
+      isUniqueNativeSymphonyInspection(started, {
+        runId: "automation-cycle8",
+        instanceCount: 1,
+        totalRootCount: 1,
+      }),
+    ).toBe(true);
+    expect(
+      isUniqueNativeSymphonyInspection(started, {
+        runId: "automation-cycle8",
+        instanceCount: 2,
+        totalRootCount: 2,
+      }),
+    ).toBe(false);
+
+    const evidence = {
+      stepId: "verify-native-repository",
+      evidenceName: "verify-native-repository-1.json",
+      evidenceId: sha256(Buffer.from("checks/verify-native-repository-1.json")),
+      displayedEvidenceIdPrefix: sha256(
+        Buffer.from("checks/verify-native-repository-1.json"),
+      ).slice(0, 12),
+      kind: "check",
+      provenance: "runtime_check",
+      availability: "available",
+      expanded: true,
+      contentState: "text",
+      content: {
+        argv: ["git", "rev-parse", "--is-inside-work-tree"],
+        exit_code: 0,
+        stdout: "true\n",
+        stderr: "",
+      },
+    };
+    expect(isNativeGitCheckEvidenceObservation(evidence)).toBe(true);
+    expect(isNativeGitCheckEvidenceObservation({ ...evidence, evidenceId: "wrong" })).toBe(false);
+    expect(
+      isNativeGitCheckEvidenceObservation({
+        ...evidence,
+        content: { ...evidence.content, stdout: "false\n" },
+      }),
+    ).toBe(false);
   });
 
   it("seals both themes and real narrow drawer scenarios", () => {

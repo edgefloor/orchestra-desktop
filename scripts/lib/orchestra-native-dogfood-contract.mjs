@@ -14,13 +14,16 @@ export const ORCHESTRA_NATIVE_DOGFOOD_CALL_ID = "call-cycle8-orchestra-run";
 export const ORCHESTRA_NATIVE_DOGFOOD_RESUME_CALL_ID = "call-cycle8-orchestra-resume";
 export const ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT = 5;
 export const ORCHESTRA_NATIVE_DOGFOOD_MAX_REQUEST_BYTES = 2 * 1024 * 1024;
+export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID = "verify-native-repository";
+export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME = `${ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID}-1.json`;
+export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH = `checks/${ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME}`;
 export const ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT =
   "Native workflow approval was accepted and the same run completed with one deterministic child finding.";
 
 const providerId = "orchestra_native_dogfood";
 const model = "gpt-5.4";
 const agentStepId = "inspect-native-runtime";
-const checkStepId = "verify-native-repository";
+const checkStepId = ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID;
 const approvalStepId = "accept-native-finding";
 const missingLinearCredential = "ORCHESTRA_NATIVE_DOGFOOD_LINEAR_API_KEY";
 const functionArguments = JSON.stringify({

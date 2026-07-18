@@ -22,8 +22,16 @@ export function buildNativeGuestFixture(origin: string): {
 };
 export function makeNativeShellAssertion(observed: unknown, passed?: boolean): NativeShellAssertion;
 export function isExactNativeDogfoodResponseCount(requestCount: number): boolean;
+export function createNativeShellRequestCountWaiter(): {
+  readonly count: number;
+  readonly increment: () => number;
+  readonly fail: (error: unknown) => void;
+  readonly waitFor: (target: number, context: string, timeoutMs?: number) => Promise<number>;
+};
 export function isNativeWorkflowLifecycleObservation(observation: unknown): boolean;
 export function isNativeEvidenceObservation(observation: unknown): boolean;
+export function isNativeGitCheckEvidenceObservation(observation: unknown): boolean;
+export function isUniqueNativeSymphonyInspection(started: unknown, inspected: unknown): boolean;
 export function isNarrowDrawerOpenedObservation(observations: unknown): boolean;
 export function assertNativeShellAssertions(
   assertions: Readonly<Record<string, NativeShellAssertion>>,

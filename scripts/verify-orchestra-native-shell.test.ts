@@ -45,6 +45,7 @@ type MutableManifest = {
   };
   orchestraCore: { repository: string; commit: string; tree: string };
   product: {
+    pinsToml: string;
     pinsSha256: string;
     manifestSha256: string;
     releaseManifest: Record<string, unknown>;
@@ -53,6 +54,23 @@ type MutableManifest = {
     electronVersion: string;
     chromiumVersion: string;
     platform: { os: string; arch: string };
+    sourceClean: boolean;
+    buildReceipts: {
+      desktop: {
+        tool: string;
+        arguments: string[];
+        sourceCommit: string;
+        sourceTree: string;
+        artifacts: Array<{ path: string; sha256: string }>;
+      };
+      evaluator: {
+        tool: string;
+        arguments: string[];
+        sourceCommit: string;
+        sourceTree: string;
+        artifact: { path: string; sha256: string };
+      };
+    };
   };
   productionEntry: string;
   buildArtifacts: Array<{ path: string; sha256: string }>;
@@ -104,6 +122,7 @@ type MutableManifest = {
       nodeIntegration: boolean;
       nodeIntegrationInSubFrames: boolean;
     };
+    nativeDogfood: Record<string, unknown>;
     navigation: Array<{
       action: string;
       expected: unknown;
@@ -112,7 +131,20 @@ type MutableManifest = {
     }>;
     cleanup: { portsClosed: boolean; processGroupEmpty: boolean | null };
   };
-  agentReview: { status: string; reviewedAt: string; notes: string };
+  agentReview: {
+    status: string;
+    reviewedAt: string;
+    scenarios: Array<{
+      scenario: string;
+      clipping: string;
+      contrast: string;
+      layering: string;
+      drawerGeometry: string;
+      activeTaskContinuity: string;
+      nativeSurfaceLegibility: string;
+      notes: string;
+    }>;
+  };
 };
 
 async function makeFixture(
@@ -247,6 +279,154 @@ async function makeFixture(
     artifacts: productArtifacts,
   };
   const productManifestSha256 = sha256(Buffer.from(JSON.stringify(unsignedReleaseManifest)));
+  const pinsToml = [
+    "[product]",
+    `version = ${JSON.stringify(unsignedReleaseManifest.productVersion)}`,
+    `minimum_macos = ${JSON.stringify(unsignedReleaseManifest.minimumMacos)}`,
+    "",
+    "[sources]",
+    ...Object.entries(unsignedReleaseManifest.sources).map(
+      ([key, value]) => `${key} = ${JSON.stringify(value)}`,
+    ),
+    "",
+    "[schemas]",
+    `protocol = ${JSON.stringify(unsignedReleaseManifest.schemas.protocol.identity)}`,
+    `snapshot = ${JSON.stringify(unsignedReleaseManifest.schemas.snapshot.identity)}`,
+    "",
+    "[evaluator]",
+    `revision = ${JSON.stringify(unsignedReleaseManifest.evaluator.revision)}`,
+    `adapter_abi = ${JSON.stringify(unsignedReleaseManifest.evaluator.adapterAbi)}`,
+    `canonicalizer = ${JSON.stringify(unsignedReleaseManifest.evaluator.canonicalizer)}`,
+    `issue_format = ${JSON.stringify(unsignedReleaseManifest.evaluator.issueFormat)}`,
+    "",
+  ].join("\n");
+  const workflowWaiting = {
+    label: "Task Workflow Runs",
+    text: "Waiting",
+    runLabels: ["Workflow run run-cycle8"],
+    expandedButtons: 0,
+    collapsedButtons: 1,
+  };
+  const workflowCompleted = {
+    label: "Task Workflow Runs",
+    text: "Completed",
+    runLabels: ["Workflow run run-cycle8"],
+    expandedButtons: 1,
+    collapsedButtons: 0,
+  };
+  const evidence = {
+    before: { exposed: true, contentAbsentBeforeExpand: true },
+    after: {
+      expanded: true,
+      contentState: "text",
+      runText: "Child /root/child deterministic native child Plain-text preview",
+    },
+  };
+  const symphony = {
+    validation: {
+      valid: true,
+      text: "ORCHESTRA_NATIVE_DOGFOOD_LINEAR_API_KEY is deliberately absent",
+    },
+    started: {
+      runId: "automation-cycle8",
+      text: "running with skipped intake",
+      issueRowCount: 0,
+    },
+    inspected: { runId: "automation-cycle8", instanceCount: 1 },
+    sameRootAfterInspect: true,
+    issueChildFabricated: false,
+  };
+  const workflow = {
+    waiting: workflowWaiting,
+    completed: workflowCompleted,
+    sameRun: true,
+  };
+  const attention = {
+    waiting: { text: "Approval required" },
+    completed: { text: "No items need intervention" },
+  };
+  const reload = {
+    workflow: workflowCompleted,
+    evidence,
+    symphony: { runId: "automation-cycle8", instanceCount: 1 },
+    sameWorkflowRun: true,
+    sameSymphonyRoot: true,
+  };
+  const restart = {
+    stop: {
+      thread: { session: { status: "stopped" } },
+      responsesRequestCount: 5,
+    },
+    recovery: {
+      thread: { session: { status: "ready" } },
+      typedSymphonyStatus: { runId: "automation-cycle8", status: "running" },
+      symphony: { runId: "automation-cycle8", instanceCount: 1 },
+      workflow: workflowCompleted,
+      evidence,
+      responsesRequestCount: 5,
+    },
+    sameWorkflowRun: true,
+    sameSymphonyRoot: true,
+    sameSymphonyStatus: true,
+  };
+  const nativeDogfood = {
+    responsesRequestCount: 5,
+    waitingProjectionVisible: true,
+    completedProjectionVisible: true,
+    workflow,
+    attention,
+    evidence,
+    symphony,
+    reload,
+    restart,
+  };
+  const retainedDesktopCapabilities = {
+    workspace: {
+      projectVisible: true,
+      taskVisible: true,
+      localCheckoutVisible: true,
+      contextTabs: ["Workflow", "Attention"],
+    },
+    context: { workflowRunId: "run-cycle8", attentionResolved: true },
+    modelPicker: { trigger: "Codex gpt-5.4", text: "gpt-5.4" },
+    settings: { hash: "#/settings", generalVisible: true },
+    vcs: { items: [{ label: "Commit" }, { label: "Push" }] },
+    surfaces: Object.fromEntries(
+      ["Files", "Terminal 1", "Browser", "Diff"].map((title) => [
+        title,
+        { title, panelVisible: true },
+      ]),
+    ),
+    mutations: { commit: "unobserved", push: "unobserved" },
+  };
+  const assertions = Object.fromEntries(
+    ORCHESTRA_NATIVE_SHELL_ASSERTIONS.map((assertion) => [
+      assertion,
+      makeNativeShellAssertion({ proof: assertion }, true),
+    ]),
+  );
+  assertions.nativeDogfoodResponsesExact = makeNativeShellAssertion({ requestCount: 5 }, true);
+  assertions.nativeChildProjected = makeNativeShellAssertion(evidence.after, true);
+  assertions.nativeWorkflowLifecycleRendered = makeNativeShellAssertion(workflow, true);
+  assertions.nativeAttentionResolved = makeNativeShellAssertion(attention, true);
+  assertions.nativeEvidenceLazyExpanded = makeNativeShellAssertion(evidence, true);
+  assertions.nativeSymphonySkippedIntake = makeNativeShellAssertion(symphony, true);
+  assertions.nativeDogfoodIdentityRecovered = makeNativeShellAssertion(
+    { workflow, symphony, reload },
+    true,
+  );
+  assertions.nativeDogfoodProviderRestartRecovered = makeNativeShellAssertion(restart, true);
+  const drawerObservations = [
+    { opened: true, closed: true, focusRestored: true },
+    { opened: true, closed: true, focusRestored: true },
+  ];
+  assertions.narrowDrawerOpened = makeNativeShellAssertion(drawerObservations, true);
+  assertions.narrowDrawerClosed = makeNativeShellAssertion(drawerObservations, true);
+  assertions.narrowDrawerFocusRestored = makeNativeShellAssertion(drawerObservations, true);
+  assertions.retainedDesktopCapabilitiesProbed = makeNativeShellAssertion(
+    retainedDesktopCapabilities,
+    true,
+  );
 
   const manifest: MutableManifest = {
     schemaVersion: 1,
@@ -284,7 +464,8 @@ async function makeFixture(
       tree: "30f8c2ef452243f4a930623d5da635acffd35077",
     },
     product: {
-      pinsSha256: "1".repeat(64),
+      pinsToml,
+      pinsSha256: sha256(Buffer.from(pinsToml)),
       manifestSha256: productManifestSha256,
       releaseManifest: {
         ...unsignedReleaseManifest,
@@ -295,16 +476,31 @@ async function makeFixture(
       electronVersion: "41.5.0",
       chromiumVersion: "142.0.7444.235",
       platform: { os: "darwin", arch: "arm64" },
+      sourceClean: true,
+      buildReceipts: {
+        desktop: {
+          tool: "bun",
+          arguments: ["run", "build:desktop"],
+          sourceCommit: "b3e6534f82c62e6d30fdbac0d0e7aa9aa7301750",
+          sourceTree: "974192a2af184643d37df51ca70dea77d24decc9",
+          artifacts: buildArtifacts.map((artifact) => ({ ...artifact })),
+        },
+        evaluator: {
+          tool: "scripts/evaluator-build.sh",
+          arguments: ["target/orchestra-product/orchestra-validate-worker"],
+          sourceCommit: "ef4470f54f791c26dab1fec92edbbcc8cf47a9f6",
+          sourceTree: "30f8c2ef452243f4a930623d5da635acffd35077",
+          artifact: {
+            path: "target/orchestra-product/orchestra-validate-worker",
+            sha256: (productArtifacts["orchestra-validate-worker"] as { sha256: string }).sha256,
+          },
+        },
+      },
     },
     productionEntry: "t3code://app/",
     buildArtifacts,
     screenshots,
-    assertions: Object.fromEntries(
-      ORCHESTRA_NATIVE_SHELL_ASSERTIONS.map((assertion) => [
-        assertion,
-        makeNativeShellAssertion({ proof: assertion }, true),
-      ]),
-    ),
+    assertions,
     guest: {
       origin: "http://127.0.0.1:43123",
       fixtureSha256: buildNativeGuestFixture("http://127.0.0.1:43123").digest,
@@ -336,6 +532,7 @@ async function makeFixture(
         nodeIntegration: false,
         nodeIntegrationInSubFrames: false,
       },
+      nativeDogfood,
       navigation: [
         "navigate-page-a",
         "navigate-page-b",
@@ -355,7 +552,16 @@ async function makeFixture(
     agentReview: {
       status: "observed",
       reviewedAt: "2026-07-18T12:34:56.000Z",
-      notes: "Wide and narrow native-shell captures were inspected.",
+      scenarios: ORCHESTRA_NATIVE_SHELL_SCREENSHOTS.map((scenario) => ({
+        scenario: scenario.scenario,
+        clipping: "pass",
+        contrast: "pass",
+        layering: "pass",
+        drawerGeometry: scenario.drawerOpen ? "pass" : "not-applicable",
+        activeTaskContinuity: "pass",
+        nativeSurfaceLegibility: "pass",
+        notes: `${scenario.scenario} inspected directly by the review agent.`,
+      })),
     },
   };
   await mutate?.(manifest, rootDir);
@@ -474,9 +680,15 @@ describe("Orchestra native-shell evidence verifier", () => {
       },
       {
         mutate: (manifest) => {
-          manifest.agentReview.notes = " ";
+          manifest.agentReview.scenarios[0]!.notes = " ";
         },
-        message: "manifest.agentReview.notes must be non-empty",
+        message: "manifest.agentReview.native-browser-1440x900-dark.notes must be non-empty",
+      },
+      {
+        mutate: (manifest) => {
+          manifest.agentReview.scenarios[0]!.contrast = "pending";
+        },
+        message: "manifest.agentReview.native-browser-1440x900-dark.contrast must be pass",
       },
       {
         mutate: (manifest) => {
@@ -552,6 +764,12 @@ describe("Orchestra native-shell evidence verifier", () => {
         },
         message: "manifest.capture.platform.os must be darwin, linux, or win32",
       },
+      {
+        mutate: (manifest) => {
+          manifest.capture.sourceClean = false;
+        },
+        message: "manifest.capture.sourceClean must be true",
+      },
     ];
 
     for (const invalidCase of invalidCases) {
@@ -581,6 +799,79 @@ describe("Orchestra native-shell evidence verifier", () => {
     await expect(
       verifyOrchestraNativeShell({ rootDir: mismatchedExecutable.rootDir }),
     ).rejects.toThrow("manifest.codex.binarySha256 must match the Product Codex executable");
+  });
+
+  it("recomputes canonical Product pins and rejects pinned-identity contradictions", async () => {
+    const wrongDigest = await makeFixture((manifest) => {
+      manifest.product.pinsSha256 = "f".repeat(64);
+    });
+    await expect(verifyOrchestraNativeShell({ rootDir: wrongDigest.rootDir })).rejects.toThrow(
+      "manifest.product.pinsSha256 does not match manifest.product.pinsToml",
+    );
+
+    const wrongPinnedRepository = await makeFixture((manifest) => {
+      manifest.product.pinsToml = manifest.product.pinsToml.replace(
+        "https://github.com/oven-sh/bun.git",
+        "https://example.invalid/bun.git",
+      );
+      manifest.product.pinsSha256 = sha256(Buffer.from(manifest.product.pinsToml));
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: wrongPinnedRepository.rootDir }),
+    ).rejects.toThrow(
+      "manifest.product.pinsToml sources.bun_repository does not match the Product manifest",
+    );
+  });
+
+  it("requires source-bound Desktop and evaluator build receipts", async () => {
+    const wrongDesktopCommand = await makeFixture((manifest) => {
+      manifest.capture.buildReceipts.desktop.arguments = ["run", "build"];
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: wrongDesktopCommand.rootDir }),
+    ).rejects.toThrow(
+      "manifest.capture.buildReceipts.desktop.arguments must exactly match the source-bound Desktop build contract",
+    );
+
+    const wrongEvaluator = await makeFixture((manifest) => {
+      manifest.capture.buildReceipts.evaluator.artifact.sha256 = "f".repeat(64);
+    });
+    await expect(verifyOrchestraNativeShell({ rootDir: wrongEvaluator.rootDir })).rejects.toThrow(
+      "manifest.capture.buildReceipts.evaluator artifact must match the Product evaluator executable",
+    );
+  });
+
+  it("rejects semantic contradictions even when passed remains true", async () => {
+    const falseWorkflow = await makeFixture((manifest) => {
+      const dogfood = manifest.runtime.nativeDogfood;
+      (dogfood.workflow as Record<string, unknown>).sameRun = false;
+    });
+    await expect(verifyOrchestraNativeShell({ rootDir: falseWorkflow.rootDir })).rejects.toThrow(
+      "manifest.runtime.nativeDogfood.workflow is not the same waiting/completed Run",
+    );
+
+    const falseDrawer = await makeFixture((manifest) => {
+      manifest.assertions.narrowDrawerOpened = makeNativeShellAssertion(
+        [{ opened: true }, { opened: false }],
+        true,
+      );
+    });
+    await expect(verifyOrchestraNativeShell({ rootDir: falseDrawer.rootDir })).rejects.toThrow(
+      "manifest.assertions.narrowDrawerOpened observed value contradicts passed:true",
+    );
+
+    const falseRetainedProbe = await makeFixture((manifest) => {
+      const observed = manifest.assertions.retainedDesktopCapabilitiesProbed!.observed as Record<
+        string,
+        unknown
+      >;
+      (observed.workspace as Record<string, unknown>).localCheckoutVisible = false;
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: falseRetainedProbe.rootDir }),
+    ).rejects.toThrow(
+      "manifest.assertions.retainedDesktopCapabilitiesProbed observed value contradicts passed:true",
+    );
   });
 
   it("rejects a desktop tree that does not belong to the resolved source commit", async () => {

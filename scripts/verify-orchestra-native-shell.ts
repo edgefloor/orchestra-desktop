@@ -17,6 +17,10 @@ import {
 
 import {
   buildNativeGuestFixture,
+  isExactNativeDogfoodResponseCount,
+  isNarrowDrawerOpenedObservation,
+  isNativeEvidenceObservation,
+  isNativeWorkflowLifecycleObservation,
   type NativeShellScenario,
   ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY,
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
@@ -57,6 +61,241 @@ const screenshotsByName = Object.fromEntries(
 export const ORCHESTRA_NATIVE_SHELL_SCREENSHOT_NAMES = Object.freeze(
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS.map(({ scenario }) => scenario),
 );
+
+function record(value: unknown, context: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${context} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function stringField(value: unknown, context: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${context} must be a non-empty string`);
+  }
+  return value;
+}
+
+function tomlSection(source: string, section: string): string {
+  const match = new RegExp(
+    `^\\[${section.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\]\\s*$`,
+    "m",
+  ).exec(source);
+  if (!match || match.index === undefined) {
+    throw new Error(`manifest.product.pinsToml must contain [${section}]`);
+  }
+  const start = match.index + match[0].length;
+  const nextSection = /^\s*\[[^\]]+\]\s*$/m.exec(source.slice(start));
+  return source.slice(start, nextSection ? start + nextSection.index : source.length);
+}
+
+function quotedTomlValue(source: string, section: string, key: string): string {
+  const body = tomlSection(source, section);
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`^\\s*${escapedKey}\\s*=\\s*"([^"]+)"\\s*$`, "m").exec(body);
+  if (!match?.[1]) {
+    throw new Error(`manifest.product.pinsToml must contain quoted ${section}.${key}`);
+  }
+  return match[1];
+}
+
+function requireNativeDogfoodObservation(value: unknown): Record<string, unknown> {
+  requireFields(
+    value,
+    [
+      "responsesRequestCount",
+      "waitingProjectionVisible",
+      "completedProjectionVisible",
+      "workflow",
+      "attention",
+      "evidence",
+      "symphony",
+      "reload",
+      "restart",
+    ],
+    "manifest.runtime.nativeDogfood",
+  );
+  const dogfood = value as Record<string, unknown>;
+  if (
+    !isExactNativeDogfoodResponseCount(Number(dogfood.responsesRequestCount)) ||
+    dogfood.waitingProjectionVisible !== true ||
+    dogfood.completedProjectionVisible !== true
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood must contain the exact five-request projection",
+    );
+  }
+  try {
+    if (!isNativeWorkflowLifecycleObservation(dogfood.workflow)) {
+      throw new Error(
+        "manifest.runtime.nativeDogfood.workflow is not the same waiting/completed Run",
+      );
+    }
+  } catch {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.workflow is not the same waiting/completed Run",
+    );
+  }
+
+  const workflow = record(dogfood.workflow, "manifest.runtime.nativeDogfood.workflow");
+  const completedWorkflow = record(
+    workflow.completed,
+    "manifest.runtime.nativeDogfood.workflow.completed",
+  );
+  const completedRunLabels = completedWorkflow.runLabels;
+  if (!Array.isArray(completedRunLabels) || typeof completedRunLabels[0] !== "string") {
+    throw new Error("manifest.runtime.nativeDogfood.workflow.completed must identify one Run");
+  }
+  const workflowRunLabel = completedRunLabels[0];
+
+  const attention = record(dogfood.attention, "manifest.runtime.nativeDogfood.attention");
+  const waitingAttention = record(
+    attention.waiting,
+    "manifest.runtime.nativeDogfood.attention.waiting",
+  );
+  const completedAttention = record(
+    attention.completed,
+    "manifest.runtime.nativeDogfood.attention.completed",
+  );
+  if (
+    !stringField(waitingAttention.text, "manifest.runtime.nativeDogfood.attention.waiting.text")
+      .toLowerCase()
+      .includes("approval") ||
+    !stringField(
+      completedAttention.text,
+      "manifest.runtime.nativeDogfood.attention.completed.text",
+    ).includes("No items need intervention")
+  ) {
+    throw new Error("manifest.runtime.nativeDogfood.attention must prove approval resolution");
+  }
+
+  try {
+    if (!isNativeEvidenceObservation(dogfood.evidence)) {
+      throw new Error("manifest.runtime.nativeDogfood.evidence must prove lazy text expansion");
+    }
+  } catch {
+    throw new Error("manifest.runtime.nativeDogfood.evidence must prove lazy text expansion");
+  }
+  const evidence = record(dogfood.evidence, "manifest.runtime.nativeDogfood.evidence");
+  const expandedEvidence = record(evidence.after, "manifest.runtime.nativeDogfood.evidence.after");
+  const expandedRunText = stringField(
+    expandedEvidence.runText,
+    "manifest.runtime.nativeDogfood.evidence.after.runText",
+  );
+  if (
+    !expandedRunText.includes("Child /root/") ||
+    !expandedRunText.includes("deterministic native child")
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.evidence must contain the genuine native child",
+    );
+  }
+
+  const symphony = record(dogfood.symphony, "manifest.runtime.nativeDogfood.symphony");
+  const symphonyValidation = record(
+    symphony.validation,
+    "manifest.runtime.nativeDogfood.symphony.validation",
+  );
+  const symphonyStarted = record(
+    symphony.started,
+    "manifest.runtime.nativeDogfood.symphony.started",
+  );
+  const symphonyRunId = stringField(
+    symphonyStarted.runId,
+    "manifest.runtime.nativeDogfood.symphony.started.runId",
+  );
+  const symphonyText = stringField(
+    symphonyStarted.text,
+    "manifest.runtime.nativeDogfood.symphony.started.text",
+  ).toLowerCase();
+  if (
+    symphonyValidation.valid !== true ||
+    !stringField(
+      symphonyValidation.text,
+      "manifest.runtime.nativeDogfood.symphony.validation.text",
+    ).includes("ORCHESTRA_NATIVE_DOGFOOD_LINEAR_API_KEY") ||
+    !symphonyText.includes("running") ||
+    !symphonyText.includes("skipped") ||
+    symphonyStarted.issueRowCount !== 0 ||
+    symphony.issueChildFabricated !== false ||
+    symphony.sameRootAfterInspect !== true
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.symphony must prove one running skipped-intake Root with no Issue child",
+    );
+  }
+
+  const reload = record(dogfood.reload, "manifest.runtime.nativeDogfood.reload");
+  const reloadWorkflow = record(reload.workflow, "manifest.runtime.nativeDogfood.reload.workflow");
+  const reloadSymphony = record(reload.symphony, "manifest.runtime.nativeDogfood.reload.symphony");
+  const reloadRunLabels = reloadWorkflow.runLabels;
+  if (
+    reload.sameWorkflowRun !== true ||
+    reload.sameSymphonyRoot !== true ||
+    !Array.isArray(reloadRunLabels) ||
+    reloadRunLabels.length !== 1 ||
+    reloadRunLabels[0] !== workflowRunLabel ||
+    reloadSymphony.runId !== symphonyRunId ||
+    reloadSymphony.instanceCount !== 1 ||
+    !isNativeEvidenceObservation(reload.evidence)
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.reload must recover the same Run, Evidence, and Root",
+    );
+  }
+
+  const restart = record(dogfood.restart, "manifest.runtime.nativeDogfood.restart");
+  const stop = record(restart.stop, "manifest.runtime.nativeDogfood.restart.stop");
+  const stoppedThread = record(stop.thread, "manifest.runtime.nativeDogfood.restart.stop.thread");
+  const stoppedSession = record(
+    stoppedThread.session,
+    "manifest.runtime.nativeDogfood.restart.stop.thread.session",
+  );
+  const recovery = record(restart.recovery, "manifest.runtime.nativeDogfood.restart.recovery");
+  const readyThread = record(
+    recovery.thread,
+    "manifest.runtime.nativeDogfood.restart.recovery.thread",
+  );
+  const readySession = record(
+    readyThread.session,
+    "manifest.runtime.nativeDogfood.restart.recovery.thread.session",
+  );
+  const typedSymphony = record(
+    recovery.typedSymphonyStatus,
+    "manifest.runtime.nativeDogfood.restart.recovery.typedSymphonyStatus",
+  );
+  const restartSymphony = record(
+    recovery.symphony,
+    "manifest.runtime.nativeDogfood.restart.recovery.symphony",
+  );
+  const restartWorkflow = record(
+    recovery.workflow,
+    "manifest.runtime.nativeDogfood.restart.recovery.workflow",
+  );
+  const restartRunLabels = restartWorkflow.runLabels;
+  if (
+    stoppedSession.status !== "stopped" ||
+    !isExactNativeDogfoodResponseCount(Number(stop.responsesRequestCount)) ||
+    readySession.status !== "ready" ||
+    !isExactNativeDogfoodResponseCount(Number(recovery.responsesRequestCount)) ||
+    typedSymphony.runId !== symphonyRunId ||
+    typedSymphony.status !== "running" ||
+    restartSymphony.runId !== symphonyRunId ||
+    restartSymphony.instanceCount !== 1 ||
+    !Array.isArray(restartRunLabels) ||
+    restartRunLabels.length !== 1 ||
+    restartRunLabels[0] !== workflowRunLabel ||
+    !isNativeEvidenceObservation(recovery.evidence) ||
+    restart.sameWorkflowRun !== true ||
+    restart.sameSymphonyRoot !== true ||
+    restart.sameSymphonyStatus !== true
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.restart must recover the same Run, Evidence, and Root after a stopped/ready provider cycle",
+    );
+  }
+  return dogfood;
+}
 
 export async function verifyOrchestraNativeShell(
   options: {
@@ -159,11 +398,15 @@ export async function verifyOrchestraNativeShell(
 
   requireFields(
     typedManifest.product,
-    ["pinsSha256", "manifestSha256", "releaseManifest"],
+    ["pinsToml", "pinsSha256", "manifestSha256", "releaseManifest"],
     "manifest.product",
   );
   const product = typedManifest.product as Record<string, unknown>;
+  const pinsToml = stringField(product.pinsToml, "manifest.product.pinsToml");
   requireSha256(product.pinsSha256, "manifest.product.pinsSha256");
+  if (sha256(Buffer.from(pinsToml, "utf8")) !== product.pinsSha256) {
+    throw new Error("manifest.product.pinsSha256 does not match manifest.product.pinsToml");
+  }
   requireSha256(product.manifestSha256, "manifest.product.manifestSha256");
   requireFields(
     product.releaseManifest,
@@ -274,6 +517,10 @@ export async function verifyOrchestraNativeShell(
   }
   if (
     sources.orchestra_core_repository !== "https://github.com/edgefloor/codex-orchestra.git" ||
+    sources.orchestra_codex_repository !== "https://github.com/edgefloor/orchestra-codex.git" ||
+    sources.orchestra_desktop_repository !== "https://github.com/edgefloor/orchestra-desktop.git" ||
+    sources.codex_upstream_repository !== "https://github.com/openai/codex.git" ||
+    sources.t3code_upstream_repository !== "https://github.com/pingdotgg/t3code.git" ||
     sources.bun_repository !== "https://github.com/oven-sh/bun.git" ||
     sources.bun_version !== "1.3.14" ||
     sources.zod_repository !== "https://github.com/colinhacks/zod.git" ||
@@ -284,6 +531,21 @@ export async function verifyOrchestraNativeShell(
   ) {
     throw new Error(
       "manifest.product.releaseManifest.sources must seal core, Bun, Zod, and protocol identities",
+    );
+  }
+  for (const [key, value] of Object.entries(sources)) {
+    if (quotedTomlValue(pinsToml, "sources", key) !== value) {
+      throw new Error(
+        `manifest.product.pinsToml sources.${key} does not match the Product manifest`,
+      );
+    }
+  }
+  if (
+    quotedTomlValue(pinsToml, "product", "version") !== releaseManifest.productVersion ||
+    quotedTomlValue(pinsToml, "product", "minimum_macos") !== releaseManifest.minimumMacos
+  ) {
+    throw new Error(
+      "manifest.product.pinsToml product identity does not match the Product manifest",
     );
   }
   if (
@@ -317,6 +579,19 @@ export async function verifyOrchestraNativeShell(
     );
   }
   requireSha256(protocolSchema.sha256, "manifest.product.releaseManifest.schemas.protocol.sha256");
+  const snapshotSchema = schemas.snapshot as Record<string, unknown>;
+  requireFields(
+    snapshotSchema,
+    ["identity", "sha256"],
+    "manifest.product.releaseManifest.schemas.snapshot",
+  );
+  requireSha256(snapshotSchema.sha256, "manifest.product.releaseManifest.schemas.snapshot.sha256");
+  if (
+    quotedTomlValue(pinsToml, "schemas", "protocol") !== protocolSchema.identity ||
+    quotedTomlValue(pinsToml, "schemas", "snapshot") !== snapshotSchema.identity
+  ) {
+    throw new Error("manifest.product.pinsToml schemas do not match the Product manifest");
+  }
 
   requireFields(
     releaseManifest.evaluator,
@@ -333,6 +608,18 @@ export async function verifyOrchestraNativeShell(
     throw new Error(
       "manifest.product.releaseManifest.evaluator is not the sealed evaluator identity",
     );
+  }
+  for (const [tomlKey, manifestKey] of [
+    ["revision", "revision"],
+    ["adapter_abi", "adapterAbi"],
+    ["canonicalizer", "canonicalizer"],
+    ["issue_format", "issueFormat"],
+  ] as const) {
+    if (quotedTomlValue(pinsToml, "evaluator", tomlKey) !== evaluator[manifestKey]) {
+      throw new Error(
+        `manifest.product.pinsToml evaluator.${tomlKey} does not match the Product manifest`,
+      );
+    }
   }
 
   if (!Array.isArray(releaseManifest.capabilities) || releaseManifest.capabilities.length === 0) {
@@ -377,10 +664,13 @@ export async function verifyOrchestraNativeShell(
 
   requireFields(
     typedManifest.capture,
-    ["electronVersion", "chromiumVersion", "platform"],
+    ["electronVersion", "chromiumVersion", "platform", "sourceClean", "buildReceipts"],
     "manifest.capture",
   );
   const capture = typedManifest.capture as Record<string, unknown>;
+  if (capture.sourceClean !== true) {
+    throw new Error("manifest.capture.sourceClean must be true");
+  }
   if (
     typeof capture.electronVersion !== "string" ||
     !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(capture.electronVersion)
@@ -400,6 +690,76 @@ export async function verifyOrchestraNativeShell(
   }
   if (!new Set(["arm64", "x64"]).has(String(platform.arch))) {
     throw new Error("manifest.capture.platform.arch must be arm64 or x64");
+  }
+  requireFields(capture.buildReceipts, ["desktop", "evaluator"], "manifest.capture.buildReceipts");
+  const buildReceipts = capture.buildReceipts as Record<string, unknown>;
+  requireFields(
+    buildReceipts.desktop,
+    ["tool", "arguments", "sourceCommit", "sourceTree", "artifacts"],
+    "manifest.capture.buildReceipts.desktop",
+  );
+  const desktopReceipt = buildReceipts.desktop as Record<string, unknown>;
+  if (
+    desktopReceipt.tool !== "bun" ||
+    desktopReceipt.sourceCommit !== desktop.commit ||
+    desktopReceipt.sourceTree !== desktop.tree
+  ) {
+    throw new Error("manifest.capture.buildReceipts.desktop must bind bun to the Desktop tuple");
+  }
+  requireExactArray(
+    desktopReceipt.arguments,
+    ["run", "build:desktop"],
+    "manifest.capture.buildReceipts.desktop.arguments",
+    "source-bound Desktop build",
+  );
+  if (!Array.isArray(desktopReceipt.artifacts)) {
+    throw new Error("manifest.capture.buildReceipts.desktop.artifacts must be an array");
+  }
+  requireExactArray(
+    desktopReceipt.artifacts.map((entry) =>
+      entry !== null && typeof entry === "object" && "path" in entry
+        ? (entry as { readonly path: unknown }).path
+        : null,
+    ),
+    ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS,
+    "manifest.capture.buildReceipts.desktop artifact paths",
+    "source-bound Desktop build",
+  );
+  requireFields(
+    buildReceipts.evaluator,
+    ["tool", "arguments", "sourceCommit", "sourceTree", "artifact"],
+    "manifest.capture.buildReceipts.evaluator",
+  );
+  const evaluatorReceipt = buildReceipts.evaluator as Record<string, unknown>;
+  if (
+    evaluatorReceipt.tool !== "scripts/evaluator-build.sh" ||
+    evaluatorReceipt.sourceCommit !== orchestraCore.commit ||
+    evaluatorReceipt.sourceTree !== orchestraCore.tree
+  ) {
+    throw new Error(
+      "manifest.capture.buildReceipts.evaluator must bind evaluator-build.sh to the Orchestra core tuple",
+    );
+  }
+  requireExactArray(
+    evaluatorReceipt.arguments,
+    ["target/orchestra-product/orchestra-validate-worker"],
+    "manifest.capture.buildReceipts.evaluator.arguments",
+    "source-bound evaluator build",
+  );
+  requireFields(
+    evaluatorReceipt.artifact,
+    ["path", "sha256"],
+    "manifest.capture.buildReceipts.evaluator.artifact",
+  );
+  const evaluatorReceiptArtifact = evaluatorReceipt.artifact as Record<string, unknown>;
+  if (
+    evaluatorReceiptArtifact.path !== "target/orchestra-product/orchestra-validate-worker" ||
+    evaluatorReceiptArtifact.sha256 !==
+      (productArtifacts["orchestra-validate-worker"] as Record<string, unknown>).sha256
+  ) {
+    throw new Error(
+      "manifest.capture.buildReceipts.evaluator artifact must match the Product evaluator executable",
+    );
   }
 
   if (typedManifest.productionEntry !== "t3code://app/") {
@@ -451,6 +811,23 @@ export async function verifyOrchestraNativeShell(
     if (!productArtifact || productArtifact.sha256 !== artifact.sha256) {
       throw new Error(
         `manifest Product ${String(productArtifactName)} executable does not match the captured Desktop artifact`,
+      );
+    }
+  }
+  for (const [index, rawReceiptArtifact] of desktopReceipt.artifacts.entries()) {
+    requireFields(
+      rawReceiptArtifact,
+      ["path", "sha256"],
+      "manifest.capture.buildReceipts.desktop.artifact",
+    );
+    const receiptArtifact = rawReceiptArtifact as Record<string, unknown>;
+    const capturedArtifact = typedManifest.buildArtifacts[index] as Record<string, unknown>;
+    if (
+      receiptArtifact.path !== capturedArtifact.path ||
+      receiptArtifact.sha256 !== capturedArtifact.sha256
+    ) {
+      throw new Error(
+        `manifest.capture.buildReceipts.desktop artifact ${String(receiptArtifact.path)} does not match captured bytes`,
       );
     }
   }
@@ -564,10 +941,19 @@ export async function verifyOrchestraNativeShell(
 
   requireFields(
     typedManifest.runtime,
-    ["rendererUrl", "appViewport", "guest", "rejectedAttachmentProbe", "navigation", "cleanup"],
+    [
+      "rendererUrl",
+      "appViewport",
+      "guest",
+      "rejectedAttachmentProbe",
+      "nativeDogfood",
+      "navigation",
+      "cleanup",
+    ],
     "manifest.runtime",
   );
   const runtime = typedManifest.runtime as Record<string, unknown>;
+  const nativeDogfood = requireNativeDogfoodObservation(runtime.nativeDogfood);
   if (typeof runtime.rendererUrl !== "string" || !runtime.rendererUrl.startsWith("t3code://app/")) {
     throw new Error("manifest.runtime.rendererUrl must use the production t3code://app/ entry");
   }
@@ -674,9 +1060,116 @@ export async function verifyOrchestraNativeShell(
     throw new Error("manifest.runtime.cleanup must prove listener and process-group cleanup");
   }
 
+  const assertionObservation = (name: string): unknown =>
+    (assertions[name] as Record<string, unknown>).observed;
+  const requireSameObservation = (name: string, expected: unknown): void => {
+    if (JSON.stringify(assertionObservation(name)) !== JSON.stringify(expected)) {
+      throw new Error(`manifest.assertions.${name} contradicts manifest.runtime.nativeDogfood`);
+    }
+  };
+  requireSameObservation("nativeDogfoodResponsesExact", {
+    requestCount: nativeDogfood.responsesRequestCount,
+  });
+  requireSameObservation("nativeChildProjected", record(nativeDogfood.evidence, "evidence").after);
+  requireSameObservation("nativeWorkflowLifecycleRendered", nativeDogfood.workflow);
+  requireSameObservation("nativeAttentionResolved", nativeDogfood.attention);
+  requireSameObservation("nativeEvidenceLazyExpanded", nativeDogfood.evidence);
+  requireSameObservation("nativeSymphonySkippedIntake", nativeDogfood.symphony);
+  requireSameObservation("nativeDogfoodIdentityRecovered", {
+    workflow: nativeDogfood.workflow,
+    symphony: nativeDogfood.symphony,
+    reload: nativeDogfood.reload,
+  });
+  requireSameObservation("nativeDogfoodProviderRestartRecovered", nativeDogfood.restart);
+
+  const narrowOpened = assertionObservation("narrowDrawerOpened");
+  if (!isNarrowDrawerOpenedObservation(narrowOpened)) {
+    throw new Error(
+      "manifest.assertions.narrowDrawerOpened observed value contradicts passed:true",
+    );
+  }
+  for (const [name, field] of [
+    ["narrowDrawerClosed", "closed"],
+    ["narrowDrawerFocusRestored", "focusRestored"],
+  ] as const) {
+    const observations = assertionObservation(name);
+    if (
+      !Array.isArray(observations) ||
+      observations.length !== 2 ||
+      !observations.every((observation) => record(observation, name)[field] === true)
+    ) {
+      throw new Error(`manifest.assertions.${name} observed value contradicts passed:true`);
+    }
+  }
+  const retained = record(
+    assertionObservation("retainedDesktopCapabilitiesProbed"),
+    "manifest.assertions.retainedDesktopCapabilitiesProbed.observed",
+  );
+  const retainedWorkspace = record(
+    retained.workspace,
+    "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.workspace",
+  );
+  const retainedContext = record(
+    retained.context,
+    "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.context",
+  );
+  const retainedModel = record(
+    retained.modelPicker,
+    "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.modelPicker",
+  );
+  const retainedSettings = record(
+    retained.settings,
+    "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.settings",
+  );
+  const retainedVcs = record(
+    retained.vcs,
+    "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.vcs",
+  );
+  const retainedSurfaces = record(
+    retained.surfaces,
+    "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.surfaces",
+  );
+  const retainedMutations = record(
+    retained.mutations,
+    "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.mutations",
+  );
+  const contextTabs = retainedWorkspace.contextTabs;
+  const vcsItems = retainedVcs.items;
+  if (
+    retainedWorkspace.projectVisible !== true ||
+    retainedWorkspace.taskVisible !== true ||
+    retainedWorkspace.localCheckoutVisible !== true ||
+    !Array.isArray(contextTabs) ||
+    !contextTabs.includes("Workflow") ||
+    !contextTabs.includes("Attention") ||
+    typeof retainedContext.workflowRunId !== "string" ||
+    retainedContext.attentionResolved !== true ||
+    !stringField(retainedModel.trigger, "retained model trigger") ||
+    !stringField(retainedModel.text, "retained model text") ||
+    !stringField(retainedSettings.hash, "retained settings hash").includes("/settings") ||
+    retainedSettings.generalVisible !== true ||
+    !Array.isArray(vcsItems) ||
+    !vcsItems.some((item) =>
+      stringField(record(item, "vcs item").label, "vcs label").includes("Commit"),
+    ) ||
+    !vcsItems.some((item) =>
+      stringField(record(item, "vcs item").label, "vcs label").includes("Push"),
+    ) ||
+    !["Files", "Terminal 1", "Browser", "Diff"].every((title) => {
+      const surface = record(retainedSurfaces[title], `retained surface ${title}`);
+      return surface.title === title && surface.panelVisible === true;
+    }) ||
+    retainedMutations.commit !== "unobserved" ||
+    retainedMutations.push !== "unobserved"
+  ) {
+    throw new Error(
+      "manifest.assertions.retainedDesktopCapabilitiesProbed observed value contradicts passed:true",
+    );
+  }
+
   requireFields(
     typedManifest.agentReview,
-    ["status", "reviewedAt", "notes"],
+    ["status", "reviewedAt", "scenarios"],
     "manifest.agentReview",
   );
   const agentReview = typedManifest.agentReview as Record<string, unknown>;
@@ -691,8 +1184,57 @@ export async function verifyOrchestraNativeShell(
   ) {
     throw new Error("manifest.agentReview.reviewedAt must be an ISO timestamp");
   }
-  if (typeof agentReview.notes !== "string" || agentReview.notes.trim().length === 0) {
-    throw new Error("manifest.agentReview.notes must be non-empty");
+  if (!Array.isArray(agentReview.scenarios)) {
+    throw new Error("manifest.agentReview.scenarios must be an array");
+  }
+  requireExactArray(
+    agentReview.scenarios.map((entry) =>
+      entry !== null && typeof entry === "object" && "scenario" in entry
+        ? (entry as { readonly scenario: unknown }).scenario
+        : null,
+    ),
+    ORCHESTRA_NATIVE_SHELL_SCREENSHOT_NAMES,
+    "manifest.agentReview scenario order",
+    "native-shell evidence",
+  );
+  for (const rawReview of agentReview.scenarios) {
+    requireFields(
+      rawReview,
+      [
+        "scenario",
+        "clipping",
+        "contrast",
+        "layering",
+        "drawerGeometry",
+        "activeTaskContinuity",
+        "nativeSurfaceLegibility",
+        "notes",
+      ],
+      "manifest.agentReview.scenario",
+    );
+    const review = rawReview as Record<string, unknown>;
+    const scenario = screenshotsByName[String(review.scenario)];
+    if (!scenario) throw new Error("manifest.agentReview.scenario is not approved");
+    for (const judgment of [
+      "clipping",
+      "contrast",
+      "layering",
+      "activeTaskContinuity",
+      "nativeSurfaceLegibility",
+    ]) {
+      if (review[judgment] !== "pass") {
+        throw new Error(`manifest.agentReview.${scenario.scenario}.${judgment} must be pass`);
+      }
+    }
+    const expectedDrawerJudgment = scenario.drawerOpen ? "pass" : "not-applicable";
+    if (review.drawerGeometry !== expectedDrawerJudgment) {
+      throw new Error(
+        `manifest.agentReview.${scenario.scenario}.drawerGeometry must be ${expectedDrawerJudgment}`,
+      );
+    }
+    if (typeof review.notes !== "string" || review.notes.trim().length === 0) {
+      throw new Error(`manifest.agentReview.${scenario.scenario}.notes must be non-empty`);
+    }
   }
 }
 

@@ -24,11 +24,14 @@ import {
   buildNativeGuestFixture,
   canConnectToNativeShellPort,
   cleanupFailedNativeShellCapture,
+  createNativeShellRequestCountWaiter,
   isExactNativeDogfoodResponseCount,
+  isNativeGitCheckEvidenceObservation,
   isNarrowDrawerOpenedObservation,
   isNativeEvidenceObservation,
   isNativeWorkflowLifecycleObservation,
   isNativeShellProcessGroupEmpty,
+  isUniqueNativeSymphonyInspection,
   makeNativeShellAssertion,
   ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY,
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
@@ -48,8 +51,12 @@ import {
   buildNativeDogfoodFixtures,
   matchNativeDogfoodResponsesRequest,
   NativeDogfoodContractError,
+  ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME,
+  ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH,
+  ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID,
   ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT,
   ORCHESTRA_NATIVE_DOGFOOD_PARENT_PROMPT,
+  ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,
   ORCHESTRA_NATIVE_DOGFOOD_RESUME_PROMPT,
 } from "../../../scripts/lib/orchestra-native-dogfood-contract.mjs";
 import { resolveElectronLaunchCommand } from "./electron-launcher.mjs";
@@ -158,108 +165,151 @@ async function prepareNativeProductIdentity({
   if (runGit(orchestraRepository, ["status", "--porcelain", "--untracked-files=no"]).length > 0) {
     throw new Error("native dogfood Orchestra core repository must have no tracked changes");
   }
-  const orchestraProductBuildCommand = [
-    "build",
-    "--manifest-path",
-    NodePath.join(orchestraRepository, "Cargo.toml"),
-    "-p",
-    "codex-orchestra-product",
-  ];
-  runChecked("cargo", orchestraProductBuildCommand, {
-    cwd: orchestraRepository,
-    env: cleanCargoEnvironment(),
-    stdio: "inherit",
-  });
-  const orchestraProductPath = NodePath.join(
-    orchestraRepository,
-    "target",
-    "debug",
-    "orchestra-product",
-  );
-  const orchestraEvaluatorPath = NodePath.join(
-    orchestraRepository,
-    "target",
-    "orchestra-product",
-    "orchestra-validate-worker",
-  );
-  for (const executable of [orchestraProductPath, orchestraEvaluatorPath]) {
-    if (!NodeFS.existsSync(executable)) {
-      throw new Error(`native dogfood Product executable is missing: ${executable}`);
-    }
-  }
-  runChecked(orchestraProductPath, ["doctor", "--root", orchestraRepository], {
-    cwd: orchestraRepository,
-    stdio: "inherit",
-  });
-
-  const productManifestPath = NodePath.join(runtimeDirectory, "release-manifest.json");
-  const productArtifacts = [
-    ["codex-cli", dogfoodCodexPath],
-    ["orchestra-product", orchestraProductPath],
-    ["orchestra-validate-worker", orchestraEvaluatorPath],
-    ["desktop-main", mainBundle],
-    ["desktop-preload", NodePath.join(desktopDir, "dist-electron", "preload.cjs")],
-    ["desktop-server", NodePath.join(repoRoot, "apps", "server", "dist", "bin.mjs")],
-    ["desktop-renderer", NodePath.join(repoRoot, "apps", "web", "dist", "index.html")],
-  ];
-  runChecked(
-    orchestraProductPath,
-    [
-      "manifest",
-      "--root",
-      orchestraRepository,
-      "--target",
-      rustHostTarget(),
-      "--output",
-      productManifestPath,
-      ...productArtifacts.flatMap(([name, path]) => ["--artifact", `${name}=${path}`]),
-    ],
-    { cwd: orchestraRepository, stdio: "inherit" },
-  );
-  runChecked(orchestraProductPath, ["verify-manifest", "--manifest", productManifestPath], {
-    cwd: orchestraRepository,
-    stdio: "inherit",
-  });
-  const releaseManifest = JSON.parse(await NodeFSP.readFile(productManifestPath, "utf8"));
-  if (releaseManifest.artifacts?.["codex-cli"]?.sha256 !== dogfoodCodexIdentity.binarySha256) {
-    throw new Error("Product manifest Codex artifact does not match the source-bound binary");
-  }
-  const desktopCommit = runGit(repoRoot, ["rev-parse", "HEAD"]);
-  const desktopTree = runGit(repoRoot, ["rev-parse", "HEAD^{tree}"]);
+  const productPinsPath = NodePath.join(orchestraRepository, "product", "pins.toml");
+  const pinsToml = await NodeFSP.readFile(productPinsPath, "utf8");
+  const orchestraCoreCommit = pinsToml.match(/^orchestra_core_revision = "([0-9a-f]{40})"$/m)?.[1];
+  const orchestraCoreTree = pinsToml.match(/^orchestra_core_tree = "([0-9a-f]{40})"$/m)?.[1];
   if (
-    releaseManifest.sources?.orchestra_codex !== dogfoodCodexIdentity.commit ||
-    releaseManifest.sources?.orchestra_codex_tree !== dogfoodCodexIdentity.tree ||
-    releaseManifest.sources?.orchestra_desktop !== desktopCommit ||
-    releaseManifest.sources?.orchestra_desktop_tree !== desktopTree
-  ) {
-    throw new Error(
-      "Product manifest sources do not match the source-bound Codex and Desktop tuple",
-    );
-  }
-  const orchestraCoreCommit = releaseManifest.sources?.orchestra_core_revision;
-  const orchestraCoreTree = releaseManifest.sources?.orchestra_core_tree;
-  if (
+    !orchestraCoreCommit ||
+    !orchestraCoreTree ||
     runGit(orchestraRepository, ["rev-parse", "--verify", `${orchestraCoreCommit}^{commit}`]) !==
       orchestraCoreCommit ||
     runGit(orchestraRepository, ["rev-parse", `${orchestraCoreCommit}^{tree}`]) !==
       orchestraCoreTree
   ) {
-    throw new Error("Product manifest Orchestra core identity does not resolve in the core fork");
+    throw new Error("Product-pinned Orchestra core identity does not resolve in the core fork");
   }
-  const productPinsPath = NodePath.join(orchestraRepository, "product", "pins.toml");
-  return {
-    dogfoodCodexIdentity,
-    orchestraCoreIdentity: {
-      repository: "edgefloor/codex-orchestra",
-      commit: orchestraCoreCommit,
-      tree: orchestraCoreTree,
-    },
-    productIdentity: {
-      pinsSha256: sha256(await NodeFSP.readFile(productPinsPath)),
-      manifestSha256: releaseManifest.manifestSha256,
-      releaseManifest,
-    },
-  };
+  const pinnedOrchestraRepository = NodePath.join(runtimeDirectory, "orchestra-core-source");
+  runGit(orchestraRepository, [
+    "worktree",
+    "add",
+    "--detach",
+    pinnedOrchestraRepository,
+    orchestraCoreCommit,
+  ]);
+  try {
+    const orchestraProductBuildCommand = [
+      "build",
+      "--manifest-path",
+      NodePath.join(pinnedOrchestraRepository, "Cargo.toml"),
+      "-p",
+      "codex-orchestra-product",
+    ];
+    runChecked("cargo", orchestraProductBuildCommand, {
+      cwd: pinnedOrchestraRepository,
+      env: cleanCargoEnvironment(),
+      stdio: "inherit",
+    });
+    const orchestraProductPath = NodePath.join(
+      pinnedOrchestraRepository,
+      "target",
+      "debug",
+      "orchestra-product",
+    );
+    const orchestraEvaluatorPath = NodePath.join(
+      pinnedOrchestraRepository,
+      "target",
+      "orchestra-product",
+      "orchestra-validate-worker",
+    );
+    const evaluatorBuildScript = NodePath.join(
+      pinnedOrchestraRepository,
+      "scripts",
+      "evaluator-build.sh",
+    );
+    runChecked(evaluatorBuildScript, [orchestraEvaluatorPath], {
+      cwd: pinnedOrchestraRepository,
+      stdio: "inherit",
+    });
+    for (const executable of [orchestraProductPath, orchestraEvaluatorPath]) {
+      if (!NodeFS.existsSync(executable)) {
+        throw new Error(`native dogfood Product executable is missing: ${executable}`);
+      }
+    }
+    runChecked(orchestraProductPath, ["doctor", "--root", orchestraRepository], {
+      cwd: orchestraRepository,
+      stdio: "inherit",
+    });
+
+    const productManifestPath = NodePath.join(runtimeDirectory, "release-manifest.json");
+    const productArtifacts = [
+      ["codex-cli", dogfoodCodexPath],
+      ["orchestra-product", orchestraProductPath],
+      ["orchestra-validate-worker", orchestraEvaluatorPath],
+      ["desktop-main", mainBundle],
+      ["desktop-preload", NodePath.join(desktopDir, "dist-electron", "preload.cjs")],
+      ["desktop-server", NodePath.join(repoRoot, "apps", "server", "dist", "bin.mjs")],
+      ["desktop-renderer", NodePath.join(repoRoot, "apps", "web", "dist", "index.html")],
+    ];
+    runChecked(
+      orchestraProductPath,
+      [
+        "manifest",
+        "--root",
+        orchestraRepository,
+        "--target",
+        rustHostTarget(),
+        "--output",
+        productManifestPath,
+        ...productArtifacts.flatMap(([name, path]) => ["--artifact", `${name}=${path}`]),
+      ],
+      { cwd: orchestraRepository, stdio: "inherit" },
+    );
+    runChecked(orchestraProductPath, ["verify-manifest", "--manifest", productManifestPath], {
+      cwd: orchestraRepository,
+      stdio: "inherit",
+    });
+    const releaseManifest = JSON.parse(await NodeFSP.readFile(productManifestPath, "utf8"));
+    if (releaseManifest.artifacts?.["codex-cli"]?.sha256 !== dogfoodCodexIdentity.binarySha256) {
+      throw new Error("Product manifest Codex artifact does not match the source-bound binary");
+    }
+    const desktopCommit = runGit(repoRoot, ["rev-parse", "HEAD"]);
+    const desktopTree = runGit(repoRoot, ["rev-parse", "HEAD^{tree}"]);
+    if (
+      releaseManifest.sources?.orchestra_codex !== dogfoodCodexIdentity.commit ||
+      releaseManifest.sources?.orchestra_codex_tree !== dogfoodCodexIdentity.tree ||
+      releaseManifest.sources?.orchestra_desktop !== desktopCommit ||
+      releaseManifest.sources?.orchestra_desktop_tree !== desktopTree
+    ) {
+      throw new Error(
+        "Product manifest sources do not match the source-bound Codex and Desktop tuple",
+      );
+    }
+    if (
+      releaseManifest.sources?.orchestra_core_revision !== orchestraCoreCommit ||
+      releaseManifest.sources?.orchestra_core_tree !== orchestraCoreTree
+    ) {
+      throw new Error(
+        "Product manifest Orchestra core identity does not match the pinned build worktree",
+      );
+    }
+    return {
+      dogfoodCodexIdentity,
+      orchestraCoreIdentity: {
+        repository: "edgefloor/codex-orchestra",
+        commit: orchestraCoreCommit,
+        tree: orchestraCoreTree,
+      },
+      productIdentity: {
+        pinsToml,
+        pinsSha256: sha256(Buffer.from(pinsToml)),
+        manifestSha256: releaseManifest.manifestSha256,
+        releaseManifest,
+      },
+      evaluatorBuildReceipt: {
+        tool: "scripts/evaluator-build.sh",
+        arguments: ["target/orchestra-product/orchestra-validate-worker"],
+        sourceCommit: orchestraCoreCommit,
+        sourceTree: orchestraCoreTree,
+        artifact: {
+          path: "target/orchestra-product/orchestra-validate-worker",
+          sha256: sha256(await NodeFSP.readFile(orchestraEvaluatorPath)),
+        },
+      },
+    };
+  } finally {
+    runGit(orchestraRepository, ["worktree", "remove", "--force", pinnedOrchestraRepository]);
+  }
 }
 
 async function waitFor(predicate, context, timeoutMs = 30_000) {
@@ -292,12 +342,24 @@ function scrubProviderCredentials(environment) {
 }
 
 async function launchUnderElectron() {
-  const trackedChanges = runGit(repoRoot, ["status", "--porcelain", "--untracked-files=no"]);
-  if (trackedChanges.length > 0 && process.env.ORCHESTRA_NATIVE_ACCEPTANCE_ALLOW_DIRTY !== "1") {
+  const sourceChanges = runGit(repoRoot, [
+    "status",
+    "--porcelain",
+    "--untracked-files=all",
+    "--",
+    ".",
+    `:(exclude)${evidenceRelativeDirectory}`,
+    `:(exclude)${evidenceRelativeDirectory}/**`,
+  ]);
+  const sourceClean = sourceChanges.length === 0;
+  if (!sourceClean && process.env.ORCHESTRA_NATIVE_ACCEPTANCE_ALLOW_DIRTY !== "1") {
     throw new Error(
       "native-shell capture requires a clean tracked worktree; commit source changes first",
     );
   }
+
+  const desktopBuildCommand = ["run", "build:desktop"];
+  runChecked("bun", desktopBuildCommand, { cwd: repoRoot, stdio: "inherit" });
 
   for (const required of [
     mainBundle,
@@ -333,12 +395,24 @@ async function launchUnderElectron() {
     process.env.ORCHESTRA_NATIVE_DOGFOOD_CODEX_REPOSITORY?.trim() || defaultCodexRepository;
   const dogfoodCodexPath =
     process.env.ORCHESTRA_NATIVE_DOGFOOD_CODEX_PATH?.trim() || defaultCodexPath;
-  const { dogfoodCodexIdentity, orchestraCoreIdentity, productIdentity } =
+  const { dogfoodCodexIdentity, orchestraCoreIdentity, productIdentity, evaluatorBuildReceipt } =
     await prepareNativeProductIdentity({
       runtimeDirectory,
       dogfoodCodexRepository,
       dogfoodCodexPath,
     });
+  const desktopBuildReceipt = {
+    tool: "bun",
+    arguments: desktopBuildCommand,
+    sourceCommit: runGit(repoRoot, ["rev-parse", "HEAD"]),
+    sourceTree: runGit(repoRoot, ["rev-parse", "HEAD^{tree}"]),
+    artifacts: await Promise.all(
+      ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS.map(async (path) => ({
+        path,
+        sha256: sha256(await NodeFSP.readFile(NodePath.join(repoRoot, path))),
+      })),
+    ),
+  };
   const dogfoodFixtures = buildNativeDogfoodFixtures(`http://127.0.0.1:${responsesPort}`);
   await Promise.all(
     [wrapperDirectory, homeDirectory, t3Home, codexHome, dogfoodRepository].map((directory) =>
@@ -412,6 +486,11 @@ async function launchUnderElectron() {
     ORCHESTRA_NATIVE_ACCEPTANCE_CODEX_IDENTITY: JSON.stringify(dogfoodCodexIdentity),
     ORCHESTRA_NATIVE_ACCEPTANCE_CORE_IDENTITY: JSON.stringify(orchestraCoreIdentity),
     ORCHESTRA_NATIVE_ACCEPTANCE_PRODUCT_IDENTITY: JSON.stringify(productIdentity),
+    ORCHESTRA_NATIVE_ACCEPTANCE_SOURCE_CLEAN: sourceClean ? "1" : "0",
+    ORCHESTRA_NATIVE_ACCEPTANCE_BUILD_RECEIPTS: JSON.stringify({
+      desktop: desktopBuildReceipt,
+      evaluator: evaluatorBuildReceipt,
+    }),
   };
   delete environment.ELECTRON_RUN_AS_NODE;
   delete environment.VITE_DEV_SERVER_URL;
@@ -447,6 +526,11 @@ async function launchUnderElectron() {
     if (exit.code !== 0) {
       throw new Error(
         `native-shell Electron capture exited with ${exit.signal ?? `status ${exit.code}`}`,
+      );
+    }
+    if (!sourceClean) {
+      throw new Error(
+        "ORCHESTRA_NATIVE_ACCEPTANCE_ALLOW_DIRTY is diagnostic-only; dirty captures cannot become verifiable evidence",
       );
     }
 
@@ -589,6 +673,38 @@ async function awaitNativeShellSessionEvent({ baseUrl, token, threadId, afterSeq
   );
 }
 
+async function awaitNativeShellAssistantMessageEvent({
+  baseUrl,
+  token,
+  threadId,
+  afterSequence,
+  text,
+}) {
+  return runWithNativeShellRpcClient(baseUrl, token, (client) =>
+    client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+      threadId,
+      afterSequence,
+    }).pipe(
+      Stream.filter(
+        (item) =>
+          item.kind === "event" &&
+          item.event.type === "thread.message-sent" &&
+          item.event.payload.role === "assistant" &&
+          item.event.payload.streaming === false &&
+          item.event.payload.text.includes(text),
+      ),
+      Stream.runHead,
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.fail(new Error(`thread message stream ended before ${text}`)),
+          onSome: Effect.succeed,
+        }),
+      ),
+      Effect.timeout("45 seconds"),
+    ),
+  );
+}
+
 async function readNativeShellAutomationStatus({ baseUrl, token, threadId, runId }) {
   return runWithNativeShellRpcClient(baseUrl, token, (client) =>
     client[WS_METHODS.automationStatus]({ threadId, runId }),
@@ -634,6 +750,66 @@ async function observeSymphonyRoot(renderer, runId, context) {
   );
 }
 
+async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelector, context) {
+  return renderer.executeJavaScript(
+    `new Promise((resolve, reject) => {
+      const deadline = window.setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
+      }, 45000);
+      const complete = () => {
+        const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
+        if (!(run instanceof HTMLElement)) return;
+        const runDisclosure = run.querySelector(':scope > div > button[aria-controls]');
+        if (runDisclosure instanceof HTMLButtonElement) {
+          if (runDisclosure.getAttribute('aria-expanded') === 'false') {
+            runDisclosure.click();
+            return;
+          }
+        }
+        if (run.innerText.includes('Loading bounded native run tree…')) return;
+        const stepButton = [...run.querySelectorAll('button[aria-controls]')]
+          .find((button) => button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID)}));
+        if (!(stepButton instanceof HTMLButtonElement)) return;
+        if (stepButton.getAttribute('aria-expanded') === 'false') {
+          stepButton.click();
+          return;
+        }
+        const step = stepButton.parentElement;
+        if (!(step instanceof HTMLElement) || step.innerText.includes('Loading step outputs and evidence references…')) return;
+        const evidenceButton = [...step.querySelectorAll('button[aria-expanded]:not([aria-controls])')]
+          .find((button) => button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME)}));
+        if (!(evidenceButton instanceof HTMLButtonElement)) return;
+        const evidence = evidenceButton.parentElement;
+        if (!(evidence instanceof HTMLElement)) return;
+        const text = evidence.innerText;
+        const labels = [...evidenceButton.querySelectorAll(':scope > span')]
+          .map((span) => span.textContent?.trim() ?? '');
+        const identityPrefix = text.match(/\bid ([0-9a-f]{12})\b/)?.[1] ?? null;
+        window.clearTimeout(deadline);
+        observer.disconnect();
+        resolve({
+          exposed: true,
+          stepId: ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID)},
+          evidenceName: ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME)},
+          evidenceId: ${JSON.stringify(sha256(Buffer.from(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH)))},
+          displayedEvidenceIdPrefix: identityPrefix,
+          kind: labels.at(-3) ?? null,
+          provenance: labels.at(-2)?.replaceAll(' ', '_') ?? null,
+          availability: labels.at(-1) ?? null,
+          contentAbsentBeforeExpand: evidenceButton.getAttribute('aria-expanded') === 'false' && !text.includes('Plain-text preview'),
+          runText: run.innerText.slice(0, 4000),
+          runTextTruncated: run.innerText.length > 4000,
+        });
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
+      complete();
+    })`,
+    true,
+  );
+}
+
 async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, context) {
   return renderer.executeJavaScript(
     `new Promise((resolve, reject) => {
@@ -644,29 +820,58 @@ async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, co
       const complete = () => {
         const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
         if (!(run instanceof HTMLElement)) return;
-        const runDisclosure = run.querySelector('button[aria-controls][aria-expanded="false"]');
-        if (runDisclosure instanceof HTMLButtonElement) {
+        const runDisclosure = run.querySelector(':scope > div > button[aria-controls]');
+        if (runDisclosure instanceof HTMLButtonElement && runDisclosure.getAttribute('aria-expanded') === 'false') {
           runDisclosure.click();
           return;
         }
         if (run.innerText.includes('Loading bounded native run tree…')) return;
-        if (run.innerText.includes('Loading step outputs and evidence references…')) return;
-        const evidenceButton = [...run.querySelectorAll('button[aria-expanded]:not([aria-controls])')]
-          .find((button) => button instanceof HTMLButtonElement);
+        const stepButton = [...run.querySelectorAll('button[aria-controls]')]
+          .find((button) => button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID)}));
+        if (!(stepButton instanceof HTMLButtonElement)) return;
+        if (stepButton.getAttribute('aria-expanded') === 'false') {
+          stepButton.click();
+          return;
+        }
+        const step = stepButton.parentElement;
+        if (!(step instanceof HTMLElement) || step.innerText.includes('Loading step outputs and evidence references…')) return;
+        const evidenceButton = [...step.querySelectorAll('button[aria-expanded]:not([aria-controls])')]
+          .find((button) => button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME)}));
         if (!(evidenceButton instanceof HTMLButtonElement)) return;
         if (evidenceButton.getAttribute('aria-expanded') === 'false') {
           evidenceButton.click();
           return;
         }
-        const text = run.innerText;
-        if (text.includes('Loading authorized evidence…') || !text.includes('Plain-text preview')) return;
+        const evidence = evidenceButton.parentElement;
+        if (!(evidence instanceof HTMLElement) || evidence.innerText.includes('Loading authorized evidence…')) return;
+        const preview = evidence.querySelector('pre');
+        if (!(preview instanceof HTMLElement) || !evidence.innerText.includes('Plain-text preview')) return;
+        let content;
+        try {
+          content = JSON.parse(preview.textContent ?? '');
+        } catch {
+          content = null;
+        }
+        const text = evidence.innerText;
+        const labels = [...evidenceButton.querySelectorAll(':scope > span')]
+          .map((span) => span.textContent?.trim() ?? '');
+        const identityPrefix = text.match(/\bid ([0-9a-f]{12})\b/)?.[1] ?? null;
         window.clearTimeout(deadline);
         observer.disconnect();
         resolve({
           expanded: true,
           contentState: 'text',
-          runText: text.slice(0, 4000),
-          runTextTruncated: text.length > 4000,
+          stepId: ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID)},
+          evidenceName: ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME)},
+          evidenceId: ${JSON.stringify(sha256(Buffer.from(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH)))},
+          displayedEvidenceIdPrefix: identityPrefix,
+          expectedEvidenceId: ${JSON.stringify(sha256(Buffer.from(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH)))},
+          kind: labels.at(-3) ?? null,
+          provenance: labels.at(-2)?.replaceAll(' ', '_') ?? null,
+          availability: labels.at(-1) ?? null,
+          content,
+          runText: run.innerText.slice(0, 4000),
+          runTextTruncated: run.innerText.length > 4000,
         });
       };
       const observer = new MutationObserver(complete);
@@ -692,6 +897,78 @@ async function observeActiveRightPanelSurface(renderer, expectedTitle, context) 
         window.clearTimeout(deadline);
         observer.disconnect();
         resolve({ title, panelVisible: document.querySelector('[role="tabpanel"]') !== null });
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
+      complete();
+    })`,
+    true,
+  );
+}
+
+async function observeDocumentText(renderer, requiredTexts, context) {
+  return renderer.executeJavaScript(
+    `new Promise((resolve, reject) => {
+      const required = ${JSON.stringify(requiredTexts)};
+      const deadline = window.setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
+      }, 45000);
+      const complete = () => {
+        const body = document.body.innerText;
+        if (!required.every((text) => body.includes(text))) return;
+        window.clearTimeout(deadline);
+        observer.disconnect();
+        resolve(body);
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+      complete();
+    })`,
+    true,
+  );
+}
+
+async function observeWorkspaceContext(
+  renderer,
+  { tabSelector, sectionLabel, requiredTexts, expectedRunLabels, expectedRunCount, context },
+) {
+  return renderer.executeJavaScript(
+    `new Promise((resolve, reject) => {
+      const required = ${JSON.stringify(requiredTexts)}.map((text) => text.toLowerCase());
+      const expectedLabels = ${JSON.stringify(expectedRunLabels)};
+      let clicked = false;
+      const deadline = window.setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
+      }, 45000);
+      const complete = () => {
+        const tab = document.querySelector(${JSON.stringify(tabSelector)});
+        if (!(tab instanceof HTMLElement)) return;
+        if (!clicked && tab.getAttribute('aria-selected') !== 'true') {
+          clicked = true;
+          tab.click();
+          return;
+        }
+        const section = document.querySelector(${JSON.stringify(`[aria-label="${sectionLabel}"]`)});
+        if (!(section instanceof HTMLElement)) return;
+        const text = section.innerText;
+        if (!required.every((value) => text.toLowerCase().includes(value))) return;
+        const runLabels = [...section.querySelectorAll('section[aria-label^="Workflow run "]')]
+          .map((node) => node.getAttribute('aria-label'))
+          .filter(Boolean);
+        if (${JSON.stringify(expectedRunCount)} !== null && runLabels.length !== ${JSON.stringify(expectedRunCount)}) return;
+        if (expectedLabels !== null && JSON.stringify(runLabels) !== JSON.stringify(expectedLabels)) return;
+        window.clearTimeout(deadline);
+        observer.disconnect();
+        resolve({
+          label: section.getAttribute('aria-label'),
+          text: text.slice(0, 4000),
+          textTruncated: text.length > 4000,
+          runLabels,
+          expandedButtons: section.querySelectorAll('button[aria-expanded="true"]').length,
+          collapsedButtons: section.querySelectorAll('button[aria-expanded="false"]').length,
+        });
       };
       const observer = new MutationObserver(complete);
       observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
@@ -784,6 +1061,8 @@ async function runElectronChild() {
   const dogfoodCodexIdentityJson = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CODEX_IDENTITY;
   const orchestraCoreIdentityJson = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CORE_IDENTITY;
   const productIdentityJson = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_PRODUCT_IDENTITY;
+  const sourceClean = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_SOURCE_CLEAN === "1";
+  const buildReceiptsJson = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_BUILD_RECEIPTS;
   if (
     !runtimeDirectory ||
     !backendPort ||
@@ -794,13 +1073,15 @@ async function runElectronChild() {
     !dogfoodCodexPath ||
     !dogfoodCodexIdentityJson ||
     !orchestraCoreIdentityJson ||
-    !productIdentityJson
+    !productIdentityJson ||
+    !buildReceiptsJson
   ) {
     throw new Error("native-shell child environment is incomplete");
   }
   const dogfoodCodexIdentity = JSON.parse(dogfoodCodexIdentityJson);
   const orchestraCoreIdentity = JSON.parse(orchestraCoreIdentityJson);
   const productIdentity = JSON.parse(productIdentityJson);
+  const buildReceipts = JSON.parse(buildReceiptsJson);
   app.setPath("userData", NodePath.join(runtimeDirectory, "electron-user-data"));
 
   const guestOrigin = `http://127.0.0.1:${guestPort}`;
@@ -824,47 +1105,7 @@ async function runElectronChild() {
     guestServer.listen(guestPort, "127.0.0.1", resolve);
   });
 
-  let responsesRequestCount = 0;
-  let responsesContractFailure = null;
-  const responsesCountWaiters = new Set();
-  const settleResponsesCountWaiters = () => {
-    for (const waiter of responsesCountWaiters) {
-      if (responsesContractFailure) {
-        responsesCountWaiters.delete(waiter);
-        clearTimeout(waiter.timeout);
-        waiter.reject(responsesContractFailure);
-      } else if (responsesRequestCount >= waiter.target) {
-        responsesCountWaiters.delete(waiter);
-        clearTimeout(waiter.timeout);
-        waiter.resolve(responsesRequestCount);
-      }
-    }
-  };
-  const awaitResponsesRequestCount = (target, context, timeoutMs = 60_000) =>
-    new Promise((resolve, reject) => {
-      if (responsesContractFailure) {
-        reject(responsesContractFailure);
-        return;
-      }
-      if (responsesRequestCount >= target) {
-        resolve(responsesRequestCount);
-        return;
-      }
-      const waiter = {
-        target,
-        resolve,
-        reject,
-        timeout: setTimeout(() => {
-          responsesCountWaiters.delete(waiter);
-          reject(
-            new Error(
-              `${context} did not reach ${target} Responses requests within ${timeoutMs}ms`,
-            ),
-          );
-        }, timeoutMs),
-      };
-      responsesCountWaiters.add(waiter);
-    });
+  const responsesRequestCounter = createNativeShellRequestCountWaiter();
   const responsesServer = NodeHttp.createServer((request, response) => {
     const url = new URL(request.url ?? "/", `http://127.0.0.1:${responsesPort}`);
     if (request.method === "GET" && url.pathname === "/v1/models") {
@@ -876,19 +1117,17 @@ async function runElectronChild() {
     request.on("data", (chunk) => chunks.push(chunk));
     request.on("end", () => {
       try {
-        const matched = matchNativeDogfoodResponsesRequest(responsesRequestCount, {
+        const matched = matchNativeDogfoodResponsesRequest(responsesRequestCounter.count, {
           method: request.method,
           pathname: url.pathname,
           contentEncoding: request.headers["content-encoding"],
           body: Buffer.concat(chunks),
         });
-        responsesRequestCount += 1;
-        settleResponsesCountWaiters();
+        responsesRequestCounter.increment();
         response.writeHead(matched.statusCode, matched.headers);
         response.end(matched.body);
       } catch (error) {
-        responsesContractFailure = error;
-        settleResponsesCountWaiters();
+        responsesRequestCounter.fail(error);
         response.writeHead(error instanceof NativeDogfoodContractError ? error.statusCode : 500, {
           "content-type": "application/json",
         });
@@ -1038,39 +1277,6 @@ async function runElectronChild() {
       throw error;
     }
 
-    const selectWorkspaceContext = async (tabSelector, sectionLabel, context) => {
-      await renderer.executeJavaScript(
-        `(() => {
-          const tab = document.querySelector(${JSON.stringify(tabSelector)});
-          if (!(tab instanceof HTMLElement)) throw new Error(${JSON.stringify(`${context} tab missing`)});
-          tab.click();
-        })()`,
-        true,
-      );
-      return waitFor(
-        () =>
-          renderer.executeJavaScript(
-            `(() => {
-              const section = document.querySelector(${JSON.stringify(`[aria-label="${sectionLabel}"]`)});
-              if (!(section instanceof HTMLElement)) return null;
-              const text = section.innerText;
-              return {
-                label: section.getAttribute('aria-label'),
-                text: text.slice(0, 4000),
-                textTruncated: text.length > 4000,
-                runLabels: [...section.querySelectorAll('section[aria-label^="Workflow run "]')]
-                  .map((node) => node.getAttribute('aria-label'))
-                  .filter(Boolean),
-                expandedButtons: section.querySelectorAll('button[aria-expanded="true"]').length,
-                collapsedButtons: section.querySelectorAll('button[aria-expanded="false"]').length,
-              };
-            })()`,
-            true,
-          ),
-        context,
-      );
-    };
-
     const clickButtonByText = async (scopeSelector, label, context) => {
       const clicked = await waitFor(
         () =>
@@ -1102,260 +1308,146 @@ async function runElectronChild() {
       restart: null,
     };
 
-    await dispatchCommand(bootstrap.bootstrap.httpBaseUrl, bootstrap.token, {
-      type: "thread.turn.start",
-      commandId: "cmd-native-dogfood-turn-start",
-      threadId,
-      message: {
-        messageId: "msg-native-dogfood-turn-start",
-        role: "user",
-        text: ORCHESTRA_NATIVE_DOGFOOD_PARENT_PROMPT,
-        attachments: [],
+    const waitingTurnReceipt = await dispatchCommand(
+      bootstrap.bootstrap.httpBaseUrl,
+      bootstrap.token,
+      {
+        type: "thread.turn.start",
+        commandId: "cmd-native-dogfood-turn-start",
+        threadId,
+        message: {
+          messageId: "msg-native-dogfood-turn-start",
+          role: "user",
+          text: ORCHESTRA_NATIVE_DOGFOOD_PARENT_PROMPT,
+          attachments: [],
+        },
+        modelSelection: { instanceId: "codex", model: "gpt-5.4" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        createdAt: new Date().toISOString(),
       },
-      modelSelection: { instanceId: "codex", model: "gpt-5.4" },
-      runtimeMode: "full-access",
-      interactionMode: "default",
-      createdAt: new Date().toISOString(),
+    );
+    if (!Number.isInteger(waitingTurnReceipt?.sequence)) {
+      throw new Error("native dogfood waiting turn did not return a typed receipt sequence");
+    }
+    await responsesRequestCounter.waitFor(3, "native dogfood waiting workflow");
+    const waitingAssistantEvent = await awaitNativeShellAssistantMessageEvent({
+      baseUrl: bootstrap.bootstrap.httpBaseUrl,
+      token: bootstrap.token,
+      threadId,
+      afterSequence: waitingTurnReceipt.sequence,
+      text: "Native workflow is waiting for approval.",
     });
-    await awaitResponsesRequestCount(3, "native dogfood waiting workflow");
-    const waitingWorkflow = await waitFor(
-      () =>
-        renderer
-          .executeJavaScript(
-            `(() => ({body:document.body.innerText, workflow:document.querySelector('#workspace-context-tab-workflow') !== null, attention:document.querySelector('#workspace-context-tab-attention') !== null}))()`,
-            true,
-          )
-          .then((state) =>
-            state.body.includes("Orchestra workflow") && state.workflow && state.attention
-              ? state
-              : null,
-          ),
+    const waitingWorkflow = await observeDocumentText(
+      renderer,
+      ["Orchestra workflow"],
       "native workflow waiting projection",
-      45_000,
     );
-    const waitingWorkflowView = await waitFor(
-      () =>
-        selectWorkspaceContext(
-          "#workspace-context-tab-workflow",
-          "Task Workflow Runs",
-          "rendered waiting Workflow view",
-        ).then((state) =>
-          state.runLabels.length === 1 && state.text.includes("Waiting") ? state : null,
-        ),
-      "rendered waiting native Run",
-      45_000,
-    );
+    const waitingWorkflowView = await observeWorkspaceContext(renderer, {
+      tabSelector: "#workspace-context-tab-workflow",
+      sectionLabel: "Task Workflow Runs",
+      requiredTexts: ["Waiting"],
+      expectedRunLabels: null,
+      expectedRunCount: 1,
+      context: "rendered waiting native Run",
+    });
     nativeDogfoodObservation.workflow.waiting = waitingWorkflowView;
+    nativeDogfoodObservation.workflow.waitingEventSequence = waitingAssistantEvent.event.sequence;
     const waitingRunLabel = waitingWorkflowView.runLabels[0];
     const waitingRunId = waitingRunLabel.replace(/^Workflow run /, "");
-    const waitingAttentionView = await waitFor(
-      () =>
-        selectWorkspaceContext(
-          "#workspace-context-tab-attention",
-          "Task attention",
-          "rendered waiting Attention view",
-        ).then((state) => (/approval/i.test(state.text) ? state : null)),
-      "rendered approval attention state",
-      45_000,
-    );
+    const waitingAttentionView = await observeWorkspaceContext(renderer, {
+      tabSelector: "#workspace-context-tab-attention",
+      sectionLabel: "Task attention",
+      requiredTexts: ["approval"],
+      expectedRunLabels: null,
+      expectedRunCount: 0,
+      context: "rendered approval attention state",
+    });
     nativeDogfoodObservation.attention.waiting = waitingAttentionView;
 
-    await dispatchCommand(bootstrap.bootstrap.httpBaseUrl, bootstrap.token, {
-      type: "thread.turn.start",
-      commandId: "cmd-native-dogfood-resume",
-      threadId,
-      message: {
-        messageId: "msg-native-dogfood-resume",
-        role: "user",
-        text: ORCHESTRA_NATIVE_DOGFOOD_RESUME_PROMPT,
-        attachments: [],
+    const completedTurnReceipt = await dispatchCommand(
+      bootstrap.bootstrap.httpBaseUrl,
+      bootstrap.token,
+      {
+        type: "thread.turn.start",
+        commandId: "cmd-native-dogfood-resume",
+        threadId,
+        message: {
+          messageId: "msg-native-dogfood-resume",
+          role: "user",
+          text: ORCHESTRA_NATIVE_DOGFOOD_RESUME_PROMPT,
+          attachments: [],
+        },
+        modelSelection: { instanceId: "codex", model: "gpt-5.4" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        createdAt: new Date().toISOString(),
       },
-      modelSelection: { instanceId: "codex", model: "gpt-5.4" },
-      runtimeMode: "full-access",
-      interactionMode: "default",
-      createdAt: new Date().toISOString(),
+    );
+    if (!Number.isInteger(completedTurnReceipt?.sequence)) {
+      throw new Error("native dogfood completed turn did not return a typed receipt sequence");
+    }
+    await responsesRequestCounter.waitFor(
+      ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,
+      "native dogfood completed workflow",
+    );
+    assertNativeDogfoodResponsesComplete(responsesRequestCounter.count);
+    const completedAssistantEvent = await awaitNativeShellAssistantMessageEvent({
+      baseUrl: bootstrap.bootstrap.httpBaseUrl,
+      token: bootstrap.token,
+      threadId,
+      afterSequence: completedTurnReceipt.sequence,
+      text: ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT,
     });
-    await awaitResponsesRequestCount(5, "native dogfood completed workflow");
-    assertNativeDogfoodResponsesComplete(responsesRequestCount);
-    const completedWorkflow = await waitFor(
-      () =>
-        renderer
-          .executeJavaScript(`document.body.innerText`, true)
-          .then((body) =>
-            body.includes(ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT) ? body : null,
-          ),
+    const completedWorkflow = await observeDocumentText(
+      renderer,
+      [ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT],
       "native workflow completed projection",
-      45_000,
     );
-    const completedWorkflowView = await waitFor(
-      () =>
-        selectWorkspaceContext(
-          "#workspace-context-tab-workflow",
-          "Task Workflow Runs",
-          "rendered completed Workflow view",
-        ).then((state) =>
-          state.runLabels.length === 1 &&
-          state.runLabels[0] === waitingRunLabel &&
-          state.text.includes("Completed")
-            ? state
-            : null,
-        ),
-      "same rendered native Run after completion",
-      45_000,
-    );
+    const completedWorkflowView = await observeWorkspaceContext(renderer, {
+      tabSelector: "#workspace-context-tab-workflow",
+      sectionLabel: "Task Workflow Runs",
+      requiredTexts: ["Completed"],
+      expectedRunLabels: [waitingRunLabel],
+      expectedRunCount: 1,
+      context: "same rendered native Run after completion",
+    });
     nativeDogfoodObservation.workflow.completed = completedWorkflowView;
+    nativeDogfoodObservation.workflow.completedEventSequence =
+      completedAssistantEvent.event.sequence;
     nativeDogfoodObservation.workflow.sameRun =
       completedWorkflowView.runLabels.length === 1 &&
       completedWorkflowView.runLabels[0] === waitingRunLabel;
 
     const workflowRunSelector = `[aria-label=${JSON.stringify(waitingRunLabel)}]`;
-    await renderer.executeJavaScript(
-      `(() => {
-        const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
-        const disclosure = run?.querySelector('button[aria-controls][aria-expanded="false"]');
-        if (!(disclosure instanceof HTMLButtonElement)) {
-          throw new Error('completed native Run disclosure missing');
-        }
-        disclosure.click();
-      })()`,
-      true,
+    const evidenceBefore = await observeNativeGitCheckEvidenceReference(
+      renderer,
+      workflowRunSelector,
+      "native git check Evidence reference",
     );
-    await waitFor(
-      () =>
-        renderer.executeJavaScript(
-          `(() => {
-            const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
-            return run instanceof HTMLElement &&
-              run.innerText.includes('Revision') &&
-              !run.innerText.includes('Loading bounded native run tree…');
-          })()`,
-          true,
-        ),
-      "bounded completed native Run tree",
-      45_000,
+    const evidenceAfter = await observeExpandedWorkflowEvidence(
+      renderer,
+      workflowRunSelector,
+      "authorized native git check Evidence expansion",
     );
-    for (let stepIndex = 0; stepIndex < 16; stepIndex += 1) {
-      const openedStep = await renderer.executeJavaScript(
-        `(() => {
-          const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
-          if (!(run instanceof HTMLElement)) return false;
-          const disclosure = [...run.querySelectorAll('button[aria-controls][aria-expanded="false"]')]
-            .find((button) => button instanceof HTMLButtonElement);
-          if (!(disclosure instanceof HTMLButtonElement)) return false;
-          disclosure.click();
-          return true;
-        })()`,
-        true,
-      );
-      if (!openedStep) break;
-      await waitFor(
-        () =>
-          renderer.executeJavaScript(
-            `(() => {
-              const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
-              return run instanceof HTMLElement &&
-                !run.innerText.includes('Loading step outputs and evidence references…');
-            })()`,
-            true,
-          ),
-        `bounded native step detail ${stepIndex + 1}`,
-        45_000,
+    if (!isNativeGitCheckEvidenceObservation(evidenceAfter)) {
+      throw new Error(
+        `native workflow returned the wrong git check Evidence: ${JSON.stringify(evidenceAfter)}`,
       );
     }
-    const evidenceBefore = await renderer.executeJavaScript(
-      `(() => {
-        const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
-        if (!(run instanceof HTMLElement)) return null;
-        const button = [...run.querySelectorAll('button[aria-expanded]:not([aria-controls])')]
-          .find((candidate) => candidate instanceof HTMLButtonElement);
-        const text = run.innerText;
-        return {
-          exposed: button instanceof HTMLButtonElement,
-          buttonText: button?.textContent?.trim() ?? null,
-          contentAbsentBeforeExpand:
-            !text.includes('Plain-text preview') &&
-            !text.includes('Loading authorized evidence…'),
-          runText: text.slice(0, 4000),
-          runTextTruncated: text.length > 4000,
-        };
-      })()`,
-      true,
-    );
-    if (evidenceBefore?.exposed) {
-      await renderer.executeJavaScript(
-        `(() => {
-          const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
-          const button = run && [...run.querySelectorAll('button[aria-expanded]:not([aria-controls])')]
-            .find((candidate) => candidate instanceof HTMLButtonElement);
-          if (!(button instanceof HTMLButtonElement)) throw new Error('evidence disclosure disappeared');
-          button.click();
-        })()`,
-        true,
-      );
-      const evidenceAfter = await waitFor(
-        () =>
-          renderer.executeJavaScript(
-            `(() => {
-              const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
-              const button = run && [...run.querySelectorAll('button[aria-expanded]:not([aria-controls])')]
-                .find((candidate) => candidate instanceof HTMLButtonElement);
-              if (!(run instanceof HTMLElement) || button?.getAttribute('aria-expanded') !== 'true') return null;
-              const text = run.innerText;
-              if (text.includes('Loading authorized evidence…')) return null;
-              return {
-                expanded: true,
-                contentState: text.includes('Plain-text preview')
-                  ? 'text'
-                  : text.includes('Evidence integrity changed')
-                    ? 'integrity_failure'
-                    : text.includes('Evidence media type')
-                      ? 'unsupported_media'
-                      : text.includes('Empty evidence')
-                        ? 'empty'
-                        : text.includes('Evidence content too large')
-                          ? 'content_too_large'
-                          : text.includes('Evidence malformed')
-                            ? 'malformed'
-                            : text.includes('Evidence unavailable')
-                              ? 'unavailable'
-                              : 'rendered_other',
-                runText: text.slice(0, 4000),
-                runTextTruncated: text.length > 4000,
-              };
-            })()`,
-            true,
-          ),
-        "authorized native evidence expansion",
-        45_000,
-      );
-      nativeDogfoodObservation.evidence = {
-        before: evidenceBefore,
-        after: evidenceAfter,
-      };
-    } else {
-      nativeDogfoodObservation.evidence = {
-        before: evidenceBefore,
-        after: null,
-      };
-    }
+    nativeDogfoodObservation.evidence = { before: evidenceBefore, after: evidenceAfter };
 
-    const completedAttentionView = await waitFor(
-      () =>
-        selectWorkspaceContext(
-          "#workspace-context-tab-attention",
-          "Task attention",
-          "rendered completed Attention view",
-        ).then((state) =>
-          state.text.includes("No items need intervention") &&
-          state.text.includes(
-            "approvals, gates, effects, reconciliation, and provider state are clear",
-          )
-            ? state
-            : null,
-        ),
-      "rendered cleared attention state",
-      45_000,
-    );
+    const completedAttentionView = await observeWorkspaceContext(renderer, {
+      tabSelector: "#workspace-context-tab-attention",
+      sectionLabel: "Task attention",
+      requiredTexts: [
+        "No items need intervention",
+        "approvals, gates, effects, reconciliation, and provider state are clear",
+      ],
+      expectedRunLabels: null,
+      expectedRunCount: 0,
+      context: "rendered cleared attention state",
+    });
     nativeDogfoodObservation.attention.completed = completedAttentionView;
 
     await renderer.executeJavaScript(
@@ -1468,10 +1560,7 @@ async function runElectronChild() {
       validation: symphonyValidation,
       started: symphonyStarted,
       inspected: symphonyInspected,
-      sameRootAfterInspect:
-        symphonyInspected === null ||
-        (symphonyInspected.runId === symphonyStarted.runId &&
-          symphonyInspected.instanceCount === 1),
+      sameRootAfterInspect: isUniqueNativeSymphonyInspection(symphonyStarted, symphonyInspected),
       issueChildFabricated: symphonyStarted.issueRowCount !== 0,
     };
     await renderer.executeJavaScript(
@@ -1497,27 +1586,24 @@ async function runElectronChild() {
       `document.querySelector('[aria-label="Dismiss notification"]')?.click()`,
       true,
     );
-    const reloadWorkflowView = await waitFor(
-      () =>
-        selectWorkspaceContext(
-          "#workspace-context-tab-workflow",
-          "Task Workflow Runs",
-          "Workflow view after renderer reload",
-        ).then((state) =>
-          state.runLabels.length === 1 &&
-          state.runLabels[0] === waitingRunLabel &&
-          state.text.includes("Completed")
-            ? state
-            : null,
-        ),
-      "same native Run after renderer reload",
-      45_000,
-    );
+    const reloadWorkflowView = await observeWorkspaceContext(renderer, {
+      tabSelector: "#workspace-context-tab-workflow",
+      sectionLabel: "Task Workflow Runs",
+      requiredTexts: ["Completed"],
+      expectedRunLabels: [waitingRunLabel],
+      expectedRunCount: 1,
+      context: "same native Run after renderer reload",
+    });
     const reloadEvidence = await observeExpandedWorkflowEvidence(
       renderer,
       workflowRunSelector,
       "expanded native Evidence after renderer reload",
     );
+    if (!isNativeGitCheckEvidenceObservation(reloadEvidence)) {
+      throw new Error(
+        `renderer reload returned the wrong git check Evidence: ${JSON.stringify(reloadEvidence)}`,
+      );
+    }
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Symphony automation"]')?.click()`,
       true,
@@ -1534,7 +1620,8 @@ async function runElectronChild() {
       sameWorkflowRun: reloadWorkflowView.runLabels[0] === waitingRunLabel,
       sameSymphonyRoot:
         reloadSymphonyRoot.runId === symphonyStarted.runId &&
-        reloadSymphonyRoot.instanceCount === 1,
+        reloadSymphonyRoot.instanceCount === 1 &&
+        reloadSymphonyRoot.totalRootCount === 1,
     };
 
     const providerStopCommand = {
@@ -1567,7 +1654,7 @@ async function runElectronChild() {
     if (stoppedThreadSession.session?.status !== "stopped") {
       throw new Error("typed stopped event did not agree with the bounded thread snapshot");
     }
-    assertNativeDogfoodResponsesComplete(responsesRequestCount);
+    assertNativeDogfoodResponsesComplete(responsesRequestCounter.count);
 
     await clickButtonByText(symphonySelector, "Inspect", "Symphony recovery after provider stop");
     const readySessionEvent = await awaitNativeShellSessionEvent({
@@ -1605,28 +1692,25 @@ async function runElectronChild() {
       symphonyStarted.runId,
       "same Symphony root after provider restart",
     );
-    const restartWorkflowView = await waitFor(
-      () =>
-        selectWorkspaceContext(
-          "#workspace-context-tab-workflow",
-          "Task Workflow Runs",
-          "Workflow view after provider restart",
-        ).then((state) =>
-          state.runLabels.length === 1 &&
-          state.runLabels[0] === waitingRunLabel &&
-          state.text.includes("Completed")
-            ? state
-            : null,
-        ),
-      "same native Run after provider restart",
-      45_000,
-    );
+    const restartWorkflowView = await observeWorkspaceContext(renderer, {
+      tabSelector: "#workspace-context-tab-workflow",
+      sectionLabel: "Task Workflow Runs",
+      requiredTexts: ["Completed"],
+      expectedRunLabels: [waitingRunLabel],
+      expectedRunCount: 1,
+      context: "same native Run after provider restart",
+    });
     const restartEvidence = await observeExpandedWorkflowEvidence(
       renderer,
       workflowRunSelector,
       "expanded native Evidence after provider restart",
     );
-    assertNativeDogfoodResponsesComplete(responsesRequestCount);
+    if (!isNativeGitCheckEvidenceObservation(restartEvidence)) {
+      throw new Error(
+        `provider restart returned the wrong git check Evidence: ${JSON.stringify(restartEvidence)}`,
+      );
+    }
+    assertNativeDogfoodResponsesComplete(responsesRequestCounter.count);
     nativeDogfoodObservation.restart = {
       stop: {
         command: {
@@ -1637,7 +1721,7 @@ async function runElectronChild() {
         receiptSequence: providerStopReceipt?.sequence ?? null,
         sessionEventSequence: stoppedSessionEvent.event.sequence,
         thread: stoppedThreadSession,
-        responsesRequestCount,
+        responsesRequestCount: responsesRequestCounter.count,
       },
       recovery: {
         trigger: "Symphony Inspect / automation.status",
@@ -1650,12 +1734,13 @@ async function runElectronChild() {
         workflow: restartWorkflowView,
         evidence: restartEvidence,
         symphony: restartSymphonyRoot,
-        responsesRequestCount,
+        responsesRequestCount: responsesRequestCounter.count,
       },
       sameWorkflowRun: restartWorkflowView.runLabels[0] === `Workflow run ${waitingRunId}`,
       sameSymphonyRoot:
         restartSymphonyRoot.runId === symphonyStarted.runId &&
-        restartSymphonyRoot.instanceCount === 1,
+        restartSymphonyRoot.instanceCount === 1 &&
+        restartSymphonyRoot.totalRootCount === 1,
       sameSymphonyStatus: restartSymphonyRoot.status === "running",
     };
     await renderer.executeJavaScript(
@@ -2017,8 +2102,8 @@ async function runElectronChild() {
         reloadState.hash.includes(threadId) && reloadState.body.includes(threadTitle),
       ),
       nativeDogfoodResponsesExact: makeNativeShellAssertion(
-        { requestCount: responsesRequestCount },
-        isExactNativeDogfoodResponseCount(responsesRequestCount),
+        { requestCount: responsesRequestCounter.count },
+        isExactNativeDogfoodResponseCount(responsesRequestCounter.count),
       ),
       currentCodexForkRecorded: makeNativeShellAssertion(
         dogfoodCodexIdentity,
@@ -2045,7 +2130,8 @@ async function runElectronChild() {
       ),
       nativeEvidenceLazyExpanded: makeNativeShellAssertion(
         nativeDogfoodObservation.evidence,
-        isNativeEvidenceObservation(nativeDogfoodObservation.evidence),
+        isNativeEvidenceObservation(nativeDogfoodObservation.evidence) &&
+          isNativeGitCheckEvidenceObservation(nativeDogfoodObservation.evidence?.after),
       ),
       nativeSymphonySkippedIntake: makeNativeShellAssertion(
         nativeDogfoodObservation.symphony,
@@ -2065,20 +2151,22 @@ async function runElectronChild() {
         nativeDogfoodObservation.symphony?.sameRootAfterInspect === true &&
           nativeDogfoodObservation.reload?.sameWorkflowRun === true &&
           nativeDogfoodObservation.reload.sameSymphonyRoot === true &&
-          nativeDogfoodObservation.reload.evidence?.expanded === true &&
-          nativeDogfoodObservation.reload.evidence.contentState === "text",
+          isNativeGitCheckEvidenceObservation(nativeDogfoodObservation.reload.evidence),
       ),
       nativeDogfoodProviderRestartRecovered: makeNativeShellAssertion(
         nativeDogfoodObservation.restart,
         nativeDogfoodObservation.restart?.stop.thread.session?.status === "stopped" &&
-          nativeDogfoodObservation.restart.stop.responsesRequestCount === 5 &&
+          isExactNativeDogfoodResponseCount(
+            nativeDogfoodObservation.restart.stop.responsesRequestCount,
+          ) &&
           nativeDogfoodObservation.restart.recovery.thread.session?.status === "ready" &&
-          nativeDogfoodObservation.restart.recovery.responsesRequestCount === 5 &&
+          isExactNativeDogfoodResponseCount(
+            nativeDogfoodObservation.restart.recovery.responsesRequestCount,
+          ) &&
           nativeDogfoodObservation.restart.recovery.typedSymphonyStatus?.runId ===
             nativeDogfoodObservation.restart.recovery.symphony.runId &&
           nativeDogfoodObservation.restart.recovery.typedSymphonyStatus.status === "running" &&
-          nativeDogfoodObservation.restart.recovery.evidence?.expanded === true &&
-          nativeDogfoodObservation.restart.recovery.evidence.contentState === "text" &&
+          isNativeGitCheckEvidenceObservation(nativeDogfoodObservation.restart.recovery.evidence) &&
           nativeDogfoodObservation.restart.sameWorkflowRun === true &&
           nativeDogfoodObservation.restart.sameSymphonyRoot === true &&
           nativeDogfoodObservation.restart.sameSymphonyStatus === true,
@@ -2463,6 +2551,8 @@ async function runElectronChild() {
         electronVersion: process.versions.electron,
         chromiumVersion: process.versions.chrome,
         platform: { os: hostPlatform, arch: hostArchitecture },
+        sourceClean,
+        buildReceipts,
       },
       productionEntry: "t3code://app/",
       buildArtifacts: await Promise.all(
@@ -2491,7 +2581,7 @@ async function runElectronChild() {
         },
         rejectedAttachmentProbe: rejectedAttachmentObservation,
         nativeDogfood: {
-          responsesRequestCount,
+          responsesRequestCount: responsesRequestCounter.count,
           waitingProjectionVisible: Boolean(waitingWorkflow),
           completedProjectionVisible: Boolean(completedWorkflow),
           ...nativeDogfoodObservation,
@@ -2502,7 +2592,16 @@ async function runElectronChild() {
       agentReview: {
         status: "pending",
         reviewedAt: new Date(0).toISOString(),
-        notes: "Pending direct agent visual inspection of all four real Electron screenshots.",
+        scenarios: screenshotScenarios.map(({ scenario }) => ({
+          scenario,
+          clipping: "pending",
+          contrast: "pending",
+          layering: "pending",
+          drawerGeometry: "pending",
+          activeTaskContinuity: "pending",
+          nativeSurfaceLegibility: "pending",
+          notes: "Pending agent visual inspection.",
+        })),
       },
     };
     await NodeFSP.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
