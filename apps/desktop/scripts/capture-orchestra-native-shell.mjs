@@ -1040,9 +1040,14 @@ async function observeActiveRightPanelSurface(renderer, expectedTitle, context) 
   );
 }
 
-async function selectVisibleMenuItem(renderer, { triggerSelector, label, context }) {
+async function interactWithVisibleMenu(
+  renderer,
+  { triggerSelector, requiredLabels, selectLabel = null, context },
+) {
   return renderer.executeJavaScript(
     `new Promise((resolve, reject) => {
+      const requiredLabels = ${JSON.stringify(requiredLabels)};
+      const selectLabel = ${JSON.stringify(selectLabel)};
       const trigger = document.querySelector(${JSON.stringify(triggerSelector)});
       if (!(trigger instanceof HTMLButtonElement) || trigger.disabled) {
         reject(new Error(${JSON.stringify(`${context} trigger missing`)}));
@@ -1050,24 +1055,42 @@ async function selectVisibleMenuItem(renderer, { triggerSelector, label, context
       }
       const deadline = window.setTimeout(() => {
         observer.disconnect();
-        reject(new Error(${JSON.stringify(`${context} menu item missing`)}));
+        reject(new Error(${JSON.stringify(`${context} menu did not render within 45000ms`)}));
       }, 45000);
       const complete = () => {
         const popup = [...document.querySelectorAll('[data-slot="menu-popup"]')]
-          .find((candidate) =>
-            candidate instanceof HTMLElement &&
-            candidate.getClientRects().length > 0 &&
-            [...candidate.querySelectorAll('[data-slot="menu-item"]')]
-              .some((item) => item.textContent?.trim() === ${JSON.stringify(label)}));
+          .find((candidate) => {
+            if (!(candidate instanceof HTMLElement) || candidate.getClientRects().length === 0) {
+              return false;
+            }
+            const labels = [...candidate.querySelectorAll('[data-slot="menu-item"]')]
+              .map((item) => item.textContent?.trim() ?? '');
+            return requiredLabels.every((label) => labels.includes(label));
+          });
         if (!(popup instanceof HTMLElement)) return;
-        const item = [...popup.querySelectorAll('[data-slot="menu-item"]')]
-          .find((candidate) => candidate.textContent?.trim() === ${JSON.stringify(label)});
-        if (!(item instanceof HTMLElement) ||
-            item.matches('[data-disabled], [aria-disabled="true"]')) return;
+        const items = [...popup.querySelectorAll('[data-slot="menu-item"]')]
+          .map((item) => ({
+            element: item,
+            label: item.textContent?.trim() ?? '',
+            disabled: item.matches('[data-disabled], [aria-disabled="true"]'),
+          }))
+          .filter(({ label }) => label.length > 0);
+        const selected = selectLabel === null
+          ? null
+          : items.find(({ label }) => label === selectLabel);
+        if (selectLabel !== null && (!selected || selected.disabled)) return;
         window.clearTimeout(deadline);
         observer.disconnect();
-        item.click();
-        resolve({ label: item.textContent?.trim() ?? '' });
+        if (selected) {
+          selected.element.click();
+        } else {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        }
+        resolve({
+          popupVisible: true,
+          items: items.map(({ label, disabled }) => ({ label, disabled })),
+          selectedLabel: selected?.label ?? null,
+        });
       };
       const observer = new MutationObserver(complete);
       observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
@@ -1179,9 +1202,10 @@ async function addRightPanelSurface(
       true,
     );
   } else {
-    await selectVisibleMenuItem(renderer, {
+    await interactWithVisibleMenu(renderer, {
       triggerSelector: '[aria-label="Add panel surface"]',
-      label,
+      requiredLabels: [label],
+      selectLabel: label,
       context: `${label} surface`,
     });
   }
@@ -2019,41 +2043,11 @@ async function runElectronChild() {
       true,
     );
 
-    const retainedVcsMenu = await renderer.executeJavaScript(
-      `new Promise((resolve, reject) => {
-        const trigger = document.querySelector('[aria-label="Git action options"]');
-        if (!(trigger instanceof HTMLButtonElement) || trigger.disabled) {
-          reject(new Error('Git action options trigger missing'));
-          return;
-        }
-        const deadline = window.setTimeout(() => {
-          observer.disconnect();
-          reject(new Error('Git action menu did not render within 45000ms'));
-        }, 45000);
-        const complete = () => {
-          const popup = document.querySelector('[data-slot="menu-popup"]');
-          if (!(popup instanceof HTMLElement) || popup.getClientRects().length === 0) return;
-          const items = [...popup.querySelectorAll('[data-slot="menu-item"]')]
-            .map((item) => ({
-              label: item.textContent?.trim() ?? '',
-              disabled: item.matches('[data-disabled], [aria-disabled="true"]'),
-            }))
-            .filter(({ label }) => label.length > 0);
-          if (!items.some(({ label }) => label.includes('Commit')) ||
-              !items.some(({ label }) => label.includes('Push'))) return;
-          window.clearTimeout(deadline);
-          observer.disconnect();
-          resolve({ popupVisible: true, items });
-          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        };
-        const observer = new MutationObserver(complete);
-        observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
-        trigger.focus();
-        trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
-        complete();
-      })`,
-      true,
-    );
+    const retainedVcsMenu = await interactWithVisibleMenu(renderer, {
+      triggerSelector: '[aria-label="Git action options"]',
+      requiredLabels: ["Commit", "Push"],
+      context: "Git action",
+    });
     retainedDesktopCapabilities.vcs = {
       ...retainedVcsMenu,
       fixtureRemote: gitFixtureIdentity,

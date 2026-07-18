@@ -290,10 +290,9 @@ describe("native-shell acceptance capture contract", () => {
     const probeSource = captureSource.slice(probeStart, probeEnd);
     expect(probeStart).toBeGreaterThanOrEqual(0);
     expect(probeEnd).toBeGreaterThan(probeStart);
-    expect(probeSource).toContain("key: 'ArrowDown'");
-    expect(probeSource).toContain("popup.getClientRects().length === 0");
-    expect(probeSource).toContain("popup.querySelectorAll('[data-slot=\"menu-item\"]')");
-    expect(probeSource).not.toContain("document.querySelectorAll('[role=\"menuitem\"]')");
+    expect(probeSource).toContain("interactWithVisibleMenu(renderer");
+    expect(probeSource).toContain('requiredLabels: ["Commit", "Push"]');
+    expect(probeSource).not.toContain("executeJavaScript");
   });
 
   it("gives the isolated repository a local bare origin that exposes production Push", async () => {
@@ -348,15 +347,16 @@ describe("native-shell acceptance capture contract", () => {
       NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),
       "utf8",
     );
-    const helperStart = captureSource.indexOf("async function selectVisibleMenuItem");
+    const helperStart = captureSource.indexOf("async function interactWithVisibleMenu");
     const helperEnd = captureSource.indexOf("async function observeDocumentText", helperStart);
     const helperSource = captureSource.slice(helperStart, helperEnd);
     expect(helperStart).toBeGreaterThanOrEqual(0);
     expect(helperEnd).toBeGreaterThan(helperStart);
-    expect(helperSource).toContain("getClientRects().length > 0");
+    expect(helperSource).toContain("getClientRects().length === 0");
     expect(helperSource).toContain("candidate.querySelectorAll('[data-slot=\"menu-item\"]')");
     expect(helperSource).toContain("key: 'ArrowDown'");
     expect(helperSource).not.toContain("querySelectorAll('[role=\"menuitem\"]')");
+    expect(captureSource.match(/interactWithVisibleMenu\(renderer/g)).toHaveLength(2);
     expect(captureSource).toContain("bounded tabs:");
   });
 
