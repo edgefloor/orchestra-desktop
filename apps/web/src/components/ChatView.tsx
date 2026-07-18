@@ -1839,7 +1839,7 @@ function ChatViewContent(props: ChatViewProps) {
     [activeThread, shouldUseWorkspaceContextSheet],
   );
   const openWorkflowEvidenceSurface = useCallback(
-    (runId: string, evidenceId: string) => {
+    (runId: string, stepId: string, evidenceId: string) => {
       if (!activeThread) return;
       useWorkspaceSurfaceStore.getState().openSurface({
         schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
@@ -1848,6 +1848,7 @@ function ChatViewContent(props: ChatViewProps) {
         projectId: activeThread.projectId,
         threadId: activeThread.id,
         runId,
+        stepId,
         evidenceId,
       });
       setWorkspaceContextRailView("workflow");
@@ -6151,7 +6152,10 @@ function ChatViewContent(props: ChatViewProps) {
                     ? {
                         requestedRunId: activeWorkspaceEntry.surface.runId,
                         ...(activeWorkspaceEntry.surface.kind === "evidence"
-                          ? { requestedEvidenceId: activeWorkspaceEntry.surface.evidenceId }
+                          ? {
+                              requestedEvidenceStepId: activeWorkspaceEntry.surface.stepId,
+                              requestedEvidenceId: activeWorkspaceEntry.surface.evidenceId,
+                            }
                           : {}),
                       }
                     : {})}
@@ -6290,7 +6294,10 @@ function ChatViewContent(props: ChatViewProps) {
                   ? {
                       requestedRunId: activeWorkspaceEntry.surface.runId,
                       ...(activeWorkspaceEntry.surface.kind === "evidence"
-                        ? { requestedEvidenceId: activeWorkspaceEntry.surface.evidenceId }
+                        ? {
+                            requestedEvidenceStepId: activeWorkspaceEntry.surface.stepId,
+                            requestedEvidenceId: activeWorkspaceEntry.surface.evidenceId,
+                          }
                         : {}),
                     }
                   : {})}

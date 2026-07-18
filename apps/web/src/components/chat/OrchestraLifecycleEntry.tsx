@@ -118,15 +118,17 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   readonly threadId: ThreadId;
   readonly event: OrchestraReplayEvent;
   readonly requestedRunId?: string;
+  readonly requestedEvidenceStepId?: string;
   readonly requestedEvidenceId?: string;
   readonly onOpenRun?: (runId: string) => void;
-  readonly onOpenEvidence?: (runId: string, evidenceId: string) => void;
+  readonly onOpenEvidence?: (runId: string, stepId: string, evidenceId: string) => void;
 }) {
   const {
     environmentId,
     threadId,
     event,
     requestedRunId,
+    requestedEvidenceStepId,
     requestedEvidenceId,
     onOpenRun,
     onOpenEvidence,
@@ -156,6 +158,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   const [loading, setLoading] = useState<ReadonlySet<string>>(() => new Set());
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const restoredRunRequestRef = useRef<string | null>(null);
+  const restoredEvidencePageRequestRef = useRef<string | null>(null);
   const restoredEvidenceRequestRef = useRef<string | null>(null);
 
   const load = useCallback(
@@ -332,7 +335,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   }, [history, historyExpanded, load]);
 
   const toggleEvidence = useCallback(
-    (item: OrchestraEvidenceReference) => {
+    (stepId: string, item: OrchestraEvidenceReference) => {
       const willExpand = !expandedEvidence.has(item.evidenceId);
       setExpandedEvidence((current) => {
         const next = new Set(current);
@@ -340,13 +343,42 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
         else next.delete(item.evidenceId);
         return next;
       });
-      if (willExpand) onOpenEvidence?.(event.runId, item.evidenceId);
+      if (willExpand) onOpenEvidence?.(event.runId, stepId, item.evidenceId);
       if (willExpand && evidenceContent[item.evidenceId] === undefined) {
         void load("evidence_content", undefined, item.evidenceId);
       }
     },
     [event.runId, evidenceContent, expandedEvidence, load, onOpenEvidence],
   );
+
+  useEffect(() => {
+    if (
+      requestedRunId !== event.runId ||
+      !requestedEvidenceStepId ||
+      !requestedEvidenceId ||
+      !steps?.some((step) => step.id === requestedEvidenceStepId)
+    ) {
+      restoredEvidencePageRequestRef.current = null;
+      return;
+    }
+    setExpandedSteps((current) => new Set(current).add(requestedEvidenceStepId));
+    const restorationKey = `${event.runId}:${requestedEvidenceStepId}:${requestedEvidenceId}`;
+    if (
+      evidence[requestedEvidenceStepId] === undefined &&
+      restoredEvidencePageRequestRef.current !== restorationKey
+    ) {
+      restoredEvidencePageRequestRef.current = restorationKey;
+      void load("evidence", requestedEvidenceStepId);
+    }
+  }, [
+    event.runId,
+    evidence,
+    load,
+    requestedEvidenceId,
+    requestedEvidenceStepId,
+    requestedRunId,
+    steps,
+  ]);
 
   useEffect(() => {
     if (requestedRunId !== event.runId || !requestedEvidenceId) {
@@ -551,7 +583,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                             <button
                               aria-expanded={itemExpanded}
                               className="flex min-h-6 w-full items-center gap-2 text-left pointer-coarse:min-h-11"
-                              onClick={() => toggleEvidence(item)}
+                              onClick={() => toggleEvidence(step.id, item)}
                               type="button"
                             >
                               {itemExpanded ? (

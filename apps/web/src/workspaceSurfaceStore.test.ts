@@ -8,7 +8,7 @@ import {
 } from "./workspaceSurfaceStore";
 
 const surface: WorkspaceSurface = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   kind: "attention",
   environmentId: EnvironmentId.make("local"),
   projectId: ProjectId.make("orchestra"),
@@ -20,6 +20,15 @@ beforeEach(() => {
 });
 
 describe("workspace surface store", () => {
+  it("drops the pre-step workspace schema instead of guessing lazy query scope", () => {
+    expect(
+      normalizePersistedWorkspaceSurfaceState({
+        schemaVersion: 1,
+        entries: [{ surface: { ...surface, schemaVersion: 1 } }],
+      }),
+    ).toEqual({ schemaVersion: 2, entries: [], activeSurfaceKey: null, focusOrder: [] });
+  });
+
   it("wraps the pure open, focus, close, and reconcile transitions", () => {
     const store = useWorkspaceSurfaceStore.getState();
     const key = workspaceSurfaceKey(surface);
@@ -49,7 +58,7 @@ describe("workspace surface store", () => {
     const key = workspaceSurfaceKey(surface);
     expect(
       normalizePersistedWorkspaceSurfaceState({
-        schemaVersion: 1,
+        schemaVersion: 2,
         entries: [
           { surface, availability: "temporarilyUnavailable" },
           { surface: { ...surface, kind: "unknown" }, availability: "available" },
@@ -59,7 +68,7 @@ describe("workspace surface store", () => {
         executionAuthority: { invented: true },
       }),
     ).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       entries: [{ surface, availability: "temporarilyUnavailable" }],
       activeSurfaceKey: null,
       focusOrder: [key],

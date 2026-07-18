@@ -75,7 +75,7 @@ describe("OrchestraLifecycleEntry", () => {
   it("emits workspace descriptors only while opening run and evidence disclosures", () => {
     expect(lifecycleSource).toContain("if (next) onOpenRun?.(event.runId)");
     expect(lifecycleSource).toContain(
-      "if (willExpand) onOpenEvidence?.(event.runId, item.evidenceId)",
+      "if (willExpand) onOpenEvidence?.(event.runId, stepId, item.evidenceId)",
     );
   });
 
@@ -100,6 +100,7 @@ describe("OrchestraLifecycleEntry", () => {
   it("restores requested disclosures without invoking user-open callbacks", () => {
     expect(lifecycleSource).toContain("restoredRunRequestRef");
     expect(lifecycleSource).toContain("restoredEvidenceRequestRef");
+    expect(lifecycleSource).toContain('void load("evidence", requestedEvidenceStepId)');
     expect(lifecycleSource).toContain('void Promise.all([load("run"), load("steps")])');
     expect(lifecycleSource).toContain(
       'void load("evidence_content", undefined, requestedEvidenceId)',

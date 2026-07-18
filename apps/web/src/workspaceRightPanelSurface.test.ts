@@ -45,7 +45,7 @@ function expectedSurface(
     | { kind: "diff" }
     | { kind: "terminal"; terminalId: string },
 ): WorkspaceSurface {
-  return { schemaVersion: 1, ...scope, ...details } as WorkspaceSurface;
+  return { schemaVersion: 2, ...scope, ...details } as WorkspaceSurface;
 }
 
 describe("workspace right-panel surface projection", () => {
@@ -110,7 +110,7 @@ describe("right-panel activation lookup", () => {
     ).toBeNull();
     expect(
       rightPanelActivationForWorkspaceSurface(
-        { schemaVersion: 1, ...scope, kind: "task" },
+        { schemaVersion: 2, ...scope, kind: "task" },
         surfaces,
       ),
     ).toBeNull();

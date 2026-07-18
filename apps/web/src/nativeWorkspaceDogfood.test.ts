@@ -41,14 +41,14 @@ function workflowEvent(
   status: "waitingApproval" | "completed",
 ): OrchestraReplayEvent {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     eventId: `workflow-51:${revision}`,
     runId: "workflow-51",
     sequence: revision,
     revision,
     kind: revision === 1 ? "invoked" : "resumed",
     projection: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       runId: "workflow-51",
       workflowSha256: "workflow-sha",
       parentThreadId: threadId,
@@ -114,7 +114,7 @@ const emptyCounts = {
 
 function automationRun(overrides: Partial<AutomationRun> = {}): AutomationRun {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     runId: "automation-51",
     ownerThreadId: threadId,
     sourceRevision: "source-revision",
@@ -140,9 +140,9 @@ function automationRun(overrides: Partial<AutomationRun> = {}): AutomationRun {
 describe("redesigned native workspace dogfood contract", () => {
   it("keeps one native task while a child, workflow gate, Attention, and Evidence inspection progress", () => {
     const surfaces: WorkspaceSurface[] = [
-      { schemaVersion: 1, kind: "project", environmentId, projectId },
-      { schemaVersion: 1, kind: "task", environmentId, projectId, threadId },
-      { schemaVersion: 1, kind: "attention", environmentId, projectId, threadId },
+      { schemaVersion: 2, kind: "project", environmentId, projectId },
+      { schemaVersion: 2, kind: "task", environmentId, projectId, threadId },
+      { schemaVersion: 2, kind: "attention", environmentId, projectId, threadId },
     ];
     const workspace = surfaces.reduce(openWorkspaceSurface, createWorkspaceSurfaceState());
     expect(workspace.entries.map((entry) => entry.surface.kind)).toEqual([

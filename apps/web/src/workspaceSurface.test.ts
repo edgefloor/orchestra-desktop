@@ -33,10 +33,10 @@ function openAll(surfaces: ReadonlyArray<WorkspaceSurface>): WorkspaceSurfaceSta
 }
 
 const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
-  { schemaVersion: 1, kind: "project", environmentId, projectId },
-  { schemaVersion: 1, kind: "task", environmentId, projectId, threadId },
+  { schemaVersion: 2, kind: "project", environmentId, projectId },
+  { schemaVersion: 2, kind: "task", environmentId, projectId, threadId },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "child",
     environmentId,
     projectId,
@@ -44,7 +44,7 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     agentThreadId: ThreadId.make("child"),
   },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "workflowRun",
     environmentId,
     projectId,
@@ -52,7 +52,7 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     runId: "run",
   },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "symphony",
     environmentId,
     projectId,
@@ -60,7 +60,7 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     automationRunId: "automation",
   },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "issue",
     environmentId,
     projectId,
@@ -70,17 +70,18 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     issueTaskThreadId: ThreadId.make("issue-task"),
   },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "evidence",
     environmentId,
     projectId,
     threadId,
     runId: "run",
+    stepId: "step",
     evidenceId: "evidence",
   },
-  { schemaVersion: 1, kind: "attention", environmentId, projectId, threadId },
+  { schemaVersion: 2, kind: "attention", environmentId, projectId, threadId },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "preview",
     environmentId,
     projectId,
@@ -88,16 +89,16 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     previewId: "preview",
   },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "files",
     environmentId,
     projectId,
     threadId,
     relativePath: "src/main.ts",
   },
-  { schemaVersion: 1, kind: "diff", environmentId, projectId, threadId },
+  { schemaVersion: 2, kind: "diff", environmentId, projectId, threadId },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "terminal",
     environmentId,
     projectId,
@@ -163,6 +164,16 @@ describe("workspace surface identity", () => {
     expect(
       workspaceSurfaceKey({ ...issue, issueTaskThreadId: ThreadId.make("other-issue-task") }),
     ).not.toBe(workspaceSurfaceKey(issue));
+  });
+
+  it("includes the native step in Evidence identity for cold lazy restoration", () => {
+    const evidence = everySurfaceKind.find(
+      (surface): surface is Extract<WorkspaceSurface, { kind: "evidence" }> =>
+        surface.kind === "evidence",
+    )!;
+    expect(workspaceSurfaceKey({ ...evidence, stepId: "other-step" })).not.toBe(
+      workspaceSurfaceKey(evidence),
+    );
   });
 });
 

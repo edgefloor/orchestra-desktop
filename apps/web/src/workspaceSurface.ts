@@ -1,6 +1,6 @@
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 
-export const WORKSPACE_SURFACE_SCHEMA_VERSION = 1 as const;
+export const WORKSPACE_SURFACE_SCHEMA_VERSION = 2 as const;
 export const MAX_OPEN_WORKSPACE_SURFACES = 8;
 
 interface WorkspaceSurfaceScope {
@@ -43,6 +43,7 @@ export type WorkspaceSurface =
       readonly kind: "evidence";
       readonly threadId: ThreadId;
       readonly runId: string;
+      readonly stepId: string;
       readonly evidenceId: string;
     })
   | (WorkspaceSurfaceScope & {
@@ -123,7 +124,7 @@ export function workspaceSurfaceKey(surface: WorkspaceSurface): WorkspaceSurface
       ];
       break;
     case "evidence":
-      identity = [surface.threadId, surface.runId, surface.evidenceId];
+      identity = [surface.threadId, surface.runId, surface.stepId, surface.evidenceId];
       break;
     case "attention":
       identity = [surface.threadId];

@@ -16,7 +16,7 @@ import {
   type WorkspaceSurfaceState,
 } from "./workspaceSurface";
 
-const WORKSPACE_SURFACE_STORAGE_KEY = "orchestra:workspace-surfaces:v1";
+const WORKSPACE_SURFACE_STORAGE_KEY = "orchestra:workspace-surfaces:v2";
 
 interface WorkspaceSurfaceStore extends WorkspaceSurfaceState {
   openSurface: (surface: WorkspaceSurface) => void;
@@ -63,7 +63,7 @@ function isWorkspaceSurface(value: unknown): value is WorkspaceSurface {
     case "issue":
       return stringFields("threadId", "automationRunId", "issueId", "issueTaskThreadId");
     case "evidence":
-      return stringFields("threadId", "runId", "evidenceId");
+      return stringFields("threadId", "runId", "stepId", "evidenceId");
     case "preview":
       return stringFields("threadId", "previewId");
     case "files":
