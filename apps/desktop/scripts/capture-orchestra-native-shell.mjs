@@ -657,26 +657,37 @@ async function runWithNativeShellRpcClient(baseUrl, token, useClient) {
   );
 }
 
+export function withNativeShellEventTimeout(effect, context, duration = "45 seconds") {
+  return effect.pipe(
+    Effect.timeoutOrElse({
+      duration,
+      orElse: () => Effect.fail(new Error(`${context} did not arrive within ${duration}`)),
+    }),
+  );
+}
+
 async function awaitNativeShellSessionEvent({ baseUrl, token, threadId, afterSequence, status }) {
   return runWithNativeShellRpcClient(baseUrl, token, (client) =>
-    client[ORCHESTRATION_WS_METHODS.subscribeThread]({
-      threadId,
-      afterSequence,
-    }).pipe(
-      Stream.filter(
-        (item) =>
-          item.kind === "event" &&
-          item.event.type === "thread.session-set" &&
-          item.event.payload.session.status === status,
+    withNativeShellEventTimeout(
+      client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+        threadId,
+        afterSequence,
+      }).pipe(
+        Stream.filter(
+          (item) =>
+            item.kind === "event" &&
+            item.event.type === "thread.session-set" &&
+            item.event.payload.session.status === status,
+        ),
+        Stream.runHead,
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.fail(new Error(`thread session stream ended before ${status}`)),
+            onSome: Effect.succeed,
+          }),
+        ),
       ),
-      Stream.runHead,
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.fail(new Error(`thread session stream ended before ${status}`)),
-          onSome: Effect.succeed,
-        }),
-      ),
-      Effect.timeout("45 seconds"),
+      `thread.session-set status ${status}`,
     ),
   );
 }
@@ -689,26 +700,28 @@ async function awaitNativeShellAssistantMessageEvent({
   text,
 }) {
   return runWithNativeShellRpcClient(baseUrl, token, (client) =>
-    client[ORCHESTRATION_WS_METHODS.subscribeThread]({
-      threadId,
-      afterSequence,
-    }).pipe(
-      Stream.filter(
-        (item) =>
-          item.kind === "event" &&
-          item.event.type === "thread.message-sent" &&
-          item.event.payload.role === "assistant" &&
-          item.event.payload.streaming === false &&
-          item.event.payload.text.includes(text),
+    withNativeShellEventTimeout(
+      client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+        threadId,
+        afterSequence,
+      }).pipe(
+        Stream.filter(
+          (item) =>
+            item.kind === "event" &&
+            item.event.type === "thread.message-sent" &&
+            item.event.payload.role === "assistant" &&
+            item.event.payload.streaming === false &&
+            item.event.payload.text.includes(text),
+        ),
+        Stream.runHead,
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.fail(new Error(`thread message stream ended before ${text}`)),
+            onSome: Effect.succeed,
+          }),
+        ),
       ),
-      Stream.runHead,
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.fail(new Error(`thread message stream ended before ${text}`)),
-          onSome: Effect.succeed,
-        }),
-      ),
-      Effect.timeout("45 seconds"),
+      `thread.message-sent assistant text ${JSON.stringify(text)}`,
     ),
   );
 }

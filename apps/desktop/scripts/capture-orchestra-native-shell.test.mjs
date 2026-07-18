@@ -4,7 +4,10 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeProcess from "node:process";
 
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+
+import { withNativeShellEventTimeout } from "./capture-orchestra-native-shell.mjs";
 
 import {
   assertNativeShellAssertions,
@@ -35,6 +38,29 @@ import {
 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 
 describe("native-shell acceptance capture contract", () => {
+  it("preserves typed websocket failures and names the event that timed out", async () => {
+    const observations = Effect.gen(function* () {
+      const timeoutError = yield* withNativeShellEventTimeout(
+        Effect.never,
+        "thread.message-sent fixture",
+        "5 millis",
+      ).pipe(Effect.flip);
+      const streamError = yield* withNativeShellEventTimeout(
+        Effect.fail(new Error("typed stream failed")),
+        "thread.session-set fixture",
+        "5 millis",
+      ).pipe(Effect.flip);
+      return { timeoutError, streamError };
+    });
+    // oxlint-disable-next-line t3code/no-manual-effect-runtime-in-tests -- Bun's Vitest shim does not advance @effect/vitest's clock for this standalone ESM harness test.
+    const { timeoutError, streamError } = await Effect.runPromise(observations);
+
+    expect(timeoutError).toBeInstanceOf(Error);
+    expect(timeoutError.message).toBe("thread.message-sent fixture did not arrive within 5 millis");
+    expect(streamError).toBeInstanceOf(Error);
+    expect(streamError.message).toBe("typed stream failed");
+  });
+
   it("resolves Product pins against the canonical crate subtree", async () => {
     const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "native-shell-pins-"));
     try {
