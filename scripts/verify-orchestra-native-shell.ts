@@ -1,188 +1,59 @@
 #!/usr/bin/env node
 
 // @effect-diagnostics nodeBuiltinImport:off - Standalone repository verifier.
-import * as NodeChildProcess from "node:child_process";
-import * as NodeCrypto from "node:crypto";
+// @effect-diagnostics globalDate:off - Standalone verifier validates serialized ISO timestamps.
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
+
+import {
+  requireEvidenceFile,
+  requireExactArray,
+  requireFields,
+  requireGitObjectId,
+  requireSha256,
+  verifyDesktopSourceIdentity,
+} from "./lib/orchestra-evidence-verifier.ts";
+
+import {
+  buildNativeGuestFixture,
+  ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY,
+  ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
+  ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS,
+  ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
+  readNativeShellPngDimensions,
+  sha256,
+} from "./lib/orchestra-native-shell-contract.mjs";
+
+export {
+  ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
+  ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS,
+  ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
+  readNativeShellPngDimensions,
+};
 
 const DEFAULT_ROOT = NodePath.resolve(
   NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
   "..",
 );
 const DEFAULT_MANIFEST = "docs/acceptance/orchestra-native-shell/manifest.json";
-const ACCEPTANCE_DIRECTORY = "docs/acceptance/orchestra-native-shell";
-
-export const ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS = [
-  "apps/desktop/dist-electron/main.cjs",
-  "apps/desktop/dist-electron/preload.cjs",
-  "apps/server/dist/bin.mjs",
-  "apps/web/dist/index.html",
+const ACCEPTANCE_DIRECTORY = ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY;
+const REQUIRED_NATIVE_SHELL_SOURCE_FILES = [
+  "apps/desktop/scripts/capture-orchestra-native-shell.mjs",
+  "scripts/lib/orchestra-evidence-verifier.ts",
+  "scripts/lib/orchestra-native-shell-contract.mjs",
+  "scripts/verify-orchestra-native-shell.ts",
 ] as const;
 
-export const ORCHESTRA_NATIVE_SHELL_ASSERTIONS = [
-  "backendReady",
-  "productionMainLoaded",
-  "productionPreloadBridge",
-  "nativeProjectVisible",
-  "nativeTaskVisible",
-  "nativeRouteRecoveredAfterReload",
-  "composerVisible",
-  "taskTabsVisible",
-  "realWebviewAttached",
-  "approvedPreviewPartition",
-  "guestPageALoaded",
-  "guestPageBLoaded",
-  "guestBackWorked",
-  "guestForwardWorked",
-  "guestReloadWorked",
-  "guestFailureSurfaced",
-  "guestRecovered",
-  "guestDomMutationWorked",
-  "guestScreenshotCaptured",
-  "noDocumentHorizontalOverflow",
-  "narrowDisclosureReachable",
-  "processCleanupVerified",
-] as const;
-
-export const ORCHESTRA_NATIVE_SHELL_SCREENSHOTS = {
-  "native-browser-1440x900-dark": { width: 1440, height: 900 },
-  "native-workspace-1024x768-dark": { width: 1024, height: 768 },
-} as const;
+const screenshotsByName = Object.fromEntries(
+  ORCHESTRA_NATIVE_SHELL_SCREENSHOTS.map((scenario) => [scenario.scenario, scenario]),
+) as Readonly<
+  Record<string, { readonly scenario: string; readonly width: number; readonly height: number }>
+>;
 
 export const ORCHESTRA_NATIVE_SHELL_SCREENSHOT_NAMES = Object.freeze(
-  Object.keys(ORCHESTRA_NATIVE_SHELL_SCREENSHOTS),
+  ORCHESTRA_NATIVE_SHELL_SCREENSHOTS.map(({ scenario }) => scenario),
 );
-
-function requireFields(value: unknown, expected: ReadonlyArray<string>, context: string): void {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${context} must be an object`);
-  }
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
-  if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
-    throw new Error(`${context} fields must be ${wanted.join(", ")}`);
-  }
-}
-
-function requireExactArray(
-  actual: unknown,
-  expected: ReadonlyArray<unknown>,
-  context: string,
-): void {
-  if (!Array.isArray(actual) || JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error(`${context} must exactly match the native-shell evidence contract`);
-  }
-}
-
-function requireGitObjectId(value: unknown, context: string): asserts value is string {
-  if (typeof value !== "string" || !/^[a-f0-9]{40}$/.test(value)) {
-    throw new Error(`${context} must be a lowercase 40-character Git object ID`);
-  }
-}
-
-function requireSha256(value: unknown, context: string): asserts value is string {
-  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) {
-    throw new Error(`${context} must be a lowercase SHA-256 digest`);
-  }
-}
-
-function requireSafeRelativePath(value: unknown, context: string): asserts value is string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    NodePath.isAbsolute(value) ||
-    value.includes("\\") ||
-    value.split("/").includes("..")
-  ) {
-    throw new Error(`${context} must be a safe repository-relative path`);
-  }
-}
-
-function sha256(bytes: Uint8Array): string {
-  return NodeCrypto.createHash("sha256").update(bytes).digest("hex");
-}
-
-function runGit(rootDir: string, args: ReadonlyArray<string>): string {
-  return NodeChildProcess.execFileSync("git", args, {
-    cwd: rootDir,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-}
-
-async function verifyDesktopSourceIdentity(
-  rootDir: string,
-  commit: string,
-  tree: string,
-): Promise<void> {
-  try {
-    await NodeFSP.stat(NodePath.join(rootDir, ".git"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
-  }
-
-  try {
-    runGit(rootDir, ["rev-parse", "--verify", `${commit}^{commit}`]);
-  } catch {
-    throw new Error("manifest.desktop.commit does not resolve to a commit in this repository");
-  }
-
-  let resolvedTree: string;
-  try {
-    resolvedTree = runGit(rootDir, ["rev-parse", `${commit}^{tree}`]);
-  } catch {
-    throw new Error("manifest.desktop.commit tree could not be resolved in this repository");
-  }
-  if (resolvedTree !== tree) {
-    throw new Error("manifest.desktop.tree does not match manifest.desktop.commit");
-  }
-
-  try {
-    runGit(rootDir, ["merge-base", "--is-ancestor", commit, "HEAD"]);
-  } catch {
-    throw new Error("manifest.desktop.commit must be an ancestor of repository HEAD");
-  }
-}
-
-export function readNativeShellPngDimensions(
-  bytes: Buffer,
-  context = "image",
-): { readonly width: number; readonly height: number } {
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  if (bytes.length < 33 || !bytes.subarray(0, signature.length).equals(signature)) {
-    throw new Error(`${context} must be a PNG image`);
-  }
-  if (bytes.readUInt32BE(8) !== 13 || bytes.subarray(12, 16).toString("ascii") !== "IHDR") {
-    throw new Error(`${context} must begin with a 13-byte PNG IHDR chunk`);
-  }
-  const width = bytes.readUInt32BE(16);
-  const height = bytes.readUInt32BE(20);
-  if (width === 0 || height === 0) {
-    throw new Error(`${context} must have positive PNG dimensions`);
-  }
-  return { width, height };
-}
-
-async function requireFile(
-  rootDir: string,
-  relativePath: string,
-  context: string,
-): Promise<Buffer> {
-  requireSafeRelativePath(relativePath, context);
-  const absolutePath = NodePath.resolve(rootDir, relativePath);
-  const relativeToRoot = NodePath.relative(rootDir, absolutePath);
-  if (relativeToRoot.startsWith("..") || NodePath.isAbsolute(relativeToRoot)) {
-    throw new Error(`${context} escapes the repository root`);
-  }
-  const stat = await NodeFSP.stat(absolutePath);
-  if (!stat.isFile() || stat.size === 0) {
-    throw new Error(`${context} requires a non-empty file at ${relativePath}`);
-  }
-  return NodeFSP.readFile(absolutePath);
-}
 
 export async function verifyOrchestraNativeShell(
   options: {
@@ -207,6 +78,7 @@ export async function verifyOrchestraNativeShell(
       "screenshots",
       "assertions",
       "guest",
+      "runtime",
       "humanReview",
     ],
     "manifest",
@@ -227,15 +99,30 @@ export async function verifyOrchestraNativeShell(
   }
   requireGitObjectId(desktop.commit, "manifest.desktop.commit");
   requireGitObjectId(desktop.tree, "manifest.desktop.tree");
-  await verifyDesktopSourceIdentity(rootDir, desktop.commit, desktop.tree);
+  await verifyDesktopSourceIdentity({
+    rootDir,
+    commit: desktop.commit,
+    tree: desktop.tree,
+    requiredSourceFiles: REQUIRED_NATIVE_SHELL_SOURCE_FILES,
+  });
 
-  requireFields(typedManifest.capture, ["electronVersion", "platform"], "manifest.capture");
+  requireFields(
+    typedManifest.capture,
+    ["electronVersion", "chromiumVersion", "platform"],
+    "manifest.capture",
+  );
   const capture = typedManifest.capture as Record<string, unknown>;
   if (
     typeof capture.electronVersion !== "string" ||
     !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(capture.electronVersion)
   ) {
     throw new Error("manifest.capture.electronVersion must be a semantic Electron version");
+  }
+  if (
+    typeof capture.chromiumVersion !== "string" ||
+    !/^\d+\.\d+\.\d+\.\d+$/.test(capture.chromiumVersion)
+  ) {
+    throw new Error("manifest.capture.chromiumVersion must be a four-part Chromium version");
   }
   requireFields(capture.platform, ["os", "arch"], "manifest.capture.platform");
   const platform = capture.platform as Record<string, unknown>;
@@ -261,6 +148,7 @@ export async function verifyOrchestraNativeShell(
     ),
     ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS,
     "manifest build artifact paths",
+    "native-shell evidence",
   );
   for (const [index, rawArtifact] of typedManifest.buildArtifacts.entries()) {
     requireFields(rawArtifact, ["path", "sha256"], "manifest.buildArtifact");
@@ -270,7 +158,11 @@ export async function verifyOrchestraNativeShell(
       throw new Error(`manifest.buildArtifacts.${index}.path must be ${expectedPath}`);
     }
     requireSha256(artifact.sha256, `manifest.buildArtifacts.${index}.sha256`);
-    const bytes = await requireFile(rootDir, expectedPath, `manifest.buildArtifacts.${index}.path`);
+    const bytes = await requireEvidenceFile(
+      rootDir,
+      expectedPath,
+      `manifest.buildArtifacts.${index}.path`,
+    );
     if (sha256(bytes) !== artifact.sha256) {
       throw new Error(`manifest.buildArtifacts.${index}.sha256 does not match the artifact bytes`);
     }
@@ -287,22 +179,20 @@ export async function verifyOrchestraNativeShell(
     ),
     ORCHESTRA_NATIVE_SHELL_SCREENSHOT_NAMES,
     "manifest screenshot scenarios",
+    "native-shell evidence",
   );
   for (const rawScreenshot of typedManifest.screenshots) {
     requireFields(
       rawScreenshot,
-      ["scenario", "file", "width", "height", "deviceScaleFactor", "theme", "sha256"],
+      ["scenario", "file", "width", "height", "deviceScaleFactor", "theme", "layout", "sha256"],
       "manifest.screenshot",
     );
     const screenshot = rawScreenshot as Record<string, unknown>;
     const scenario = screenshot.scenario;
-    if (typeof scenario !== "string" || !(scenario in ORCHESTRA_NATIVE_SHELL_SCREENSHOTS)) {
+    if (typeof scenario !== "string" || !(scenario in screenshotsByName)) {
       throw new Error(`manifest screenshot scenario ${String(scenario)} is not approved`);
     }
-    const contract =
-      ORCHESTRA_NATIVE_SHELL_SCREENSHOTS[
-        scenario as keyof typeof ORCHESTRA_NATIVE_SHELL_SCREENSHOTS
-      ];
+    const contract = screenshotsByName[scenario]!;
     const context = `manifest.screenshots.${scenario}`;
     const expectedFile = `${ACCEPTANCE_DIRECTORY}/${scenario}.png`;
     if (screenshot.file !== expectedFile)
@@ -314,8 +204,29 @@ export async function verifyOrchestraNativeShell(
       throw new Error(`${context}.deviceScaleFactor must be 1`);
     }
     if (screenshot.theme !== "dark") throw new Error(`${context}.theme must be dark`);
+    requireFields(
+      screenshot.layout,
+      [
+        "width",
+        "height",
+        "overflow",
+        "browserVisible",
+        "narrowDisclosure",
+        "webviewRect",
+        "wrapperRect",
+      ],
+      `${context}.layout`,
+    );
+    const layout = screenshot.layout as Record<string, unknown>;
+    if (
+      layout.width !== contract.width ||
+      layout.height !== contract.height ||
+      layout.overflow !== true
+    ) {
+      throw new Error(`${context}.layout must match the viewport without horizontal overflow`);
+    }
     requireSha256(screenshot.sha256, `${context}.sha256`);
-    const image = await requireFile(rootDir, expectedFile, `${context}.file`);
+    const image = await requireEvidenceFile(rootDir, expectedFile, `${context}.file`);
     if (sha256(image) !== screenshot.sha256) {
       throw new Error(`${context}.sha256 does not match the PNG bytes`);
     }
@@ -328,8 +239,13 @@ export async function verifyOrchestraNativeShell(
   requireFields(typedManifest.assertions, ORCHESTRA_NATIVE_SHELL_ASSERTIONS, "manifest.assertions");
   const assertions = typedManifest.assertions as Record<string, unknown>;
   for (const assertion of ORCHESTRA_NATIVE_SHELL_ASSERTIONS) {
-    if (assertions[assertion] !== true) {
-      throw new Error(`manifest.assertions.${assertion} must be true`);
+    requireFields(
+      assertions[assertion],
+      ["observed", "passed"],
+      `manifest.assertions.${assertion}`,
+    );
+    if ((assertions[assertion] as Record<string, unknown>).passed !== true) {
+      throw new Error(`manifest.assertions.${assertion}.passed must be true`);
     }
   }
 
@@ -350,6 +266,103 @@ export async function verifyOrchestraNativeShell(
     throw new Error("manifest.guest.origin must be an HTTP(S) URL origin without a path");
   }
   requireSha256(guest.fixtureSha256, "manifest.guest.fixtureSha256");
+  const expectedGuestFixture = buildNativeGuestFixture(guest.origin);
+  if (guest.fixtureSha256 !== expectedGuestFixture.digest) {
+    throw new Error("manifest.guest.fixtureSha256 does not match the deterministic guest payload");
+  }
+
+  requireFields(
+    typedManifest.runtime,
+    ["rendererUrl", "appViewport", "guest", "navigation", "cleanup"],
+    "manifest.runtime",
+  );
+  const runtime = typedManifest.runtime as Record<string, unknown>;
+  if (typeof runtime.rendererUrl !== "string" || !runtime.rendererUrl.startsWith("t3code://app/")) {
+    throw new Error("manifest.runtime.rendererUrl must use the production t3code://app/ entry");
+  }
+  requireFields(runtime.appViewport, ["width", "height"], "manifest.runtime.appViewport");
+  requireFields(
+    runtime.guest,
+    ["webContentsId", "type", "url", "title", "partition", "viewport", "attachment"],
+    "manifest.runtime.guest",
+  );
+  const runtimeGuest = runtime.guest as Record<string, unknown>;
+  if (runtimeGuest.type !== "webview")
+    throw new Error("manifest.runtime.guest.type must be webview");
+  if (typeof runtimeGuest.url !== "string" || !runtimeGuest.url.startsWith(`${guest.origin}/`)) {
+    throw new Error("manifest.runtime.guest.url must belong to the deterministic guest origin");
+  }
+  if (runtimeGuest.title !== "Native Guest A") {
+    throw new Error("manifest.runtime.guest.title must record the recovered Native Guest A page");
+  }
+  if (
+    typeof runtimeGuest.partition !== "string" ||
+    !runtimeGuest.partition.startsWith("persist:t3code-preview-")
+  ) {
+    throw new Error("manifest.runtime.guest.partition must use the approved preview partition");
+  }
+  requireFields(runtimeGuest.viewport, ["width", "height"], "manifest.runtime.guest.viewport");
+  requireFields(
+    runtimeGuest.attachment,
+    [
+      "partition",
+      "attachmentGuardAllowed",
+      "sandbox",
+      "contextIsolation",
+      "nodeIntegration",
+      "nodeIntegrationInSubFrames",
+    ],
+    "manifest.runtime.guest.attachment",
+  );
+  const attachment = runtimeGuest.attachment as Record<string, unknown>;
+  if (
+    attachment.partition !== runtimeGuest.partition ||
+    attachment.attachmentGuardAllowed !== true ||
+    attachment.sandbox !== true ||
+    attachment.contextIsolation !== false ||
+    attachment.nodeIntegration !== false ||
+    attachment.nodeIntegrationInSubFrames !== false
+  ) {
+    throw new Error(
+      "manifest.runtime.guest.attachment must record the effective guarded preferences",
+    );
+  }
+  if (!Array.isArray(runtime.navigation)) {
+    throw new Error("manifest.runtime.navigation must be an array");
+  }
+  requireExactArray(
+    runtime.navigation.map((entry) =>
+      entry !== null && typeof entry === "object" && "action" in entry
+        ? (entry as { readonly action: unknown }).action
+        : null,
+    ),
+    [
+      "navigate-page-a",
+      "navigate-page-b",
+      "back",
+      "forward",
+      "reload",
+      "load-failure",
+      "recover-page-a",
+    ],
+    "manifest runtime navigation actions",
+    "native-shell evidence",
+  );
+  for (const entry of runtime.navigation) {
+    requireFields(
+      entry,
+      ["action", "expected", "observed", "passed"],
+      "manifest.runtime.navigation",
+    );
+    if ((entry as Record<string, unknown>).passed !== true) {
+      throw new Error("manifest.runtime.navigation entries must pass");
+    }
+  }
+  requireFields(runtime.cleanup, ["portsClosed", "processGroupEmpty"], "manifest.runtime.cleanup");
+  const cleanup = runtime.cleanup as Record<string, unknown>;
+  if (cleanup.portsClosed !== true || cleanup.processGroupEmpty === false) {
+    throw new Error("manifest.runtime.cleanup must prove listener and process-group cleanup");
+  }
 
   requireFields(
     typedManifest.humanReview,

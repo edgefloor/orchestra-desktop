@@ -1,11 +1,22 @@
 #!/usr/bin/env node
 
 // @effect-diagnostics nodeBuiltinImport:off - Standalone repository verifier.
-import * as NodeChildProcess from "node:child_process";
-import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
+
+import {
+  readPngDimensions,
+  requireEvidenceFile,
+  requireExactArray,
+  requireFields,
+  requireGitObjectId,
+  requireSha256,
+  sha256,
+  verifyDesktopSourceIdentity,
+} from "./lib/orchestra-evidence-verifier.ts";
+
+export { readPngDimensions };
 
 const DEFAULT_ROOT = NodePath.resolve(
   NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
@@ -240,145 +251,6 @@ export const ORCHESTRA_ACCEPTANCE_SCENARIO_NAMES = Object.freeze(
   Object.keys(ORCHESTRA_ACCEPTANCE_SCENARIOS),
 );
 
-function requireFields(value: unknown, expected: ReadonlyArray<string>, context: string): void {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${context} must be an object`);
-  }
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
-  if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
-    throw new Error(`${context} fields must be ${wanted.join(", ")}`);
-  }
-}
-
-function requireExactArray(
-  actual: unknown,
-  expected: ReadonlyArray<unknown>,
-  context: string,
-): void {
-  if (!Array.isArray(actual) || JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error(`${context} must exactly match the acceptance contract`);
-  }
-}
-
-function requireGitObjectId(value: unknown, context: string): asserts value is string {
-  if (typeof value !== "string" || !/^[a-f0-9]{40}$/.test(value)) {
-    throw new Error(`${context} must be a lowercase 40-character Git object ID`);
-  }
-}
-
-function requireSha256(value: unknown, context: string): asserts value is string {
-  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) {
-    throw new Error(`${context} must be a lowercase SHA-256 digest`);
-  }
-}
-
-function requireSafeRelativePath(value: unknown, context: string): asserts value is string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    NodePath.isAbsolute(value) ||
-    value.includes("\\") ||
-    value.split("/").includes("..")
-  ) {
-    throw new Error(`${context} must be a safe repository-relative path`);
-  }
-}
-
-function sha256(bytes: Uint8Array): string {
-  return NodeCrypto.createHash("sha256").update(bytes).digest("hex");
-}
-
-function runGit(rootDir: string, args: ReadonlyArray<string>): string {
-  return NodeChildProcess.execFileSync("git", args, {
-    cwd: rootDir,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-}
-
-async function verifyDesktopSourceIdentity(
-  rootDir: string,
-  commit: string,
-  tree: string,
-): Promise<void> {
-  try {
-    await NodeFSP.stat(NodePath.join(rootDir, ".git"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
-  }
-
-  try {
-    runGit(rootDir, ["rev-parse", "--verify", `${commit}^{commit}`]);
-  } catch {
-    throw new Error("manifest.desktop.commit does not resolve to a commit in this repository");
-  }
-
-  let resolvedTree: string;
-  try {
-    resolvedTree = runGit(rootDir, ["rev-parse", `${commit}^{tree}`]);
-  } catch {
-    throw new Error("manifest.desktop.commit tree could not be resolved in this repository");
-  }
-  if (resolvedTree !== tree) {
-    throw new Error("manifest.desktop.tree does not match manifest.desktop.commit");
-  }
-
-  try {
-    runGit(rootDir, ["merge-base", "--is-ancestor", commit, "HEAD"]);
-  } catch {
-    throw new Error("manifest.desktop.commit must be an ancestor of repository HEAD");
-  }
-
-  for (const sourceFile of REQUIRED_BROWSER_PREVIEW_SOURCE_FILES) {
-    try {
-      runGit(rootDir, ["cat-file", "-e", `${commit}:${sourceFile}`]);
-    } catch {
-      throw new Error(
-        `manifest.desktop.commit must contain Browser/Preview evidence source ${sourceFile}`,
-      );
-    }
-  }
-}
-
-export function readPngDimensions(
-  bytes: Buffer,
-  context = "image",
-): { readonly width: number; readonly height: number } {
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  if (bytes.length < 33 || !bytes.subarray(0, signature.length).equals(signature)) {
-    throw new Error(`${context} must be a PNG image`);
-  }
-  if (bytes.readUInt32BE(8) !== 13 || bytes.subarray(12, 16).toString("ascii") !== "IHDR") {
-    throw new Error(`${context} must begin with a 13-byte PNG IHDR chunk`);
-  }
-  const width = bytes.readUInt32BE(16);
-  const height = bytes.readUInt32BE(20);
-  if (width === 0 || height === 0) {
-    throw new Error(`${context} must have positive PNG dimensions`);
-  }
-  return { width, height };
-}
-
-async function requireImage(
-  rootDir: string,
-  relativePath: string,
-  context: string,
-): Promise<Buffer> {
-  requireSafeRelativePath(relativePath, context);
-  const absolutePath = NodePath.resolve(rootDir, relativePath);
-  const relativeToRoot = NodePath.relative(rootDir, absolutePath);
-  if (relativeToRoot.startsWith("..") || NodePath.isAbsolute(relativeToRoot)) {
-    throw new Error(`${context} escapes the repository root`);
-  }
-  const stat = await NodeFSP.stat(absolutePath);
-  if (!stat.isFile() || stat.size === 0) {
-    throw new Error(`${context} requires a non-empty file at ${relativePath}`);
-  }
-  return NodeFSP.readFile(absolutePath);
-}
-
 export async function verifyOrchestraAcceptance(
   options: {
     readonly rootDir?: string;
@@ -410,7 +282,12 @@ export async function verifyOrchestraAcceptance(
   }
   requireGitObjectId(desktop.commit, "manifest.desktop.commit");
   requireGitObjectId(desktop.tree, "manifest.desktop.tree");
-  await verifyDesktopSourceIdentity(rootDir, desktop.commit, desktop.tree);
+  await verifyDesktopSourceIdentity({
+    rootDir,
+    commit: desktop.commit,
+    tree: desktop.tree,
+    requiredSourceFiles: REQUIRED_BROWSER_PREVIEW_SOURCE_FILES,
+  });
 
   requireFields(typedManifest.capture, ["electronVersion", "platform"], "manifest.capture");
   const capture = typedManifest.capture as Record<string, unknown>;
@@ -487,7 +364,7 @@ export async function verifyOrchestraAcceptance(
       }
     }
 
-    const image = await requireImage(rootDir, expectedFile, `${context}.file`);
+    const image = await requireEvidenceFile(rootDir, expectedFile, `${context}.file`);
     if (sha256(image) !== screenshot.sha256) {
       throw new Error(`${context}.sha256 does not match the PNG bytes`);
     }

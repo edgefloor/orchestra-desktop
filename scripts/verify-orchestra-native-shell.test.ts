@@ -1,12 +1,17 @@
 // @effect-diagnostics nodeBuiltinImport:off - Contract tests generate isolated binary fixtures.
 import * as NodeChildProcess from "node:child_process";
-import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeZlib from "node:zlib";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
+
+import {
+  buildNativeGuestFixture,
+  makeNativeShellAssertion,
+  sha256,
+} from "./lib/orchestra-native-shell-contract.mjs";
 
 import {
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
@@ -54,16 +59,16 @@ function minimalPng(width: number, height: number): Buffer {
   ]);
 }
 
-function sha256(bytes: Uint8Array): string {
-  return NodeCrypto.createHash("sha256").update(bytes).digest("hex");
-}
-
 type MutableManifest = {
   schemaVersion: number;
   id: string;
   role: string;
   desktop: { repository: string; commit: string; tree: string };
-  capture: { electronVersion: string; platform: { os: string; arch: string } };
+  capture: {
+    electronVersion: string;
+    chromiumVersion: string;
+    platform: { os: string; arch: string };
+  };
   productionEntry: string;
   buildArtifacts: Array<{ path: string; sha256: string }>;
   screenshots: Array<{
@@ -73,10 +78,41 @@ type MutableManifest = {
     height: number;
     deviceScaleFactor: number;
     theme: string;
+    layout: {
+      width: number;
+      height: number;
+      overflow: boolean;
+      browserVisible: boolean;
+      narrowDisclosure: boolean;
+      webviewRect: null;
+      wrapperRect: null;
+    };
     sha256: string;
   }>;
-  assertions: Record<string, boolean>;
+  assertions: Record<string, { observed: unknown; passed: boolean }>;
   guest: { origin: string; fixtureSha256: string };
+  runtime: {
+    rendererUrl: string;
+    appViewport: { width: number; height: number };
+    guest: {
+      webContentsId: number;
+      type: string;
+      url: string;
+      title: string;
+      partition: string;
+      viewport: { width: number; height: number };
+      attachment: {
+        partition: string;
+        attachmentGuardAllowed: boolean;
+        sandbox: boolean;
+        contextIsolation: boolean;
+        nodeIntegration: boolean;
+        nodeIntegrationInSubFrames: boolean;
+      };
+    };
+    navigation: Array<{ action: string; expected: unknown; observed: unknown; passed: boolean }>;
+    cleanup: { portsClosed: boolean; processGroupEmpty: boolean | null };
+  };
   humanReview: { status: string; reviewedAt: string; notes: string };
 };
 
@@ -96,7 +132,8 @@ async function makeFixture(
   }
 
   const screenshots: MutableManifest["screenshots"] = [];
-  for (const [scenario, contract] of Object.entries(ORCHESTRA_NATIVE_SHELL_SCREENSHOTS)) {
+  for (const contract of ORCHESTRA_NATIVE_SHELL_SCREENSHOTS) {
+    const { scenario } = contract;
     const file = `${acceptanceDirectory}/${scenario}.png`;
     const image = minimalPng(contract.width, contract.height);
     await NodeFSP.writeFile(NodePath.join(rootDir, file), image);
@@ -107,6 +144,15 @@ async function makeFixture(
       height: contract.height,
       deviceScaleFactor: 1,
       theme: "dark",
+      layout: {
+        width: contract.width,
+        height: contract.height,
+        overflow: true,
+        browserVisible: true,
+        narrowDisclosure: true,
+        webviewRect: null,
+        wrapperRect: null,
+      },
       sha256: sha256(image),
     });
   }
@@ -122,17 +168,51 @@ async function makeFixture(
     },
     capture: {
       electronVersion: "41.5.0",
+      chromiumVersion: "142.0.7444.235",
       platform: { os: "darwin", arch: "arm64" },
     },
     productionEntry: "t3code://app/",
     buildArtifacts,
     screenshots,
     assertions: Object.fromEntries(
-      ORCHESTRA_NATIVE_SHELL_ASSERTIONS.map((assertion) => [assertion, true]),
+      ORCHESTRA_NATIVE_SHELL_ASSERTIONS.map((assertion) => [
+        assertion,
+        makeNativeShellAssertion({ proof: assertion }, true),
+      ]),
     ),
     guest: {
       origin: "http://127.0.0.1:43123",
-      fixtureSha256: sha256(Buffer.from("native guest fixture")),
+      fixtureSha256: buildNativeGuestFixture("http://127.0.0.1:43123").digest,
+    },
+    runtime: {
+      rendererUrl: "t3code://app/#/project/thread",
+      appViewport: { width: 1024, height: 768 },
+      guest: {
+        webContentsId: 2,
+        type: "webview",
+        url: "http://127.0.0.1:43123/a",
+        title: "Native Guest A",
+        partition: "persist:t3code-preview-fixture",
+        viewport: { width: 539, height: 808 },
+        attachment: {
+          partition: "persist:t3code-preview-fixture",
+          attachmentGuardAllowed: true,
+          sandbox: true,
+          contextIsolation: false,
+          nodeIntegration: false,
+          nodeIntegrationInSubFrames: false,
+        },
+      },
+      navigation: [
+        "navigate-page-a",
+        "navigate-page-b",
+        "back",
+        "forward",
+        "reload",
+        "load-failure",
+        "recover-page-a",
+      ].map((action) => ({ action, expected: action, observed: action, passed: true })),
+      cleanup: { portsClosed: true, processGroupEmpty: true },
     },
     humanReview: {
       status: "observed",
@@ -171,7 +251,7 @@ describe("Orchestra native-shell evidence verifier", () => {
 
     const corrupted = await makeFixture(async (_manifest, rootDir) => {
       await NodeFSP.writeFile(
-        NodePath.join(rootDir, ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS[0]),
+        NodePath.join(rootDir, ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS[0]!),
         "corrupted",
       );
     });
@@ -215,11 +295,11 @@ describe("Orchestra native-shell evidence verifier", () => {
 
   it("requires every sealed native and guest assertion to be true", async () => {
     const { rootDir } = await makeFixture((manifest) => {
-      manifest.assertions.realWebviewAttached = false;
+      manifest.assertions.realWebviewAttached = makeNativeShellAssertion("missing", false);
     });
 
     await expect(verifyOrchestraNativeShell({ rootDir })).rejects.toThrow(
-      "manifest.assertions.realWebviewAttached must be true",
+      "manifest.assertions.realWebviewAttached.passed must be true",
     );
   });
 
@@ -242,6 +322,12 @@ describe("Orchestra native-shell evidence verifier", () => {
       },
       {
         mutate: (manifest) => {
+          manifest.guest.fixtureSha256 = "f".repeat(64);
+        },
+        message: "manifest.guest.fixtureSha256 does not match the deterministic guest payload",
+      },
+      {
+        mutate: (manifest) => {
           manifest.humanReview.status = "pending";
         },
         message: "manifest.humanReview.status must be observed",
@@ -257,6 +343,37 @@ describe("Orchestra native-shell evidence verifier", () => {
           manifest.humanReview.reviewedAt = "0";
         },
         message: "manifest.humanReview.reviewedAt must be an ISO timestamp",
+      },
+    ];
+
+    for (const invalidCase of invalidCases) {
+      const { rootDir } = await makeFixture(invalidCase.mutate);
+      await expect(verifyOrchestraNativeShell({ rootDir })).rejects.toThrow(invalidCase.message);
+    }
+  });
+
+  it("requires observed guarded guest preferences, navigation, and full cleanup", async () => {
+    const invalidCases: Array<{
+      readonly mutate: (manifest: MutableManifest) => void;
+      readonly message: string;
+    }> = [
+      {
+        mutate: (manifest) => {
+          manifest.runtime.guest.attachment.sandbox = false;
+        },
+        message: "manifest.runtime.guest.attachment must record the effective guarded preferences",
+      },
+      {
+        mutate: (manifest) => {
+          manifest.runtime.navigation[2]!.passed = false;
+        },
+        message: "manifest.runtime.navigation entries must pass",
+      },
+      {
+        mutate: (manifest) => {
+          manifest.runtime.cleanup.processGroupEmpty = false;
+        },
+        message: "manifest.runtime.cleanup must prove listener and process-group cleanup",
       },
     ];
 

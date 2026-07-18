@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import * as NodeChildProcess from "node:child_process";
-import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
@@ -10,6 +9,20 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 
+import {
+  assertNativeShellAssertions,
+  buildNativeGuestFixture,
+  cleanupFailedNativeShellCapture,
+  isNativeShellProcessGroupEmpty,
+  makeNativeShellAssertion,
+  ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY,
+  ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
+  ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS,
+  ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
+  readNativeShellPngDimensions,
+  sha256,
+  shouldRunNativeShellElectronChild,
+} from "../../../scripts/lib/orchestra-native-shell-contract.mjs";
 import { resolveElectronLaunchCommand } from "./electron-launcher.mjs";
 
 const scriptPath = NodeURL.fileURLToPath(import.meta.url);
@@ -20,42 +33,15 @@ const hostPlatform = NodeOS.platform();
 // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone native-shell harness has no Effect runtime.
 const hostArchitecture = NodeOS.arch();
 const mainBundle = NodePath.join(desktopDir, "dist-electron", "main.cjs");
-const evidenceDirectory = NodePath.join(repoRoot, "docs", "acceptance", "orchestra-native-shell");
-const evidenceRelativeDirectory = "docs/acceptance/orchestra-native-shell";
+const evidenceDirectory = NodePath.join(repoRoot, ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY);
+const evidenceRelativeDirectory = ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY;
 const manifestPath = NodePath.join(evidenceDirectory, "manifest.json");
 const projectId = "project-native-shell-acceptance";
 const threadId = "thread-native-shell-acceptance";
 const projectTitle = "Orchestra Desktop Native Acceptance";
 const threadTitle = "Native Browser acceptance";
-const requiredAssertionNames = [
-  "backendReady",
-  "productionMainLoaded",
-  "productionPreloadBridge",
-  "nativeProjectVisible",
-  "nativeTaskVisible",
-  "nativeRouteRecoveredAfterReload",
-  "composerVisible",
-  "taskTabsVisible",
-  "realWebviewAttached",
-  "approvedPreviewPartition",
-  "guestPageALoaded",
-  "guestPageBLoaded",
-  "guestBackWorked",
-  "guestForwardWorked",
-  "guestReloadWorked",
-  "guestFailureSurfaced",
-  "guestRecovered",
-  "guestDomMutationWorked",
-  "guestScreenshotCaptured",
-  "noDocumentHorizontalOverflow",
-  "narrowDisclosureReachable",
-  "processCleanupVerified",
-].sort();
-
-const screenshotScenarios = [
-  { scenario: "native-browser-1440x900-dark", width: 1440, height: 900 },
-  { scenario: "native-workspace-1024x768-dark", width: 1024, height: 768 },
-];
+const requiredAssertionNames = ORCHESTRA_NATIVE_SHELL_ASSERTIONS;
+const screenshotScenarios = ORCHESTRA_NATIVE_SHELL_SCREENSHOTS;
 
 function runGit(args) {
   return NodeChildProcess.execFileSync("git", args, {
@@ -63,44 +49,6 @@ function runGit(args) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-}
-
-export function sha256(bytes) {
-  return NodeCrypto.createHash("sha256").update(bytes).digest("hex");
-}
-
-export function buildNativeGuestFixture(origin) {
-  const sharedStyle = `html{font-family:ui-sans-serif,system-ui;background:#111827;color:#f9fafb}body{margin:0;min-height:100vh;display:grid;place-items:center}.card{width:min(560px,calc(100vw - 48px));padding:32px;border:1px solid #374151;border-radius:18px;background:#1f2937;box-shadow:0 20px 60px #0008}h1{margin:0 0 12px;font-size:28px}p{color:#cbd5e1}button,a{display:inline-flex;margin:8px 8px 0 0;padding:10px 14px;border:0;border-radius:9px;background:#7c3aed;color:#fff;font:inherit;text-decoration:none;cursor:pointer}.marker{margin-top:16px;color:#a7f3d0;font-family:ui-monospace,monospace}`;
-  const page = (name, other) =>
-    `<!doctype html><html><head><meta charset="utf-8"><title>Native Guest ${name}</title><style>${sharedStyle}</style></head><body><main class="card"><p>Orchestra production webview</p><h1>Native guest page ${name}</h1><p id="identity">deterministic-native-guest-${name.toLowerCase()}</p><a id="history-link" href="${origin}/${other.toLowerCase()}">Open page ${other}</a><button id="mutate" type="button">Mutate guest DOM</button><div id="mutation" class="marker">not-mutated</div><div id="load-count" class="marker"></div></main><script>const key='orchestra-native-load-${name.toLowerCase()}';const count=Number(sessionStorage.getItem(key)||'0')+1;sessionStorage.setItem(key,String(count));document.documentElement.dataset.loadCount=String(count);document.querySelector('#load-count').textContent='load-count:'+count;document.querySelector('#mutate').addEventListener('click',()=>{document.querySelector('#mutation').textContent='mutated-through-production-automation'});</script></body></html>`;
-  const pages = { "/a": page("A", "B"), "/b": page("B", "A") };
-  return {
-    pages,
-    digest: sha256(Buffer.from(JSON.stringify(pages))),
-  };
-}
-
-export function assertNativeShellAssertions(assertions) {
-  const actual = Object.keys(assertions).sort();
-  if (JSON.stringify(actual) !== JSON.stringify(requiredAssertionNames)) {
-    throw new Error("native-shell assertions do not match the sealed contract");
-  }
-  const failed = actual.filter((name) => assertions[name] !== true);
-  if (failed.length > 0) {
-    throw new Error(`native-shell assertions failed: ${failed.join(", ")}`);
-  }
-}
-
-function readPngDimensions(bytes, context) {
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  if (
-    bytes.length < 33 ||
-    !bytes.subarray(0, signature.length).equals(signature) ||
-    bytes.subarray(12, 16).toString("ascii") !== "IHDR"
-  ) {
-    throw new Error(`${context} did not produce a PNG`);
-  }
-  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
 async function reservePort() {
@@ -226,6 +174,7 @@ async function launchUnderElectron() {
   scrubProviderCredentials(environment);
 
   const launch = resolveElectronLaunchCommand([wrapperDirectory, "--force-device-scale-factor=1"]);
+  let captureCompleted = false;
   try {
     const child = NodeChildProcess.spawn(launch.electronPath, launch.args, {
       cwd: repoRoot,
@@ -266,19 +215,32 @@ async function launchUnderElectron() {
     }
 
     await new Promise((resolve) => setTimeout(resolve, 500));
-    const cleanupVerified =
+    const portsClosed =
       !(await canConnect(backendPort)) &&
       !(await canConnect(guestPort)) &&
       !(await canConnect(failurePort));
+    const processGroupEmpty = child.pid
+      ? isNativeShellProcessGroupEmpty(child.pid, hostPlatform)
+      : false;
+    const cleanupVerified = portsClosed && processGroupEmpty !== false;
     const manifest = JSON.parse(await NodeFSP.readFile(manifestPath, "utf8"));
-    manifest.assertions.processCleanupVerified = cleanupVerified;
+    manifest.runtime.cleanup = { portsClosed, processGroupEmpty };
+    manifest.assertions.processCleanupVerified = makeNativeShellAssertion(
+      manifest.runtime.cleanup,
+      cleanupVerified,
+    );
     assertNativeShellAssertions(manifest.assertions);
     await NodeFSP.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    captureCompleted = true;
     console.log(
       `Native-shell evidence captured at ${NodePath.relative(repoRoot, evidenceDirectory)}`,
     );
   } finally {
-    await NodeFSP.rm(runtimeDirectory, { recursive: true, force: true });
+    if (captureCompleted) {
+      await NodeFSP.rm(runtimeDirectory, { recursive: true, force: true });
+    } else {
+      await cleanupFailedNativeShellCapture({ runtimeDirectory, evidenceDirectory });
+    }
   }
 }
 
@@ -345,6 +307,17 @@ async function runElectronChild() {
     mainWindow.show();
     mainWindow.focus();
     const renderer = mainWindow.webContents;
+    let attachmentObservation = null;
+    renderer.on("will-attach-webview", (event, webPreferences, params) => {
+      attachmentObservation = {
+        partition: params.partition ?? null,
+        attachmentGuardAllowed: event.defaultPrevented !== true,
+        sandbox: webPreferences.sandbox === true,
+        contextIsolation: webPreferences.contextIsolation === true,
+        nodeIntegration: webPreferences.nodeIntegration === true,
+        nodeIntegrationInSubFrames: webPreferences.nodeIntegrationInSubFrames === true,
+      };
+    });
     await waitFor(
       () =>
         renderer.executeJavaScript(
@@ -479,6 +452,10 @@ async function runElectronChild() {
     if (!guestContents || guestContents.getType() !== "webview") {
       throw new Error("preview guest did not resolve to an Electron webview webContents");
     }
+    attachmentObservation = await waitFor(
+      () => attachmentObservation,
+      "production will-attach-webview observation",
+    );
 
     const navigateAddress = async (url) => {
       await renderer.executeJavaScript(
@@ -491,55 +468,102 @@ async function runElectronChild() {
         `window.desktopBridge.preview.automation.evaluate(${JSON.stringify(webviewState.tabId)}, {expression:${JSON.stringify(expression)}})`,
         true,
       );
-    const waitGuestTitle = (title) =>
+    const guestSnapshotExpression = `({
+      title: document.title,
+      href: location.href,
+      heading: document.querySelector('h1')?.textContent ?? null,
+      identity: document.querySelector('#identity')?.textContent ?? null,
+      mutation: document.querySelector('#mutation')?.textContent ?? null,
+      loadCount: Number(document.documentElement.dataset.loadCount ?? 0),
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      nodeType: typeof process,
+      requireType: typeof require
+    })`;
+    const waitGuestPage = ({ title, heading, identity }) =>
       waitFor(
         () =>
-          guestEvaluate(`document.title`).then((result) =>
-            JSON.stringify(result).includes(title) ? result : null,
+          guestEvaluate(guestSnapshotExpression).then((result) =>
+            result.title === title && result.heading === heading && result.identity === identity
+              ? result
+              : null,
           ),
-        `guest title ${title}`,
+        `guest page ${title}`,
       );
+    const pageAContract = {
+      title: "Native Guest A",
+      heading: "Native guest page A",
+      identity: "deterministic-native-guest-a",
+    };
+    const pageBContract = {
+      title: "Native Guest B",
+      heading: "Native guest page B",
+      identity: "deterministic-native-guest-b",
+    };
+    const navigation = [];
 
     await navigateAddress(`${guestOrigin}/a`);
-    await waitGuestTitle("Native Guest A");
+    const pageA = await waitGuestPage(pageAContract);
+    navigation.push({
+      action: "navigate-page-a",
+      expected: pageAContract,
+      observed: pageA,
+      passed: true,
+    });
     await renderer.executeJavaScript(
       `window.desktopBridge.preview.automation.click(${JSON.stringify(webviewState.tabId)}, {selector:'#mutate'})`,
       true,
     );
-    const guestSecurity = await guestEvaluate(
-      `({title:document.title,href:location.href,nodeType:typeof process,requireType:typeof require,identity:document.querySelector('#identity')?.textContent})`,
-    );
+    const guestSecurity = await guestEvaluate(guestSnapshotExpression);
     await renderer.executeJavaScript(
       `window.desktopBridge.preview.automation.click(${JSON.stringify(webviewState.tabId)}, {selector:'#history-link'})`,
       true,
     );
-    await waitGuestTitle("Native Guest B");
+    const pageB = await waitGuestPage(pageBContract);
+    navigation.push({
+      action: "navigate-page-b",
+      expected: pageBContract,
+      observed: pageB,
+      passed: true,
+    });
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Back"]')?.click()`,
       true,
     );
-    await waitGuestTitle("Native Guest A");
+    const backToA = await waitGuestPage(pageAContract);
+    navigation.push({ action: "back", expected: pageAContract, observed: backToA, passed: true });
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Forward"]')?.click()`,
       true,
     );
-    await waitGuestTitle("Native Guest B");
+    const forwardToB = await waitGuestPage(pageBContract);
+    navigation.push({
+      action: "forward",
+      expected: pageBContract,
+      observed: forwardToB,
+      passed: true,
+    });
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Back"]')?.click()`,
       true,
     );
-    await waitGuestTitle("Native Guest A");
+    await waitGuestPage(pageAContract);
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Refresh"]')?.click()`,
       true,
     );
-    await waitFor(
+    const reloadedA = await waitFor(
       () =>
-        guestEvaluate(`Number(document.documentElement.dataset.loadCount)`).then((result) =>
-          Number(JSON.stringify(result).match(/\d+/)?.[0] ?? 0) >= 2 ? result : null,
+        guestEvaluate(guestSnapshotExpression).then((result) =>
+          result.title === pageAContract.title && result.loadCount >= 2 ? result : null,
         ),
       "guest reload count",
     );
+    navigation.push({
+      action: "reload",
+      expected: { ...pageAContract, minimumLoadCount: 2 },
+      observed: reloadedA,
+      passed: true,
+    });
     await renderer.executeJavaScript(
       `window.desktopBridge.preview.automation.click(${JSON.stringify(webviewState.tabId)}, {selector:'#mutate'})`,
       true,
@@ -552,7 +576,7 @@ async function runElectronChild() {
     const guestArtifactBytes = await NodeFSP.readFile(guestArtifact.path);
 
     await navigateAddress(`http://127.0.0.1:${failurePort}/unreachable`);
-    await waitFor(
+    const failureSurfaceVisible = await waitFor(
       () =>
         renderer.executeJavaScript(
           `document.body.innerText.includes("This site can’t be reached") || document.body.innerText.includes("This site can't be reached")`,
@@ -560,45 +584,110 @@ async function runElectronChild() {
         ),
       "guest failure surface",
     );
-    await navigateAddress(`${guestOrigin}/a`);
-    await waitGuestTitle("Native Guest A");
-
-    const assertions = Object.fromEntries(requiredAssertionNames.map((name) => [name, false]));
-    Object.assign(assertions, {
-      backendReady: Boolean(bootstrap.bootstrap.httpBaseUrl && bootstrap.token),
-      productionMainLoaded:
-        renderer.getURL() === "t3code://app/" || renderer.getURL().startsWith("t3code://app/#"),
-      productionPreloadBridge: reloadState.bridge,
-      nativeProjectVisible: nativeShell.body.includes(projectTitle),
-      nativeTaskVisible: nativeShell.body.includes(threadTitle),
-      nativeRouteRecoveredAfterReload:
-        reloadState.hash.includes(threadId) && reloadState.body.includes(threadTitle),
-      composerVisible: nativeShell.composer,
-      taskTabsVisible: nativeShell.taskTabs,
-      realWebviewAttached: guestContents.getType() === "webview" && webviewState.id > 0,
-      approvedPreviewPartition:
-        typeof webviewState.partition === "string" &&
-        webviewState.partition.startsWith("persist:t3code-preview-"),
-      guestPageALoaded: JSON.stringify(guestSecurity).includes("Native Guest A"),
-      guestPageBLoaded: true,
-      guestBackWorked: true,
-      guestForwardWorked: true,
-      guestReloadWorked: true,
-      guestFailureSurfaced: true,
-      guestRecovered: true,
-      guestDomMutationWorked: JSON.stringify(mutation).includes(
-        "mutated-through-production-automation",
-      ),
-      guestScreenshotCaptured:
-        guestArtifact.mimeType === "image/png" &&
-        guestArtifact.sizeBytes === guestArtifactBytes.length &&
-        guestArtifactBytes.length > 100,
-      processCleanupVerified: false,
+    const failureObservation = {
+      requestedUrl: `http://127.0.0.1:${failurePort}/unreachable`,
+      guestUrl: guestContents.getURL(),
+      rendererFailureVisible: failureSurfaceVisible,
+    };
+    navigation.push({
+      action: "load-failure",
+      expected: { rendererFailureVisible: true },
+      observed: failureObservation,
+      passed: true,
     });
-    if (
-      !JSON.stringify(guestSecurity).includes('"nodeType":"undefined"') ||
-      !JSON.stringify(guestSecurity).includes('"requireType":"undefined"')
-    ) {
+    await navigateAddress(`${guestOrigin}/a`);
+    const recoveredA = await waitGuestPage(pageAContract);
+    navigation.push({
+      action: "recover-page-a",
+      expected: pageAContract,
+      observed: recoveredA,
+      passed: true,
+    });
+
+    const assertions = Object.fromEntries(
+      requiredAssertionNames.map((name) => [name, makeNativeShellAssertion(null, false)]),
+    );
+    Object.assign(assertions, {
+      backendReady: makeNativeShellAssertion(bootstrap.bootstrap.httpBaseUrl),
+      productionMainLoaded: makeNativeShellAssertion(
+        renderer.getURL(),
+        renderer.getURL() === "t3code://app/" || renderer.getURL().startsWith("t3code://app/#"),
+      ),
+      productionPreloadBridge: makeNativeShellAssertion(reloadState.bridge),
+      nativeProjectVisible: makeNativeShellAssertion(
+        projectTitle,
+        nativeShell.body.includes(projectTitle),
+      ),
+      nativeTaskVisible: makeNativeShellAssertion(
+        threadTitle,
+        nativeShell.body.includes(threadTitle),
+      ),
+      nativeRouteRecoveredAfterReload: makeNativeShellAssertion(
+        { hash: reloadState.hash, titleVisible: reloadState.body.includes(threadTitle) },
+        reloadState.hash.includes(threadId) && reloadState.body.includes(threadTitle),
+      ),
+      composerVisible: makeNativeShellAssertion(nativeShell.composer),
+      taskTabsVisible: makeNativeShellAssertion(nativeShell.taskTabs),
+      realWebviewAttached: makeNativeShellAssertion(
+        { type: guestContents.getType(), webContentsId: webviewState.id },
+        guestContents.getType() === "webview" && webviewState.id > 0,
+      ),
+      approvedPreviewPartition: makeNativeShellAssertion(
+        webviewState.partition,
+        typeof webviewState.partition === "string" &&
+          webviewState.partition.startsWith("persist:t3code-preview-"),
+      ),
+      attachmentGuardAllowed: makeNativeShellAssertion(
+        attachmentObservation,
+        attachmentObservation.attachmentGuardAllowed === true &&
+          attachmentObservation.partition === webviewState.partition,
+      ),
+      guestSandboxEnabled: makeNativeShellAssertion(
+        attachmentObservation.sandbox,
+        attachmentObservation.sandbox === true,
+      ),
+      guestContextIsolationDisabled: makeNativeShellAssertion(
+        attachmentObservation.contextIsolation,
+        attachmentObservation.contextIsolation === false,
+      ),
+      guestNodeIntegrationDisabled: makeNativeShellAssertion(
+        attachmentObservation.nodeIntegration,
+        attachmentObservation.nodeIntegration === false,
+      ),
+      guestNodeIntegrationInSubFramesDisabled: makeNativeShellAssertion(
+        attachmentObservation.nodeIntegrationInSubFrames,
+        attachmentObservation.nodeIntegrationInSubFrames === false,
+      ),
+      guestPageALoaded: makeNativeShellAssertion(pageA, pageA.href === `${guestOrigin}/a`),
+      guestPageBLoaded: makeNativeShellAssertion(pageB, pageB.href === `${guestOrigin}/b`),
+      guestBackWorked: makeNativeShellAssertion(backToA, backToA.href === `${guestOrigin}/a`),
+      guestForwardWorked: makeNativeShellAssertion(
+        forwardToB,
+        forwardToB.href === `${guestOrigin}/b`,
+      ),
+      guestReloadWorked: makeNativeShellAssertion(reloadedA, reloadedA.loadCount >= 2),
+      guestFailureSurfaced: makeNativeShellAssertion(
+        failureObservation,
+        failureSurfaceVisible === true,
+      ),
+      guestRecovered: makeNativeShellAssertion(recoveredA, recoveredA.href === `${guestOrigin}/a`),
+      guestDomMutationWorked: makeNativeShellAssertion(
+        mutation,
+        mutation === "mutated-through-production-automation",
+      ),
+      guestScreenshotCaptured: makeNativeShellAssertion(
+        {
+          mimeType: guestArtifact.mimeType,
+          declaredSizeBytes: guestArtifact.sizeBytes,
+          observedSizeBytes: guestArtifactBytes.length,
+        },
+        guestArtifact.mimeType === "image/png" &&
+          guestArtifact.sizeBytes === guestArtifactBytes.length &&
+          guestArtifactBytes.length > 100,
+      ),
+      processCleanupVerified: makeNativeShellAssertion({ status: "pending-parent-check" }, false),
+    });
+    if (guestSecurity.nodeType !== "undefined" || guestSecurity.requireType !== "undefined") {
       throw new Error("real guest unexpectedly exposed Node globals");
     }
 
@@ -616,7 +705,7 @@ async function runElectronChild() {
         );
       } else {
         guestContents.reload();
-        await waitGuestTitle("Native Guest A");
+        await waitGuestPage(pageAContract);
         guestContents.invalidate();
       }
       await renderer.executeJavaScript(
@@ -641,10 +730,15 @@ async function runElectronChild() {
         JSON.stringify({ event: "native-shell-layout", scenario: scenario.scenario, layout }),
       );
       everyScenarioAvoidsHorizontalOverflow &&= layout.overflow;
-      if (scenario.width === 1024) assertions.narrowDisclosureReachable = layout.narrowDisclosure;
+      if (scenario.width === 1024) {
+        assertions.narrowDisclosureReachable = makeNativeShellAssertion(
+          layout,
+          layout.narrowDisclosure === true,
+        );
+      }
       const image = await mainWindow.webContents.capturePage();
       const bytes = image.toPNG();
-      const dimensions = readPngDimensions(bytes, scenario.scenario);
+      const dimensions = readNativeShellPngDimensions(bytes, scenario.scenario);
       if (dimensions.width !== scenario.width || dimensions.height !== scenario.height) {
         throw new Error(
           `${scenario.scenario} produced ${dimensions.width}x${dimensions.height}, expected ${scenario.width}x${scenario.height}`,
@@ -659,18 +753,19 @@ async function runElectronChild() {
         height: scenario.height,
         deviceScaleFactor: 1,
         theme: "dark",
+        layout,
         sha256: sha256(bytes),
       });
     }
-    assertions.noDocumentHorizontalOverflow = everyScenarioAvoidsHorizontalOverflow;
-    assertNativeShellAssertions({ ...assertions, processCleanupVerified: true });
+    assertions.noDocumentHorizontalOverflow = makeNativeShellAssertion(
+      screenshots.map(({ scenario, layout }) => ({ scenario, overflow: layout.overflow })),
+      everyScenarioAvoidsHorizontalOverflow,
+    );
+    assertNativeShellAssertions({
+      ...assertions,
+      processCleanupVerified: makeNativeShellAssertion({ status: "parent-check-pending" }, true),
+    });
 
-    const buildArtifactPaths = [
-      "apps/desktop/dist-electron/main.cjs",
-      "apps/desktop/dist-electron/preload.cjs",
-      "apps/server/dist/bin.mjs",
-      "apps/web/dist/index.html",
-    ];
     const manifest = {
       schemaVersion: 1,
       id: "orchestra-native-shell-acceptance-v1",
@@ -682,11 +777,12 @@ async function runElectronChild() {
       },
       capture: {
         electronVersion: process.versions.electron,
+        chromiumVersion: process.versions.chrome,
         platform: { os: hostPlatform, arch: hostArchitecture },
       },
       productionEntry: "t3code://app/",
       buildArtifacts: await Promise.all(
-        buildArtifactPaths.map(async (path) => ({
+        ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS.map(async (path) => ({
           path,
           sha256: sha256(await NodeFSP.readFile(NodePath.join(repoRoot, path))),
         })),
@@ -694,6 +790,24 @@ async function runElectronChild() {
       screenshots,
       assertions,
       guest: { origin: guestOrigin, fixtureSha256: guestFixture.digest },
+      runtime: {
+        rendererUrl: renderer.getURL(),
+        appViewport: await renderer.executeJavaScript(
+          `({ width: window.innerWidth, height: window.innerHeight })`,
+          true,
+        ),
+        guest: {
+          webContentsId: webviewState.id,
+          type: guestContents.getType(),
+          url: guestContents.getURL(),
+          title: guestContents.getTitle(),
+          partition: webviewState.partition,
+          viewport: recoveredA.viewport,
+          attachment: attachmentObservation,
+        },
+        navigation,
+        cleanup: { portsClosed: false, processGroupEmpty: false },
+      },
       humanReview: {
         status: "pending",
         reviewedAt: new Date(0).toISOString(),
@@ -715,19 +829,18 @@ async function runElectronChild() {
   } finally {
     await new Promise((resolve) => guestServer.close(() => resolve()));
     if (!manifestWritten) {
-      await Promise.all([
-        NodeFSP.rm(manifestPath, { force: true }),
-        ...screenshotScenarios.map(({ scenario }) =>
-          NodeFSP.rm(NodePath.join(evidenceDirectory, `${scenario}.png`), { force: true }),
-        ),
-      ]);
+      await cleanupFailedNativeShellCapture({
+        runtimeDirectory,
+        evidenceDirectory,
+        removeRuntime: false,
+      });
     }
     app.quit();
   }
 }
 
 async function main() {
-  if (process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CHILD === "1") {
+  if (shouldRunNativeShellElectronChild(process.env)) {
     await runElectronChild();
   } else {
     await launchUnderElectron();
@@ -735,13 +848,13 @@ async function main() {
 }
 
 if (
-  process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CHILD === "1" ||
+  shouldRunNativeShellElectronChild(process.env) ||
   NodePath.resolve(process.argv[1] ?? "") === scriptPath
 ) {
   main().catch((error) => {
     console.error(error);
     const runtimeDirectory = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_RUNTIME_DIR;
-    if (process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CHILD === "1" && runtimeDirectory) {
+    if (shouldRunNativeShellElectronChild(process.env) && runtimeDirectory) {
       NodeFS.writeFileSync(
         NodePath.join(runtimeDirectory, "capture-error.txt"),
         error instanceof Error ? (error.stack ?? error.message) : String(error),

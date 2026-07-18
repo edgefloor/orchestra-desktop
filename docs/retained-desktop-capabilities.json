@@ -57,6 +57,9 @@
         "apps/web/src/components/preview/PreviewUnreachable.tsx",
         "apps/web/src/components/preview/PreviewView.tsx",
         "apps/web/src/components/preview/openPreviewSession.ts",
+        "scripts/lib/orchestra-evidence-verifier.ts",
+        "scripts/lib/orchestra-native-shell-contract.d.mts",
+        "scripts/lib/orchestra-native-shell-contract.mjs",
         "scripts/verify-orchestra-native-shell.ts"
       ],
       "requiredTests": [
