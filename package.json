@@ -16,6 +16,7 @@
     "build": "vp run --filter './apps/*' --filter './packages/*' --filter './oxlint-plugin-t3code' --filter './scripts' build",
     "build:marketing": "vp run --filter @t3tools/marketing build",
     "build:desktop": "vp run --filter @t3tools/desktop --filter t3 build",
+    "capture:orchestra-acceptance": "vp run --filter @t3tools/web build:acceptance && vp run --filter @t3tools/desktop ensure:electron && vp run --filter @t3tools/desktop capture:acceptance && node scripts/verify-orchestra-acceptance.ts",
     "typecheck": "vp run -r --concurrency-limit 2 typecheck",
     "tc": "vp run -r --concurrency-limit 2 typecheck",
     "lint": "vp lint --report-unused-disable-directives",

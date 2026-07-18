@@ -450,7 +450,10 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
           <XIcon />
         </Button>
       </header>
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-6">
+      <div
+        className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-6"
+        data-automation-workspace-scroll=""
+      >
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="automation-profile-path">Profile path</Label>

@@ -87,8 +87,10 @@ function resolveDevProxyTarget(wsUrl: string | undefined): string | undefined {
 
 const devProxyTarget = resolveDevProxyTarget(configuredWsUrl);
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  const acceptanceBuild = mode === "acceptance";
   return {
+    ...(acceptanceBuild ? { base: "./" } : {}),
     plugins: [
       tanstackRouter(),
       react(),
@@ -169,9 +171,16 @@ export default defineConfig(() => {
       },
     },
     build: {
-      outDir: "dist",
+      outDir: acceptanceBuild ? "dist-acceptance" : "dist",
       emptyOutDir: true,
-      sourcemap: buildSourcemap,
+      sourcemap: acceptanceBuild ? false : buildSourcemap,
+      ...(acceptanceBuild
+        ? {
+            rollupOptions: {
+              input: "acceptance.html",
+            },
+          }
+        : {}),
     },
     test: {
       projects: [defineProject(unitTestProject)],
