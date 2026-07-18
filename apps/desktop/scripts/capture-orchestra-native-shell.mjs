@@ -935,6 +935,69 @@ async function runWithNativeShellRpcClient(baseUrl, token, useClient) {
   );
 }
 
+export function observeNativeShellProviderReadiness(providers, { instanceId, driver }) {
+  const provider = providers.find((candidate) => candidate.instanceId === instanceId);
+  if (!provider) {
+    return { state: "missing", expectedInstanceId: instanceId, expectedDriver: driver };
+  }
+  return {
+    state: "observed",
+    expectedInstanceId: instanceId,
+    expectedDriver: driver,
+    instanceId: provider.instanceId,
+    driver: provider.driver,
+    enabled: provider.enabled,
+    installed: provider.installed,
+    status: provider.status,
+    availability: provider.availability ?? "available",
+  };
+}
+
+export function isNativeShellProviderReady(observation) {
+  return (
+    observation.state === "observed" &&
+    observation.instanceId === observation.expectedInstanceId &&
+    observation.driver === observation.expectedDriver &&
+    observation.enabled === true &&
+    observation.installed === true &&
+    observation.status === "ready" &&
+    observation.availability === "available"
+  );
+}
+
+export async function awaitNativeShellProviderReady({
+  baseUrl,
+  token,
+  instanceId,
+  driver,
+  runClient = runWithNativeShellRpcClient,
+}) {
+  const result = await runClient(baseUrl, token, (client) =>
+    client[WS_METHODS.serverRefreshProviders]({ instanceId }),
+  );
+  const observation = observeNativeShellProviderReadiness(result.providers, {
+    instanceId,
+    driver,
+  });
+  if (!isNativeShellProviderReady(observation)) {
+    throw new Error(`native-shell provider readiness failed: ${JSON.stringify(observation)}`);
+  }
+  return observation;
+}
+
+export async function dispatchNativeShellTurnAfterProviderReady({
+  baseUrl,
+  token,
+  instanceId,
+  driver,
+  command,
+  awaitProviderReady = awaitNativeShellProviderReady,
+  dispatch = dispatchCommand,
+}) {
+  await awaitProviderReady({ baseUrl, token, instanceId, driver });
+  return dispatch(baseUrl, token, command);
+}
+
 export function withNativeShellEventTimeout(effect, context, duration = "45 seconds") {
   return effect.pipe(
     Effect.timeoutOrElse({
@@ -1895,10 +1958,12 @@ async function runElectronChild() {
       restart: null,
     };
 
-    const waitingTurnReceipt = await dispatchCommand(
-      bootstrap.bootstrap.httpBaseUrl,
-      bootstrap.token,
-      {
+    const waitingTurnReceipt = await dispatchNativeShellTurnAfterProviderReady({
+      baseUrl: bootstrap.bootstrap.httpBaseUrl,
+      token: bootstrap.token,
+      instanceId: "codex",
+      driver: "codex",
+      command: {
         type: "thread.turn.start",
         commandId: "cmd-native-dogfood-turn-start",
         threadId,
@@ -1913,7 +1978,7 @@ async function runElectronChild() {
         interactionMode: "default",
         createdAt: new Date().toISOString(),
       },
-    );
+    });
     if (!Number.isInteger(waitingTurnReceipt?.sequence)) {
       throw new Error("native dogfood waiting turn did not return a typed receipt sequence");
     }

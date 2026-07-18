@@ -13,6 +13,7 @@ import { buildMenuItems } from "../../web/src/components/GitActionsControl.logic
 
 import {
   accumulateNativeShellAssistantMessage,
+  awaitNativeShellProviderReady,
   NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS,
   NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES,
   NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS,
@@ -20,9 +21,12 @@ import {
   closeNativeShellChildServer,
   createNativeShellResponsesRequestJournal,
   destroyNativeShellWindow,
+  dispatchNativeShellTurnAfterProviderReady,
   executeNativeShellRendererStep,
   formatNativeShellFailureForOutput,
+  isNativeShellProviderReady,
   normalizeNativeShellFailure,
+  observeNativeShellProviderReadiness,
   prepareNativeShellGitFixture,
   readNativeDogfoodRunStateSummaries,
   resolveNativeShellChildFailure,
@@ -62,6 +66,107 @@ import {
 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 
 describe("native-shell acceptance capture contract", () => {
+  it("waits for exact provider readiness before dispatching the first native turn", async () => {
+    let releaseProvider;
+    const providerReady = new Promise((resolve) => {
+      releaseProvider = resolve;
+    });
+    const calls = [];
+    const pending = dispatchNativeShellTurnAfterProviderReady({
+      baseUrl: "http://127.0.0.1:4000",
+      token: "fixture-token",
+      instanceId: "codex",
+      driver: "codex",
+      command: { type: "thread.turn.start" },
+      awaitProviderReady: async () => {
+        calls.push("provider-ready-start");
+        await providerReady;
+        calls.push("provider-ready-complete");
+      },
+      dispatch: async () => {
+        calls.push("turn-dispatch");
+        return { sequence: 7 };
+      },
+    });
+
+    await Promise.resolve();
+    expect(calls).toEqual(["provider-ready-start"]);
+    releaseProvider();
+
+    await expect(pending).resolves.toEqual({ sequence: 7 });
+    expect(calls).toEqual(["provider-ready-start", "provider-ready-complete", "turn-dispatch"]);
+  });
+
+  it("accepts only the exact correlated ready provider observation", () => {
+    const ready = observeNativeShellProviderReadiness(
+      [
+        {
+          instanceId: "codex",
+          driver: "codex",
+          enabled: true,
+          installed: true,
+          status: "ready",
+        },
+      ],
+      { instanceId: "codex", driver: "codex" },
+    );
+
+    expect(isNativeShellProviderReady(ready)).toBe(true);
+    for (const observation of [
+      { ...ready, instanceId: "codex-personal" },
+      { ...ready, driver: "other" },
+      { ...ready, enabled: false },
+      { ...ready, installed: false },
+      { ...ready, status: "error" },
+      { ...ready, availability: "unavailable" },
+      observeNativeShellProviderReadiness([], {
+        instanceId: "codex",
+        driver: "codex",
+      }),
+    ]) {
+      expect(isNativeShellProviderReady(observation)).toBe(false);
+    }
+  });
+
+  it("uses the targeted typed provider refresh and fails closed on a non-ready result", async () => {
+    const rpcInputs = [];
+    const makeRunClient = (providers) => async (_baseUrl, _token, useClient) =>
+      useClient({
+        "server.refreshProviders": (input) => {
+          rpcInputs.push(input);
+          return { providers };
+        },
+      });
+    const readyProvider = {
+      instanceId: "codex",
+      driver: "codex",
+      enabled: true,
+      installed: true,
+      status: "ready",
+    };
+
+    await expect(
+      awaitNativeShellProviderReady({
+        baseUrl: "http://127.0.0.1:4000",
+        token: "fixture-token",
+        instanceId: "codex",
+        driver: "codex",
+        runClient: makeRunClient([readyProvider]),
+      }),
+    ).resolves.toMatchObject({ state: "observed", status: "ready" });
+    expect(rpcInputs).toEqual([{ instanceId: "codex" }]);
+
+    await expect(
+      awaitNativeShellProviderReady({
+        baseUrl: "http://127.0.0.1:4000",
+        token: "fixture-token",
+        instanceId: "codex",
+        driver: "codex",
+        runClient: makeRunClient([{ ...readyProvider, status: "warning" }]),
+      }),
+    ).rejects.toThrow('"status":"warning"');
+  });
+
   it("includes provider failure text only for an explicitly bounded diagnostic", () => {
     const snapshot = {
       snapshotSequence: 8,
