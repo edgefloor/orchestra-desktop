@@ -32,12 +32,14 @@ import {
   isNativeEvidenceObservation,
   isNativeWorkflowLifecycleObservation,
   isNativeShellProcessGroupEmpty,
+  isNativeShellGitFixtureIdentity,
   isNativeShellResourceCleanupComplete,
   isUniqueNativeSymphonyInspection,
   makeNativeShellAssertion,
   ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY,
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
   ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS,
+  ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY,
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
   reserveNativeShellPort,
   shouldRunNativeShellElectronChild,
@@ -116,11 +118,7 @@ export function prepareNativeShellGitFixture({ repository, remoteRepository }) {
   ) {
     throw new Error("native-shell Git fixture must use its isolated local bare origin");
   }
-  return Object.freeze({
-    name: "origin",
-    transport: "local-bare",
-    externalMutation: false,
-  });
+  return ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY;
 }
 
 function cleanCargoEnvironment() {
@@ -2657,9 +2655,7 @@ async function runElectronChild() {
           true &&
         retainedDesktopCapabilities.vcs.items.some(({ label }) => label.includes("Push")) ===
           true &&
-        retainedDesktopCapabilities.vcs.fixtureRemote?.name === "origin" &&
-        retainedDesktopCapabilities.vcs.fixtureRemote.transport === "local-bare" &&
-        retainedDesktopCapabilities.vcs.fixtureRemote.externalMutation === false &&
+        isNativeShellGitFixtureIdentity(retainedDesktopCapabilities.vcs.fixtureRemote) &&
         ["Files", "Terminal 1", "Browser", "Diff"].every(
           (title) =>
             retainedDesktopCapabilities.surfaces[title]?.title === title &&

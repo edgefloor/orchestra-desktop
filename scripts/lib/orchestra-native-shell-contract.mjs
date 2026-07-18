@@ -13,6 +13,24 @@ import {
 
 export const ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY = "docs/acceptance/orchestra-native-shell";
 
+export const ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY = Object.freeze({
+  name: "origin",
+  transport: "local-bare",
+  externalMutation: false,
+});
+
+export function isNativeShellGitFixtureIdentity(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 3 &&
+    value.name === ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY.name &&
+    value.transport === ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY.transport &&
+    value.externalMutation === ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY.externalMutation
+  );
+}
+
 export const ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS = Object.freeze([
   "apps/desktop/dist-electron/main.cjs",
   "apps/desktop/dist-electron/preload.cjs",
