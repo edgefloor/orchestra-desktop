@@ -55,17 +55,27 @@ export function makeBoundedChildStderr(maxChars = CODEX_APP_SERVER_STDERR_MAX_CH
   const decoder = new TextDecoder();
   let stderr = "";
   let stderrTruncated = false;
+  const append = (decoded: string) => {
+    if (stderrTruncated || decoded.length === 0) return;
+    const remaining = Math.max(0, maxChars - stderr.length);
+    if (decoded.length <= remaining) {
+      stderr += decoded;
+      return;
+    }
+    if (maxChars > 0) {
+      stderr =
+        remaining === 0
+          ? `${stderr.slice(0, maxChars - 1)}…`
+          : `${stderr}${decoded.slice(0, Math.max(0, remaining - 1))}…`;
+    }
+    stderrTruncated = true;
+  };
   return Object.freeze({
     push(chunk: Uint8Array) {
-      if (stderrTruncated) return;
-      const decoded = decoder.decode(chunk);
-      const remaining = Math.max(0, maxChars - stderr.length);
-      if (decoded.length <= remaining) {
-        stderr += decoded;
-        return;
-      }
-      stderr = `${stderr}${decoded.slice(0, Math.max(0, remaining - 1))}…`;
-      stderrTruncated = true;
+      append(decoder.decode(chunk, { stream: true }));
+    },
+    flush() {
+      append(decoder.decode());
     },
     snapshot() {
       const normalized = stderr.trim();

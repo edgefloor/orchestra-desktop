@@ -268,7 +268,7 @@ const makeChildProcessClient = Effect.fn(
   const stderr = makeBoundedChildStderr();
   const stderrFiber = yield* Stream.runForEach(handle.stderr, (chunk) =>
     Effect.sync(() => stderr.push(chunk)),
-  ).pipe(Effect.ignore, Effect.forkScoped);
+  ).pipe(Effect.ensuring(Effect.sync(stderr.flush)), Effect.ignore, Effect.forkScoped);
   return yield* make(
     makeChildStdio(handle),
     options,

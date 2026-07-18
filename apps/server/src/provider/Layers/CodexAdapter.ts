@@ -126,6 +126,24 @@ function mapCodexRuntimeError(
   });
 }
 
+function providerProcessError(threadId: ThreadId, cause: CodexSessionRuntimeError) {
+  const detail = redactCodexDiagnostic(cause.message);
+  const redactedCause = isCodexAppServerProcessExitedError(cause)
+    ? new CodexErrors.CodexAppServerProcessExitedError({
+        code: cause.code,
+        ...(cause.pid === undefined ? {} : { pid: cause.pid }),
+        ...(cause.stderr === undefined ? {} : { stderr: redactCodexDiagnostic(cause.stderr) }),
+        ...(cause.stderrTruncated === undefined ? {} : { stderrTruncated: cause.stderrTruncated }),
+      })
+    : cause;
+  return new ProviderAdapterProcessError({
+    provider: PROVIDER,
+    threadId,
+    detail,
+    cause: redactedCause,
+  });
+}
+
 type CodexLifecycleItem =
   | EffectCodexSchema.V2ItemStartedNotification["item"]
   | EffectCodexSchema.V2ItemCompletedNotification["item"];
@@ -1457,15 +1475,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           Effect.provideService(Scope.Scope, sessionScope),
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
           Effect.provideService(Crypto.Crypto, crypto),
-          Effect.mapError(
-            (cause) =>
-              new ProviderAdapterProcessError({
-                provider: PROVIDER,
-                threadId: input.threadId,
-                detail: redactCodexDiagnostic(cause.message),
-                cause,
-              }),
-          ),
+          Effect.mapError((cause) => providerProcessError(input.threadId, cause)),
         );
 
         const eventFiber = yield* Stream.runForEach(runtime.events, (event) =>
@@ -1486,15 +1496,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         ).pipe(Effect.forkChild);
 
         const started = yield* runtime.start().pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProviderAdapterProcessError({
-                provider: PROVIDER,
-                threadId: input.threadId,
-                detail: cause.message,
-                cause,
-              }),
-          ),
+          Effect.mapError((cause) => providerProcessError(input.threadId, cause)),
           Effect.onError(() =>
             runtime.close.pipe(
               Effect.andThen(Effect.ignore(Scope.close(sessionScope, Exit.void))),

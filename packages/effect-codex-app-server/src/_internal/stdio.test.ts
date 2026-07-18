@@ -64,6 +64,28 @@ describe("Codex App Server child process termination", () => {
     }),
   );
 
+  it("keeps the exact bound when a later chunk proves truncation", () => {
+    const stderr = makeBoundedChildStderr();
+    stderr.push(new TextEncoder().encode("x".repeat(CODEX_APP_SERVER_STDERR_MAX_CHARS)));
+    stderr.push(new TextEncoder().encode("later"));
+    stderr.flush();
+
+    assert.equal(stderr.snapshot().stderr?.length, CODEX_APP_SERVER_STDERR_MAX_CHARS);
+    assert.isTrue(stderr.snapshot().stderr?.endsWith("…"));
+    assert.isTrue(stderr.snapshot().stderrTruncated);
+  });
+
+  it("decodes a multibyte stderr character split across chunks", () => {
+    const stderr = makeBoundedChildStderr();
+    const encoded = new TextEncoder().encode("€");
+    stderr.push(encoded.slice(0, 2));
+    stderr.push(encoded.slice(2));
+    stderr.flush();
+
+    assert.equal(stderr.snapshot().stderr, "€");
+    assert.isFalse(stderr.snapshot().stderrTruncated);
+  });
+
   it.effect("retains the process identifier and exact exit-status cause", () =>
     Effect.gen(function* () {
       const rootCause = new Error("private process diagnostics");

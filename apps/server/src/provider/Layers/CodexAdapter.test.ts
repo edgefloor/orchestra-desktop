@@ -47,6 +47,7 @@ import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import {
   type CodexSessionRuntimeOptions,
+  type CodexSessionRuntimeError,
   type CodexSessionRuntimeSendTurnInput,
   type CodexSessionRuntimeShape,
   type CodexThreadSnapshot,
@@ -137,13 +138,17 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
   public readonly closeImpl = vi.fn(() => Promise.resolve(undefined));
 
   readonly options: CodexSessionRuntimeOptions;
+  readonly startFailure: CodexSessionRuntimeError | undefined;
 
-  constructor(options: CodexSessionRuntimeOptions) {
+  constructor(options: CodexSessionRuntimeOptions, startFailure?: CodexSessionRuntimeError) {
     this.options = options;
+    this.startFailure = startFailure;
   }
 
-  start() {
-    return Effect.promise(() => this.startImpl());
+  start(): Effect.Effect<ProviderSession, CodexSessionRuntimeError> {
+    return this.startFailure
+      ? Effect.fail(this.startFailure)
+      : Effect.promise(() => this.startImpl());
   }
 
   getSession = Effect.promise(() => this.startImpl());
@@ -211,6 +216,13 @@ function makeRuntimeFactory() {
       return runtimes.at(-1);
     },
   };
+}
+
+function makeStartFailureRuntimeFactory(failure: CodexSessionRuntimeError) {
+  return vi.fn((options: CodexSessionRuntimeOptions) => {
+    const runtime = new FakeCodexRuntime(options, failure);
+    return Effect.succeed(runtime);
+  });
 }
 
 function makeScopedRuntimeFactory(options?: { readonly failConstruction?: boolean }) {
@@ -1325,6 +1337,57 @@ scopedFailureLayer("CodexAdapterLive scoped startup failure", (it) => {
         asThreadId("thread-fail"),
       ]);
       NodeAssert.equal(yield* adapter.hasSession(asThreadId("thread-fail")), false);
+    }),
+  );
+});
+
+const providerSecretSentinel = "provider-secret-sentinel";
+const processFailureRuntimeFactory = makeStartFailureRuntimeFactory(
+  new CodexErrors.CodexAppServerProcessExitedError({
+    code: 1,
+    stderr: `api_key=${providerSecretSentinel}`,
+  }),
+);
+const processFailureLayer = it.layer(
+  Layer.effect(
+    CodexAdapter,
+    Effect.gen(function* () {
+      const codexConfig = decodeCodexSettings({});
+      return yield* makeCodexAdapter(codexConfig, {
+        makeRuntime: processFailureRuntimeFactory,
+      });
+    }),
+  ).pipe(
+    Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+    Layer.provideMerge(ServerSettingsService.layerTest()),
+    Layer.provideMerge(providerSessionDirectoryTestLayer),
+    Layer.provideMerge(NodeServices.layer),
+  ),
+);
+
+processFailureLayer("CodexAdapterLive process failure redaction", (it) => {
+  it.effect("redacts startup stderr from provider detail and its attached cause", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      const result = yield* adapter
+        .startSession({
+          provider: ProviderDriverKind.make("codex"),
+          threadId: asThreadId("thread-process-fail"),
+          runtimeMode: "full-access",
+        })
+        .pipe(Effect.result);
+
+      NodeAssert.equal(result._tag, "Failure");
+      if (result._tag !== "Failure") return;
+      NodeAssert.equal(result.failure._tag, "ProviderAdapterProcessError");
+      if (result.failure._tag !== "ProviderAdapterProcessError") return;
+      NodeAssert.doesNotMatch(result.failure.detail, new RegExp(providerSecretSentinel));
+      NodeAssert.match(result.failure.detail, /\[REDACTED\]/);
+      const isProcessExit = Schema.is(CodexErrors.CodexAppServerProcessExitedError);
+      NodeAssert.ok(isProcessExit(result.failure.cause));
+      if (!isProcessExit(result.failure.cause)) return;
+      NodeAssert.doesNotMatch(result.failure.cause.message, new RegExp(providerSecretSentinel));
+      NodeAssert.match(result.failure.cause.stderr ?? "", /\[REDACTED\]/);
     }),
   );
 });
