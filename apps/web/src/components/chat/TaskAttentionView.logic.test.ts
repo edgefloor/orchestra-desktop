@@ -107,6 +107,7 @@ function automationRun(): AutomationRun {
         issueId: "issue-49",
         issueIdentifier: "ORC-49",
         issueTitle: { text: "Build Attention", truncated: false },
+        issueUrl: null,
         trackerState: "In Progress",
         attempt: 1,
         workflowInvocations: 1,

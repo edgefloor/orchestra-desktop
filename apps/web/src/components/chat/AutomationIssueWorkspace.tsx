@@ -1,4 +1,4 @@
-import { type AutomationRunResult, type EnvironmentId, type ThreadId } from "@t3tools/contracts";
+import { type AutomationRunResult, type EnvironmentId } from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -14,6 +14,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Spinner } from "../ui/spinner";
+import { readableAutomationError } from "./AutomationError.logic";
 import {
   automationIssueClaimUrl,
   beginAutomationIssueRequest,
@@ -26,7 +27,7 @@ import {
   type AutomationIssueWorkspaceSnapshot,
 } from "./AutomationIssueWorkspace.logic";
 
-interface AutomationIssueWorkspaceProps extends AutomationIssueWorkspaceLocator {
+export interface AutomationIssueWorkspaceProps extends AutomationIssueWorkspaceLocator {
   readonly environmentId: EnvironmentId;
   readonly availability: "available" | "temporarilyUnavailable";
   readonly issueIdentifier: string | undefined;
@@ -35,7 +36,7 @@ interface AutomationIssueWorkspaceProps extends AutomationIssueWorkspaceLocator 
   readonly onOpenDiff: () => void;
 }
 
-interface AutomationIssueWorkspacePresentationProps {
+export interface AutomationIssueWorkspacePresentationProps {
   readonly snapshot: AutomationIssueWorkspaceSnapshot | null;
   readonly runtimeState: AutomationIssueWorkspaceRuntimeState;
   readonly fallbackIdentifier: string;
@@ -49,11 +50,6 @@ interface AutomationIssueWorkspacePresentationProps {
   readonly onOpenDiff: () => void;
   readonly onOpenTracker: () => void;
   readonly onSendGuidance: () => void;
-}
-
-function readableError(cause: unknown): string {
-  const message = cause instanceof Error ? cause.message : "The Automation request failed.";
-  return message.length <= 1_024 ? message : `${message.slice(0, 1_023)}…`;
 }
 
 function formatState(value: string): string {
@@ -85,7 +81,7 @@ export function AutomationIssueWorkspacePresentation({
   return (
     <section
       aria-label={`${identifier} issue workspace`}
-      className="max-h-[45vh] shrink-0 space-y-3 overflow-y-auto border-b border-border bg-card/55 px-4 py-3 sm:px-6"
+      className="max-h-[45vh] min-w-0 shrink-0 space-y-3 overflow-x-hidden overflow-y-auto border-b border-border bg-card/55 px-4 py-3 sm:px-6"
       data-automation-issue-workspace=""
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -203,7 +199,7 @@ export function AutomationIssueWorkspacePresentation({
                 <Label htmlFor={`issue-workspace-guidance-${claim.claimId}`}>
                   Guide Issue task
                 </Label>
-                <div className="flex gap-2">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                   <Input
                     id={`issue-workspace-guidance-${claim.claimId}`}
                     maxLength={16_384}
@@ -212,6 +208,7 @@ export function AutomationIssueWorkspacePresentation({
                     value={guidance}
                   />
                   <Button
+                    className="w-full sm:w-auto"
                     disabled={pending || !guidance.trim()}
                     onClick={onSendGuidance}
                     size="sm"
@@ -270,7 +267,7 @@ export function AutomationIssueWorkspacePresentation({
   );
 }
 
-export const AutomationIssueWorkspace = memo(function AutomationIssueWorkspace({
+export function AutomationIssueWorkspaceController({
   environmentId,
   ownerThreadId,
   automationRunId,
@@ -327,7 +324,7 @@ export const AutomationIssueWorkspace = memo(function AutomationIssueWorkspace({
         return;
       }
       if (!isAtomCommandInterrupted(result)) {
-        setError(readableError(squashAtomCommandFailure(result)));
+        setError(readableAutomationError(squashAtomCommandFailure(result), 1_024));
       }
     });
   }, [acceptRunResult, environmentId, locator, readStatus]);
@@ -363,7 +360,7 @@ export const AutomationIssueWorkspace = memo(function AutomationIssueWorkspace({
         return;
       }
       if (!isAtomCommandInterrupted(result)) {
-        setError(readableError(squashAtomCommandFailure(result)));
+        setError(readableAutomationError(squashAtomCommandFailure(result), 1_024));
       }
     });
   }, [
@@ -381,7 +378,7 @@ export const AutomationIssueWorkspace = memo(function AutomationIssueWorkspace({
     if (!trackerUrl) return;
     void readLocalApi()
       ?.shell.openExternal(trackerUrl)
-      .catch((cause) => setError(readableError(cause)));
+      .catch((cause) => setError(readableAutomationError(cause, 1_024)));
   }, [trackerUrl]);
   const runtimeState = deriveAutomationIssueWorkspaceRuntimeState({
     availability,
@@ -407,4 +404,6 @@ export const AutomationIssueWorkspace = memo(function AutomationIssueWorkspace({
       snapshot={snapshot}
     />
   );
-});
+}
+
+export const AutomationIssueWorkspace = memo(AutomationIssueWorkspaceController);

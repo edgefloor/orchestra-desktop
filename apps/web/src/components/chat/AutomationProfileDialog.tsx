@@ -36,7 +36,6 @@ import {
   automationWorkspaceCapabilities,
   buildAutomationStartInput,
   buildAutomationValidateInput,
-  boundedAutomationFeedbackText,
   deriveAutomationWorkspaceState,
   resolveAutomationWorkspaceRunCursor,
   staleAutomationRunAction,
@@ -54,6 +53,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Spinner } from "../ui/spinner";
+import { readableAutomationError } from "./AutomationError.logic";
 
 interface AutomationWorkspaceProps {
   readonly environmentId: EnvironmentId;
@@ -65,12 +65,6 @@ interface AutomationWorkspaceProps {
 }
 
 export type { AutomationIssueTaskNavigationInput };
-
-function readableError(cause: unknown): string {
-  return boundedAutomationFeedbackText(
-    cause instanceof Error ? cause.message : "The Automation request failed.",
-  );
-}
 
 export const AutomationWorkspace = memo(function AutomationWorkspace({
   environmentId,
@@ -148,7 +142,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
           return;
         }
         if (!isAtomCommandInterrupted(commandResult)) {
-          setError(readableError(squashAtomCommandFailure(commandResult)));
+          setError(readableAutomationError(squashAtomCommandFailure(commandResult)));
         }
       });
     },
@@ -201,7 +195,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         return;
       }
       if (!isAtomCommandInterrupted(commandResult)) {
-        setError(readableError(squashAtomCommandFailure(commandResult)));
+        setError(readableAutomationError(squashAtomCommandFailure(commandResult)));
       }
     });
   }, [
@@ -235,7 +229,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         return;
       }
       if (!isAtomCommandInterrupted(commandResult)) {
-        const message = readableError(squashAtomCommandFailure(commandResult));
+        const message = readableAutomationError(squashAtomCommandFailure(commandResult));
         setError(message);
         setActionFeedback(staleAutomationRunAction("Start", message, runResult?.run ?? null));
       }
@@ -263,7 +257,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
           return;
         }
         if (!isAtomCommandInterrupted(commandResult)) {
-          const message = readableError(squashAtomCommandFailure(commandResult));
+          const message = readableAutomationError(squashAtomCommandFailure(commandResult));
           setError(message);
           setActionFeedback(staleAutomationRunAction("Steer issue", message, runResult.run));
         }
@@ -289,7 +283,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         return;
       }
       if (!isAtomCommandInterrupted(commandResult)) {
-        const message = readableError(squashAtomCommandFailure(commandResult));
+        const message = readableAutomationError(squashAtomCommandFailure(commandResult));
         setError(message);
         setActionFeedback(staleAutomationRunAction("Cancel run", message, runResult.run));
       }
@@ -314,7 +308,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
           return;
         }
         if (!isAtomCommandInterrupted(commandResult)) {
-          const message = readableError(squashAtomCommandFailure(commandResult));
+          const message = readableAutomationError(squashAtomCommandFailure(commandResult));
           setError(message);
           setActionFeedback(staleAutomationRunAction("Cancel issue", message, runResult.run));
         }
@@ -374,7 +368,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                 : action === "refresh"
                   ? "Refresh"
                   : "Resume";
-          const message = readableError(squashAtomCommandFailure(commandResult));
+          const message = readableAutomationError(squashAtomCommandFailure(commandResult));
           setError(message);
           setActionFeedback(staleAutomationRunAction(actionLabel, message, runResult.run));
         }
@@ -417,7 +411,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
           return;
         }
         if (!isAtomCommandInterrupted(commandResult)) {
-          setError(readableError(squashAtomCommandFailure(commandResult)));
+          setError(readableAutomationError(squashAtomCommandFailure(commandResult)));
         }
       });
     },
@@ -449,7 +443,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
           return;
         }
         if (!isAtomCommandInterrupted(commandResult)) {
-          setError(readableError(squashAtomCommandFailure(commandResult)));
+          setError(readableAutomationError(squashAtomCommandFailure(commandResult)));
         }
       });
     },

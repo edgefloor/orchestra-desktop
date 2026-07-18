@@ -1,5 +1,5 @@
 import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId, TurnId } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { Thread } from "../types";
 import {
@@ -12,6 +12,7 @@ import {
   deriveValidWorkspaceTaskIds,
   getStartedThreadModelChangeBlockReason,
   hasServerAcknowledgedLocalDispatch,
+  openAutomationIssueDiff,
   reconcileMountedTerminalThreadIds,
   reconcileRetainedMountedThreadIds,
   resolveSendEnvMode,
@@ -22,6 +23,33 @@ const environmentId = EnvironmentId.make("environment-local");
 const projectId = ProjectId.make("project-1");
 const threadId = ThreadId.make("thread-1");
 const now = "2026-03-29T00:00:00.000Z";
+
+describe("openAutomationIssueDiff", () => {
+  it("opens the Diff surface deterministically instead of toggling it", () => {
+    const onDiffPanelOpen = vi.fn();
+    const openDiff = vi.fn();
+    const threadRef = { environmentId, threadId };
+
+    openAutomationIssueDiff({
+      isServerThread: true,
+      threadRef,
+      diffOpen: false,
+      onDiffPanelOpen,
+      openDiff,
+    });
+    openAutomationIssueDiff({
+      isServerThread: true,
+      threadRef,
+      diffOpen: true,
+      onDiffPanelOpen,
+      openDiff,
+    });
+
+    expect(onDiffPanelOpen).toHaveBeenCalledOnce();
+    expect(openDiff).toHaveBeenNthCalledWith(1, threadRef);
+    expect(openDiff).toHaveBeenNthCalledWith(2, threadRef);
+  });
+});
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
   return {

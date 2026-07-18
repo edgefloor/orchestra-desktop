@@ -7,6 +7,7 @@ import {
   focusWorkspaceSurface,
   MAX_OPEN_WORKSPACE_SURFACES,
   openWorkspaceSurface,
+  parentSymphonySurfaceForIssue,
   reconcileWorkspaceSurfaces,
   workspaceIssueSurfaceTitle,
   workspaceSurfaceKey,
@@ -107,6 +108,24 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     terminalId: "terminal",
   },
 ];
+
+describe("issue parent Symphony", () => {
+  it("preserves the exact owner task and Automation Run identity", () => {
+    const issue = everySurfaceKind.find(
+      (surface): surface is Extract<WorkspaceSurface, { kind: "issue" }> =>
+        surface.kind === "issue",
+    )!;
+
+    expect(parentSymphonySurfaceForIssue(issue)).toEqual({
+      schemaVersion: 2,
+      kind: "symphony",
+      environmentId,
+      projectId,
+      threadId,
+      automationRunId: "automation",
+    });
+  });
+});
 
 describe("workspace surface identity", () => {
   it("provides a distinct stable key for every closed-union kind", () => {

@@ -93,6 +93,7 @@ const acceptanceAutomationRun: AutomationRunResult = {
         issueId: "issue-orc-70",
         issueIdentifier: "ORC-70",
         issueTitle: { text: "Complete the Symphony workspace", truncated: false },
+        issueUrl: null,
         trackerState: "In Progress",
         priority: 1,
         attempt: 1,

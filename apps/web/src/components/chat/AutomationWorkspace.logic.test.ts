@@ -17,6 +17,7 @@ function claim(overrides: Partial<AutomationIssueClaim> = {}): AutomationIssueCl
     issueId: "issue-1",
     issueIdentifier: "ORC-1",
     issueTitle: { text: "First issue", truncated: false },
+    issueUrl: null,
     trackerState: "Todo",
     priority: 2,
     attempt: 1,

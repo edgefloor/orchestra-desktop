@@ -62,6 +62,7 @@ const runResult: AutomationRunResult = {
         issueId: "issue-70",
         issueIdentifier: "ORC-70",
         issueTitle: { text: "Deliver the Symphony workspace", truncated: false },
+        issueUrl: null,
         trackerState: "In Progress",
         priority: 1,
         attempt: 2,

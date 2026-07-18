@@ -48,8 +48,9 @@ describe("production Automation operations", () => {
       decodeAutomationStatusInput({
         threadId: "task-60",
         runId: "automation-root-60",
+        focusedIssueId: null,
       }),
-    ).toEqual({ threadId: "task-60", runId: "automation-root-60" });
+    ).toEqual({ threadId: "task-60", runId: "automation-root-60", focusedIssueId: null });
     expect(() =>
       decodeAutomationStatusInput({
         threadId: "task-60",

@@ -317,6 +317,7 @@ describe("redesigned native workspace dogfood contract", () => {
                 issueId: "issue-51",
                 issueIdentifier: "ORC-51",
                 issueTitle: { text: "Dogfood native workspace", truncated: false },
+                issueUrl: null,
                 trackerState: "Done",
                 attempt: 1,
                 workflowInvocations: 1,

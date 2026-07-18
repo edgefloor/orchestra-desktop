@@ -261,6 +261,9 @@ describe("AutomationIssueWorkspacePresentation", () => {
     expect(markup).toContain("Keep the exact claim visible.");
     expect(markup).toContain("Send guidance");
     expect(markup).toContain("max-h-[45vh]");
+    expect(markup).toContain("overflow-x-hidden");
+    expect(markup).toContain("flex-col");
+    expect(markup).toContain("sm:flex-row");
     expect(markup).not.toMatch(/>Approve<|>Reject</);
   });
 

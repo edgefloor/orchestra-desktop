@@ -163,6 +163,19 @@ export function workspaceIssueSurfaceTitle(
   return surface.issueIdentifier ?? `Issue ${surface.issueId}`;
 }
 
+export function parentSymphonySurfaceForIssue(
+  surface: Extract<WorkspaceSurface, { kind: "issue" }>,
+): Extract<WorkspaceSurface, { kind: "symphony" }> {
+  return {
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+    kind: "symphony",
+    environmentId: surface.environmentId,
+    projectId: surface.projectId,
+    threadId: surface.threadId,
+    automationRunId: surface.automationRunId,
+  };
+}
+
 export function createWorkspaceSurfaceState(): WorkspaceSurfaceState {
   return {
     schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,

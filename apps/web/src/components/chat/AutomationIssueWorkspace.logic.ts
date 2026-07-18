@@ -86,7 +86,7 @@ export function deriveAutomationIssueWorkspaceRuntimeState(input: {
   return input.hasSnapshot ? "ready" : "loading";
 }
 
-export function safeAutomationIssueUrl(value: string | undefined): string | null {
+export function safeAutomationIssueUrl(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   if (!normalized) return null;
   try {

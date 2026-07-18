@@ -11,13 +11,13 @@
   },
   "orchestraCodex": {
     "repository": "https://github.com/edgefloor/orchestra-codex.git",
-    "revision": "cf6248510e46dd52fa46c3e23431770432f1c1f3",
+    "revision": "136521159943b9209f84a96c8da2d56d090c5fdd",
     "schemaPath": "codex-rs/app-server-protocol/schema/typescript",
-    "sourceTree": "eefe3a5076a0c9de9dc7abacaf5ed564e3a9706e",
+    "sourceTree": "0d4767c3b01157cf94797502aad0074cb2083f04",
     "generatedPath": "apps/web/src/orchestra/generated",
     "identityPath": "apps/web/src/orchestra/generated/ORCHESTRA_CODEX_SOURCE.json",
     "digestAlgorithm": "sha256-relative-path-nul-file-sha256-lf-v1",
-    "digest": "3c95201edb3dd13d7c8c1afa545174215a0435877a7d0cc7fd50052b064dc935",
+    "digest": "0cea8263f5e18ce37690bde2881e59dd2a34763b9b25d34db9415048a0b8ad7a",
     "fileCount": 710
   }
 }

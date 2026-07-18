@@ -27,6 +27,18 @@ export const MAX_HIDDEN_MOUNTED_PREVIEW_THREADS = 3;
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
 
+export function openAutomationIssueDiff(input: {
+  readonly isServerThread: boolean;
+  readonly threadRef: ScopedThreadRef | null;
+  readonly diffOpen: boolean;
+  readonly onDiffPanelOpen?: (() => void) | undefined;
+  readonly openDiff: (threadRef: ScopedThreadRef) => void;
+}): void {
+  if (!input.isServerThread || !input.threadRef) return;
+  if (!input.diffOpen) input.onDiffPanelOpen?.();
+  input.openDiff(input.threadRef);
+}
+
 export function deriveValidWorkspaceTaskIds(input: {
   activeThread: Pick<Thread, "environmentId" | "id" | "projectId">;
   activeDraftThreadId: ThreadId | null;

@@ -200,6 +200,7 @@ describe("automationRunRows", () => {
             issueId: "issue-33",
             issueIdentifier: "ORC-33",
             issueTitle: { text: "Run one fixture issue", truncated: false },
+            issueUrl: null,
             trackerState: "Todo",
             priority: 2,
             attempt: 1,

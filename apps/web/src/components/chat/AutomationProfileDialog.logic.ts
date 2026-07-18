@@ -8,6 +8,8 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 
+import { boundedAutomationText } from "./AutomationError.logic";
+
 export type AutomationWorkspacePendingAction =
   | "validating"
   | "starting"
@@ -49,19 +51,7 @@ export type AutomationRunActionFeedback = {
 const MAX_AUTOMATION_ACTION_FEEDBACK_BYTES = 512;
 
 export function boundedAutomationFeedbackText(value: string): string {
-  const normalized = value.trim();
-  const encoder = new TextEncoder();
-  if (encoder.encode(normalized).byteLength <= MAX_AUTOMATION_ACTION_FEEDBACK_BYTES) {
-    return normalized;
-  }
-  const characters = Array.from(normalized).slice(0, MAX_AUTOMATION_ACTION_FEEDBACK_BYTES);
-  while (
-    characters.length > 0 &&
-    encoder.encode(`${characters.join("")}…`).byteLength > MAX_AUTOMATION_ACTION_FEEDBACK_BYTES
-  ) {
-    characters.pop();
-  }
-  return `${characters.join("")}…`;
+  return boundedAutomationText(value, MAX_AUTOMATION_ACTION_FEEDBACK_BYTES);
 }
 
 export function acceptedAutomationRunAction(
