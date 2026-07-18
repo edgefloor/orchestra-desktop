@@ -343,6 +343,23 @@ describe("native-shell acceptance capture contract", () => {
     expect(isNativeShellTerminalSurfaceTitle("term-2")).toBe(false);
   });
 
+  it("selects panel surfaces only from the visible structured Base UI menu", async () => {
+    const captureSource = await NodeFSP.readFile(
+      NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),
+      "utf8",
+    );
+    const helperStart = captureSource.indexOf("async function selectVisibleMenuItem");
+    const helperEnd = captureSource.indexOf("async function observeDocumentText", helperStart);
+    const helperSource = captureSource.slice(helperStart, helperEnd);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    expect(helperSource).toContain("getClientRects().length > 0");
+    expect(helperSource).toContain("candidate.querySelectorAll('[data-slot=\"menu-item\"]')");
+    expect(helperSource).toContain("key: 'ArrowDown'");
+    expect(helperSource).not.toContain("querySelectorAll('[role=\"menuitem\"]')");
+    expect(captureSource).toContain("bounded tabs:");
+  });
+
   it("requires the exact all-true semantic assertion set", () => {
     expect(ORCHESTRA_NATIVE_SHELL_ASSERTIONS).toContain("nativeDogfoodProviderRestartRecovered");
     const assertions = Object.fromEntries(

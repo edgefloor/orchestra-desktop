@@ -1009,7 +1009,16 @@ async function observeActiveRightPanelSurface(renderer, expectedTitle, context) 
       const titleExpectation = ${JSON.stringify(titleExpectation)};
       const deadline = window.setTimeout(() => {
         observer.disconnect();
-        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
+        const tabs = [...document.querySelectorAll('[role="tab"]')]
+          .slice(0, 12)
+          .map((tab) => ({
+            title: (tab.textContent?.trim() ?? '').slice(0, 120),
+            selected: tab.getAttribute('aria-selected'),
+          }));
+        reject(new Error(
+          ${JSON.stringify(`${context} did not render within 45000ms; bounded tabs: `)} +
+          JSON.stringify(tabs)
+        ));
       }, 45000);
       const complete = () => {
         const active = document.querySelector('[role="tab"][aria-selected="true"]');
@@ -1025,6 +1034,49 @@ async function observeActiveRightPanelSurface(renderer, expectedTitle, context) 
       };
       const observer = new MutationObserver(complete);
       observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
+      complete();
+    })`,
+    true,
+  );
+}
+
+async function selectVisibleMenuItem(renderer, { triggerSelector, label, context }) {
+  return renderer.executeJavaScript(
+    `new Promise((resolve, reject) => {
+      const trigger = document.querySelector(${JSON.stringify(triggerSelector)});
+      if (!(trigger instanceof HTMLButtonElement) || trigger.disabled) {
+        reject(new Error(${JSON.stringify(`${context} trigger missing`)}));
+        return;
+      }
+      const deadline = window.setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(${JSON.stringify(`${context} menu item missing`)}));
+      }, 45000);
+      const complete = () => {
+        const popup = [...document.querySelectorAll('[data-slot="menu-popup"]')]
+          .find((candidate) =>
+            candidate instanceof HTMLElement &&
+            candidate.getClientRects().length > 0 &&
+            [...candidate.querySelectorAll('[data-slot="menu-item"]')]
+              .some((item) => item.textContent?.trim() === ${JSON.stringify(label)}));
+        if (!(popup instanceof HTMLElement)) return;
+        const item = [...popup.querySelectorAll('[data-slot="menu-item"]')]
+          .find((candidate) => candidate.textContent?.trim() === ${JSON.stringify(label)});
+        if (!(item instanceof HTMLElement) ||
+            item.matches('[data-disabled], [aria-disabled="true"]')) return;
+        window.clearTimeout(deadline);
+        observer.disconnect();
+        item.click();
+        resolve({ label: item.textContent?.trim() ?? '' });
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+      trigger.focus();
+      trigger.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        bubbles: true,
+        cancelable: true,
+      }));
       complete();
     })`,
     true,
@@ -1108,49 +1160,30 @@ async function addRightPanelSurface(
   label,
   { emptyState = false, expectedTitle = label } = {},
 ) {
-  await renderer.executeJavaScript(
-    `(() => {
-      const trigger = ${
-        emptyState
-          ? `(() => {
+  if (emptyState) {
+    await renderer.executeJavaScript(
+      `(() => {
+        const trigger = (() => {
         const heading = [...document.querySelectorAll('h3')]
           .find((node) => node.textContent?.trim() === 'Open a surface');
         const chooser = heading?.parentElement?.parentElement;
         return chooser && [...chooser.querySelectorAll('button')]
           .find((candidate) => [...candidate.querySelectorAll('span')]
             .some((span) => span.textContent?.trim() === ${JSON.stringify(label)}));
-      })()`
-          : `document.querySelector('[aria-label="Add panel surface"]')`
-      };
-      if (!(trigger instanceof HTMLButtonElement) || trigger.disabled) {
-        throw new Error(${JSON.stringify(`${label} surface trigger missing`)});
-      }
-      trigger.click();
-    })()`,
-    true,
-  );
-  if (!emptyState) {
-    await renderer.executeJavaScript(
-      `new Promise((resolve, reject) => {
-        const deadline = window.setTimeout(() => {
-          observer.disconnect();
-          reject(new Error(${JSON.stringify(`${label} surface menu item missing`)}));
-        }, 45000);
-        const complete = () => {
-          const item = [...document.querySelectorAll('[role="menuitem"]')]
-            .find((candidate) => candidate.textContent?.trim() === ${JSON.stringify(label)});
-          if (!(item instanceof HTMLElement) || item.getAttribute('aria-disabled') === 'true') return;
-          window.clearTimeout(deadline);
-          observer.disconnect();
-          item.click();
-          resolve(true);
-        };
-        const observer = new MutationObserver(complete);
-        observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
-        complete();
+        })();
+        if (!(trigger instanceof HTMLButtonElement) || trigger.disabled) {
+          throw new Error(${JSON.stringify(`${label} surface trigger missing`)});
+        }
+        trigger.click();
       })`,
       true,
     );
+  } else {
+    await selectVisibleMenuItem(renderer, {
+      triggerSelector: '[aria-label="Add panel surface"]',
+      label,
+      context: `${label} surface`,
+    });
   }
   return observeActiveRightPanelSurface(renderer, expectedTitle, `active ${label} surface`);
 }
