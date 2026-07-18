@@ -1,0 +1,557 @@
+{
+  "schemaVersion": 1,
+  "id": "orchestra-native-shell-acceptance-v1",
+  "role": "product-native-shell-evidence",
+  "desktop": {
+    "repository": "edgefloor/orchestra-desktop",
+    "commit": "fa24bf561bcd807e71c3aa786c83c0d8277307b6",
+    "tree": "622c518832281fb157283a62b54090e57fe2e53b"
+  },
+  "capture": {
+    "electronVersion": "41.5.0",
+    "chromiumVersion": "146.0.7680.216",
+    "platform": {
+      "os": "darwin",
+      "arch": "arm64"
+    }
+  },
+  "productionEntry": "t3code://app/",
+  "buildArtifacts": [
+    {
+      "path": "apps/desktop/dist-electron/main.cjs",
+      "sha256": "76a385d73ad5f47ae39d6d107659be049448e4f3b6a734e3efa059fcde040d74"
+    },
+    {
+      "path": "apps/desktop/dist-electron/preload.cjs",
+      "sha256": "c6d2c432d4fc51bf47b00329d30bbda8d8d7306097a4e44b71a278bdcc16c74f"
+    },
+    {
+      "path": "apps/server/dist/bin.mjs",
+      "sha256": "e8a5d484e7928cae2dc0f24cb046f53ed8063fc25434d43bebaab2e7b170ead8"
+    },
+    {
+      "path": "apps/web/dist/index.html",
+      "sha256": "5d8f34b530e27580e25986feedabe12709a9b276436e85ac5e798dde7980e861"
+    }
+  ],
+  "screenshots": [
+    {
+      "scenario": "native-browser-1440x900-dark",
+      "file": "docs/acceptance/orchestra-native-shell/native-browser-1440x900-dark.png",
+      "width": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "layout": {
+        "width": 1440,
+        "height": 900,
+        "overflow": true,
+        "browserVisible": true,
+        "narrowDisclosure": true,
+        "webviewRect": {
+          "x": 901,
+          "y": 92,
+          "width": 539,
+          "height": 808,
+          "display": "flex",
+          "visibility": "visible"
+        },
+        "wrapperRect": {
+          "x": 901,
+          "y": 92,
+          "width": 539,
+          "height": 808,
+          "display": "block",
+          "visibility": "visible"
+        }
+      },
+      "sha256": "b84ec2415162831bfd15dea855e4c05c91a3818ba5e46ce47a5c96fce9eb7026"
+    },
+    {
+      "scenario": "native-workspace-1024x768-dark",
+      "file": "docs/acceptance/orchestra-native-shell/native-workspace-1024x768-dark.png",
+      "width": 1024,
+      "height": 768,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "layout": {
+        "width": 1024,
+        "height": 768,
+        "overflow": true,
+        "browserVisible": true,
+        "narrowDisclosure": true,
+        "webviewRect": {
+          "x": -100000,
+          "y": -100000,
+          "width": 539,
+          "height": 808,
+          "display": "flex",
+          "visibility": "visible"
+        },
+        "wrapperRect": {
+          "x": -100000,
+          "y": -100000,
+          "width": 539,
+          "height": 808,
+          "display": "block",
+          "visibility": "visible"
+        }
+      },
+      "sha256": "828a584ce17c0a8d7781000d706a2c615d07299fcdb45bc566f69bb7001aff51"
+    }
+  ],
+  "assertions": {
+    "approvedPreviewPartition": {
+      "observed": "persist:t3code-preview-fddd098e8bf0f44687d5",
+      "passed": true
+    },
+    "attachmentGuardAllowed": {
+      "observed": {
+        "partition": "persist:t3code-preview-fddd098e8bf0f44687d5",
+        "attachmentGuardAllowed": true,
+        "sandbox": true,
+        "contextIsolation": false,
+        "nodeIntegration": false,
+        "nodeIntegrationInSubFrames": false
+      },
+      "passed": true
+    },
+    "attachmentGuardRejectedInvalidPartition": {
+      "observed": {
+        "partition": "persist:orchestra-native-shell-rejected",
+        "attachmentGuardAllowed": false,
+        "sandbox": true,
+        "contextIsolation": true,
+        "nodeIntegration": false,
+        "nodeIntegrationInSubFrames": false
+      },
+      "passed": true
+    },
+    "backendReady": {
+      "observed": "http://127.0.0.1:64604/",
+      "passed": true
+    },
+    "composerVisible": {
+      "observed": true,
+      "passed": true
+    },
+    "guestBackWorked": {
+      "observed": {
+        "heading": "Native guest page A",
+        "href": "http://127.0.0.1:64605/a",
+        "identity": "deterministic-native-guest-a",
+        "loadCount": 2,
+        "mutation": "not-mutated",
+        "nodeType": "undefined",
+        "requireType": "undefined",
+        "title": "Native Guest A",
+        "viewport": {
+          "height": 688,
+          "width": 539
+        }
+      },
+      "passed": true
+    },
+    "guestContextIsolationDisabled": {
+      "observed": false,
+      "passed": true
+    },
+    "guestDomMutationWorked": {
+      "observed": "mutated-through-production-automation",
+      "passed": true
+    },
+    "guestFailureSurfaced": {
+      "observed": {
+        "requestedUrl": "http://127.0.0.1:64606/unreachable",
+        "guestUrl": "http://127.0.0.1:64606/unreachable",
+        "rendererFailureVisible": true
+      },
+      "passed": true
+    },
+    "guestForwardWorked": {
+      "observed": {
+        "heading": "Native guest page B",
+        "href": "http://127.0.0.1:64605/b",
+        "identity": "deterministic-native-guest-b",
+        "loadCount": 2,
+        "mutation": "not-mutated",
+        "nodeType": "undefined",
+        "requireType": "undefined",
+        "title": "Native Guest B",
+        "viewport": {
+          "height": 688,
+          "width": 539
+        }
+      },
+      "passed": true
+    },
+    "guestNodeIntegrationDisabled": {
+      "observed": false,
+      "passed": true
+    },
+    "guestNodeIntegrationInSubFramesDisabled": {
+      "observed": false,
+      "passed": true
+    },
+    "guestPageALoaded": {
+      "observed": {
+        "heading": "Native guest page A",
+        "href": "http://127.0.0.1:64605/a",
+        "identity": "deterministic-native-guest-a",
+        "loadCount": 1,
+        "mutation": "not-mutated",
+        "nodeType": "undefined",
+        "requireType": "undefined",
+        "title": "Native Guest A",
+        "viewport": {
+          "height": 688,
+          "width": 539
+        }
+      },
+      "passed": true
+    },
+    "guestPageBLoaded": {
+      "observed": {
+        "heading": "Native guest page B",
+        "href": "http://127.0.0.1:64605/b",
+        "identity": "deterministic-native-guest-b",
+        "loadCount": 1,
+        "mutation": "not-mutated",
+        "nodeType": "undefined",
+        "requireType": "undefined",
+        "title": "Native Guest B",
+        "viewport": {
+          "height": 688,
+          "width": 539
+        }
+      },
+      "passed": true
+    },
+    "guestRecovered": {
+      "observed": {
+        "heading": "Native guest page A",
+        "href": "http://127.0.0.1:64605/a",
+        "identity": "deterministic-native-guest-a",
+        "loadCount": 5,
+        "mutation": "not-mutated",
+        "nodeType": "undefined",
+        "requireType": "undefined",
+        "title": "Native Guest A",
+        "viewport": {
+          "height": 688,
+          "width": 539
+        }
+      },
+      "passed": true
+    },
+    "guestReloadWorked": {
+      "observed": {
+        "heading": "Native guest page A",
+        "href": "http://127.0.0.1:64605/a",
+        "identity": "deterministic-native-guest-a",
+        "loadCount": 4,
+        "mutation": "not-mutated",
+        "nodeType": "undefined",
+        "requireType": "undefined",
+        "title": "Native Guest A",
+        "viewport": {
+          "height": 688,
+          "width": 539
+        }
+      },
+      "passed": true
+    },
+    "guestSandboxEnabled": {
+      "observed": true,
+      "passed": true
+    },
+    "guestScreenshotCaptured": {
+      "observed": {
+        "mimeType": "image/png",
+        "declaredSizeBytes": 28671,
+        "observedSizeBytes": 28671
+      },
+      "passed": true
+    },
+    "narrowDisclosureReachable": {
+      "observed": {
+        "width": 1024,
+        "height": 768,
+        "overflow": true,
+        "browserVisible": true,
+        "narrowDisclosure": true,
+        "webviewRect": {
+          "x": -100000,
+          "y": -100000,
+          "width": 539,
+          "height": 808,
+          "display": "flex",
+          "visibility": "visible"
+        },
+        "wrapperRect": {
+          "x": -100000,
+          "y": -100000,
+          "width": 539,
+          "height": 808,
+          "display": "block",
+          "visibility": "visible"
+        }
+      },
+      "passed": true
+    },
+    "nativeProjectVisible": {
+      "observed": "Orchestra Desktop Native Acceptance",
+      "passed": true
+    },
+    "nativeRouteRecoveredAfterReload": {
+      "observed": {
+        "hash": "#/e63eadca-1ee7-4059-9b01-2ef59fa1a058/thread-native-shell-acceptance",
+        "titleVisible": true
+      },
+      "passed": true
+    },
+    "nativeTaskVisible": {
+      "observed": "Native Browser acceptance",
+      "passed": true
+    },
+    "noDocumentHorizontalOverflow": {
+      "observed": [
+        {
+          "scenario": "native-browser-1440x900-dark",
+          "overflow": true
+        },
+        {
+          "scenario": "native-workspace-1024x768-dark",
+          "overflow": true
+        }
+      ],
+      "passed": true
+    },
+    "processCleanupVerified": {
+      "observed": {
+        "portsClosed": true,
+        "processGroupEmpty": true
+      },
+      "passed": true
+    },
+    "productionMainLoaded": {
+      "observed": "t3code://app/#/e63eadca-1ee7-4059-9b01-2ef59fa1a058/thread-native-shell-acceptance",
+      "passed": true
+    },
+    "productionPreloadBridge": {
+      "observed": true,
+      "passed": true
+    },
+    "realWebviewAttached": {
+      "observed": {
+        "type": "webview",
+        "webContentsId": 2
+      },
+      "passed": true
+    },
+    "taskTabsVisible": {
+      "observed": true,
+      "passed": true
+    }
+  },
+  "guest": {
+    "origin": "http://127.0.0.1:64605",
+    "fixtureSha256": "2ba5daef85f7bdc5c6fa6a2f79598504e8ff99bc479fc78e5d7b313c5be74af0"
+  },
+  "runtime": {
+    "rendererUrl": "t3code://app/#/e63eadca-1ee7-4059-9b01-2ef59fa1a058/thread-native-shell-acceptance",
+    "appViewport": {
+      "width": 1024,
+      "height": 768
+    },
+    "guest": {
+      "webContentsId": 2,
+      "type": "webview",
+      "url": "http://127.0.0.1:64605/a",
+      "title": "Native Guest A",
+      "partition": "persist:t3code-preview-fddd098e8bf0f44687d5",
+      "viewport": {
+        "height": 688,
+        "width": 539
+      },
+      "attachment": {
+        "partition": "persist:t3code-preview-fddd098e8bf0f44687d5",
+        "attachmentGuardAllowed": true,
+        "sandbox": true,
+        "contextIsolation": false,
+        "nodeIntegration": false,
+        "nodeIntegrationInSubFrames": false
+      }
+    },
+    "rejectedAttachmentProbe": {
+      "partition": "persist:orchestra-native-shell-rejected",
+      "attachmentGuardAllowed": false,
+      "sandbox": true,
+      "contextIsolation": true,
+      "nodeIntegration": false,
+      "nodeIntegrationInSubFrames": false
+    },
+    "navigation": [
+      {
+        "action": "navigate-page-a",
+        "expected": {
+          "title": "Native Guest A",
+          "heading": "Native guest page A",
+          "identity": "deterministic-native-guest-a"
+        },
+        "observed": {
+          "heading": "Native guest page A",
+          "href": "http://127.0.0.1:64605/a",
+          "identity": "deterministic-native-guest-a",
+          "loadCount": 1,
+          "mutation": "not-mutated",
+          "nodeType": "undefined",
+          "requireType": "undefined",
+          "title": "Native Guest A",
+          "viewport": {
+            "height": 688,
+            "width": 539
+          }
+        },
+        "passed": true
+      },
+      {
+        "action": "navigate-page-b",
+        "expected": {
+          "title": "Native Guest B",
+          "heading": "Native guest page B",
+          "identity": "deterministic-native-guest-b"
+        },
+        "observed": {
+          "heading": "Native guest page B",
+          "href": "http://127.0.0.1:64605/b",
+          "identity": "deterministic-native-guest-b",
+          "loadCount": 1,
+          "mutation": "not-mutated",
+          "nodeType": "undefined",
+          "requireType": "undefined",
+          "title": "Native Guest B",
+          "viewport": {
+            "height": 688,
+            "width": 539
+          }
+        },
+        "passed": true
+      },
+      {
+        "action": "back",
+        "expected": {
+          "title": "Native Guest A",
+          "heading": "Native guest page A",
+          "identity": "deterministic-native-guest-a"
+        },
+        "observed": {
+          "heading": "Native guest page A",
+          "href": "http://127.0.0.1:64605/a",
+          "identity": "deterministic-native-guest-a",
+          "loadCount": 2,
+          "mutation": "not-mutated",
+          "nodeType": "undefined",
+          "requireType": "undefined",
+          "title": "Native Guest A",
+          "viewport": {
+            "height": 688,
+            "width": 539
+          }
+        },
+        "passed": true
+      },
+      {
+        "action": "forward",
+        "expected": {
+          "title": "Native Guest B",
+          "heading": "Native guest page B",
+          "identity": "deterministic-native-guest-b"
+        },
+        "observed": {
+          "heading": "Native guest page B",
+          "href": "http://127.0.0.1:64605/b",
+          "identity": "deterministic-native-guest-b",
+          "loadCount": 2,
+          "mutation": "not-mutated",
+          "nodeType": "undefined",
+          "requireType": "undefined",
+          "title": "Native Guest B",
+          "viewport": {
+            "height": 688,
+            "width": 539
+          }
+        },
+        "passed": true
+      },
+      {
+        "action": "reload",
+        "expected": {
+          "title": "Native Guest A",
+          "heading": "Native guest page A",
+          "identity": "deterministic-native-guest-a",
+          "minimumLoadCount": 2
+        },
+        "observed": {
+          "heading": "Native guest page A",
+          "href": "http://127.0.0.1:64605/a",
+          "identity": "deterministic-native-guest-a",
+          "loadCount": 4,
+          "mutation": "not-mutated",
+          "nodeType": "undefined",
+          "requireType": "undefined",
+          "title": "Native Guest A",
+          "viewport": {
+            "height": 688,
+            "width": 539
+          }
+        },
+        "passed": true
+      },
+      {
+        "action": "load-failure",
+        "expected": {
+          "rendererFailureVisible": true
+        },
+        "observed": {
+          "requestedUrl": "http://127.0.0.1:64606/unreachable",
+          "guestUrl": "http://127.0.0.1:64606/unreachable",
+          "rendererFailureVisible": true
+        },
+        "passed": true
+      },
+      {
+        "action": "recover-page-a",
+        "expected": {
+          "title": "Native Guest A",
+          "heading": "Native guest page A",
+          "identity": "deterministic-native-guest-a"
+        },
+        "observed": {
+          "heading": "Native guest page A",
+          "href": "http://127.0.0.1:64605/a",
+          "identity": "deterministic-native-guest-a",
+          "loadCount": 5,
+          "mutation": "not-mutated",
+          "nodeType": "undefined",
+          "requireType": "undefined",
+          "title": "Native Guest A",
+          "viewport": {
+            "height": 688,
+            "width": 539
+          }
+        },
+        "passed": true
+      }
+    ],
+    "cleanup": {
+      "portsClosed": true,
+      "processGroupEmpty": true
+    }
+  },
+  "humanReview": {
+    "status": "observed",
+    "reviewedAt": "2026-07-18T13:24:11.000Z",
+    "notes": "Directly inspected both real Electron captures. The native project, task, tabs, truthful unauthenticated recovery card, and composer are visible in both layouts. The wide layout shows the real production webview and guest page; the narrow layout keeps the Browser disclosure reachable without visible clipping. Fresh dynamic loopback ports account for allowed wide-image variability between runs."
+  }
+}
