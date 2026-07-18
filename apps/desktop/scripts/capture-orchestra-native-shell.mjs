@@ -1218,7 +1218,7 @@ async function addRightPanelSurface(
           throw new Error(${JSON.stringify(`${label} surface trigger missing`)});
         }
         trigger.click();
-      })`,
+      })()`,
       true,
     );
   } else {
@@ -2072,7 +2072,6 @@ async function runElectronChild() {
       ...retainedVcsMenu,
       fixtureRemote: gitFixtureIdentity,
     };
-
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Toggle right panel"]')?.click()`,
       true,

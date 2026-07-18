@@ -367,6 +367,14 @@ describe("native-shell acceptance capture contract", () => {
     expect(helperSource).not.toContain("querySelectorAll('[role=\"menuitem\"]')");
     expect(captureSource.match(/interactWithVisibleMenu\(renderer/g)).toHaveLength(2);
     expect(captureSource).toContain("bounded tabs:");
+    const addSurfaceStart = captureSource.indexOf("async function addRightPanelSurface");
+    const addSurfaceEnd = captureSource.indexOf(
+      "function boundedThreadSessionObservation",
+      addSurfaceStart,
+    );
+    const addSurfaceSource = captureSource.slice(addSurfaceStart, addSurfaceEnd);
+    expect(addSurfaceSource).toMatch(/trigger\.click\(\);\s*\}\)\(\)/);
+    expect(captureSource).not.toContain("native-shell-retained-stage");
   });
 
   it("requires the exact all-true semantic assertion set", () => {
