@@ -6,8 +6,13 @@ import * as NodeProcess from "node:process";
 
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 
-import { withNativeShellEventTimeout } from "./capture-orchestra-native-shell.mjs";
+import {
+  accumulateNativeShellAssistantMessage,
+  withNativeShellEventTimeout,
+} from "./capture-orchestra-native-shell.mjs";
 
 import {
   assertNativeShellAssertions,
@@ -38,6 +43,90 @@ import {
 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 
 describe("native-shell acceptance capture contract", () => {
+  it("accepts assistant text only after typed deltas reach the matching terminal event", () => {
+    const event = (messageId, text, streaming) => ({
+      kind: "event",
+      event: {
+        sequence: streaming ? 2 : 3,
+        type: "thread.message-sent",
+        payload: { messageId, role: "assistant", text, streaming },
+      },
+    });
+    let state = new Map();
+    let output;
+
+    [state, output] = accumulateNativeShellAssistantMessage(
+      state,
+      event("assistant:waiting", "Native workflow is waiting ", true),
+      "Native workflow is waiting for approval.",
+    );
+    expect(output).toEqual([]);
+    [state, output] = accumulateNativeShellAssistantMessage(
+      state,
+      event("assistant:other", "unrelated", false),
+      "Native workflow is waiting for approval.",
+    );
+    expect(output).toEqual([]);
+    [state, output] = accumulateNativeShellAssistantMessage(
+      state,
+      event("assistant:waiting", "for approval.", true),
+      "Native workflow is waiting for approval.",
+    );
+    expect(output).toEqual([]);
+    [state, output] = accumulateNativeShellAssistantMessage(
+      state,
+      event("assistant:waiting", "", false),
+      "Native workflow is waiting for approval.",
+    );
+
+    expect(output).toHaveLength(1);
+    expect(output[0]?.event.payload).toMatchObject({
+      messageId: "assistant:waiting",
+      streaming: false,
+      text: "Native workflow is waiting for approval.",
+    });
+    expect(state.has("assistant:waiting")).toBe(false);
+  });
+
+  it.effect("emits only the reconstructed terminal assistant event from the typed stream", () => {
+    const event = (sequence, messageId, text, streaming) => ({
+      kind: "event",
+      event: {
+        sequence,
+        type: "thread.message-sent",
+        payload: { messageId, role: "assistant", text, streaming },
+      },
+    });
+    return Stream.make(
+      event(2, "assistant:waiting", "Native workflow is waiting ", true),
+      event(3, "assistant:other", "unrelated", false),
+      event(4, "assistant:waiting", "for approval.", true),
+      event(5, "assistant:waiting", "", false),
+    ).pipe(
+      Stream.mapAccum(
+        () => new Map(),
+        (state, item) =>
+          accumulateNativeShellAssistantMessage(
+            state,
+            item,
+            "Native workflow is waiting for approval.",
+          ),
+      ),
+      Stream.runHead,
+      Effect.map((result) => {
+        expect(Option.isSome(result)).toBe(true);
+        if (Option.isSome(result)) {
+          expect(result.value.event.sequence).toBe(5);
+          expect(result.value.event.payload).toMatchObject({
+            messageId: "assistant:waiting",
+            streaming: false,
+            text: "Native workflow is waiting for approval.",
+          });
+        }
+      }),
+    );
+  });
+
   it("preserves typed websocket failures and names the event that timed out", async () => {
     const observations = Effect.gen(function* () {
       const timeoutError = yield* withNativeShellEventTimeout(

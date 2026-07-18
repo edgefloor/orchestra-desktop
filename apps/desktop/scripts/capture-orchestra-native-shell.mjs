@@ -666,6 +666,37 @@ export function withNativeShellEventTimeout(effect, context, duration = "45 seco
   );
 }
 
+export function accumulateNativeShellAssistantMessage(textByMessageId, item, expectedText) {
+  const event = item.kind === "event" ? item.event : null;
+  if (event?.type !== "thread.message-sent" || event.payload.role !== "assistant") {
+    return [textByMessageId, []];
+  }
+
+  const nextTextByMessageId = new Map(textByMessageId);
+  const accumulatedText = `${nextTextByMessageId.get(event.payload.messageId) ?? ""}${event.payload.text}`;
+  if (event.payload.streaming) {
+    nextTextByMessageId.set(event.payload.messageId, accumulatedText);
+    return [nextTextByMessageId, []];
+  }
+
+  nextTextByMessageId.delete(event.payload.messageId);
+  if (!accumulatedText.includes(expectedText)) {
+    return [nextTextByMessageId, []];
+  }
+  return [
+    nextTextByMessageId,
+    [
+      {
+        ...item,
+        event: {
+          ...event,
+          payload: { ...event.payload, text: accumulatedText },
+        },
+      },
+    ],
+  ];
+}
+
 async function awaitNativeShellSessionEvent({ baseUrl, token, threadId, afterSequence, status }) {
   return runWithNativeShellRpcClient(baseUrl, token, (client) =>
     withNativeShellEventTimeout(
@@ -705,13 +736,10 @@ async function awaitNativeShellAssistantMessageEvent({
         threadId,
         afterSequence,
       }).pipe(
-        Stream.filter(
-          (item) =>
-            item.kind === "event" &&
-            item.event.type === "thread.message-sent" &&
-            item.event.payload.role === "assistant" &&
-            item.event.payload.streaming === false &&
-            item.event.payload.text.includes(text),
+        Stream.mapAccum(
+          () => new Map(),
+          (textByMessageId, item) =>
+            accumulateNativeShellAssistantMessage(textByMessageId, item, text),
         ),
         Stream.runHead,
         Effect.flatMap(
