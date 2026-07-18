@@ -1053,11 +1053,20 @@ async function interactWithVisibleMenu(
         reject(new Error(${JSON.stringify(`${context} trigger missing`)}));
         return;
       }
+      let closingPopup = null;
+      let pendingResult = null;
       const deadline = window.setTimeout(() => {
         observer.disconnect();
-        reject(new Error(${JSON.stringify(`${context} menu did not render within 45000ms`)}));
+        reject(new Error(${JSON.stringify(`${context} menu did not open and settle within 45000ms`)}));
       }, 45000);
       const complete = () => {
+        if (closingPopup instanceof HTMLElement) {
+          if (closingPopup.isConnected && closingPopup.getClientRects().length > 0) return;
+          window.clearTimeout(deadline);
+          observer.disconnect();
+          resolve(pendingResult);
+          return;
+        }
         const popup = [...document.querySelectorAll('[data-slot="menu-popup"]')]
           .find((candidate) => {
             if (!(candidate instanceof HTMLElement) || candidate.getClientRects().length === 0) {
@@ -1079,18 +1088,23 @@ async function interactWithVisibleMenu(
           ? null
           : items.find(({ label }) => label === selectLabel);
         if (selectLabel !== null && (!selected || selected.disabled)) return;
-        window.clearTimeout(deadline);
-        observer.disconnect();
-        if (selected) {
-          selected.element.click();
-        } else {
-          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        }
-        resolve({
+        closingPopup = popup;
+        pendingResult = {
           popupVisible: true,
           items: items.map(({ label, disabled }) => ({ label, disabled })),
           selectedLabel: selected?.label ?? null,
-        });
+        };
+        if (selected) {
+          selected.element.click();
+        } else {
+          popup.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            code: 'Escape',
+            bubbles: true,
+            cancelable: true,
+          }));
+        }
+        complete();
       };
       const observer = new MutationObserver(complete);
       observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });

@@ -355,6 +355,12 @@ describe("native-shell acceptance capture contract", () => {
     expect(helperSource).toContain("getClientRects().length === 0");
     expect(helperSource).toContain("candidate.querySelectorAll('[data-slot=\"menu-item\"]')");
     expect(helperSource).toContain("key: 'ArrowDown'");
+    expect(helperSource).toContain("popup.dispatchEvent(new KeyboardEvent('keydown'");
+    expect(helperSource).toContain("closingPopup.isConnected");
+    expect(helperSource).toContain("resolve(pendingResult)");
+    expect(helperSource).not.toContain(
+      "window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape'",
+    );
     expect(helperSource).not.toContain("querySelectorAll('[role=\"menuitem\"]')");
     expect(captureSource.match(/interactWithVisibleMenu\(renderer/g)).toHaveLength(2);
     expect(captureSource).toContain("bounded tabs:");
