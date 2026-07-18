@@ -10,6 +10,7 @@ import * as NodeURL from "node:url";
 
 import { makeWsRpcProtocolClient } from "@t3tools/client-runtime/rpc";
 import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@t3tools/contracts";
+import { truncateDiagnosticText } from "@t3tools/shared/diagnosticText";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -376,32 +377,24 @@ export async function executeNativeShellRendererStep(
   try {
     return await renderer.executeJavaScript(source, userGesture);
   } catch (error) {
-    const boundedContext = boundNativeShellDiagnostic(context, 160);
+    const boundedContext = truncateDiagnosticText(String(context), 160);
     let rendererUrl = "<renderer-url-unavailable>";
     try {
-      rendererUrl = boundNativeShellDiagnostic(renderer.getURL(), 256);
+      rendererUrl = truncateDiagnosticText(String(renderer.getURL()), 256);
     } catch {}
-    const message = boundNativeShellDiagnostic(error instanceof Error ? error.message : error, 512);
+    const message = truncateDiagnosticText(
+      String(error instanceof Error ? error.message : error),
+      512,
+    );
     throw new Error(`${boundedContext} renderer script failed at ${rendererUrl}: ${message}`, {
       cause: error,
     });
   }
 }
 
-export function boundNativeShellDiagnostic(value, maxChars) {
-  const normalized = String(value);
-  if (normalized.length <= maxChars) return normalized;
-  if (maxChars <= 0) return "";
-  const sliced = normalized.slice(0, maxChars - 1);
-  const lastCodeUnit = sliced.charCodeAt(sliced.length - 1);
-  const completePrefix =
-    lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff ? sliced.slice(0, -1) : sliced;
-  return `${completePrefix}…`;
-}
-
 export function formatNativeShellFailureForOutput(error) {
   const diagnostic = error instanceof Error ? (error.stack ?? error.message) : error;
-  return boundNativeShellDiagnostic(diagnostic, 4_096);
+  return truncateDiagnosticText(String(diagnostic), 4_096);
 }
 
 export function withNativeShellRendererDiagnostics(renderer) {
@@ -411,7 +404,7 @@ export function withNativeShellRendererDiagnostics(renderer) {
       if (property === "executeJavaScript") {
         return async (source, userGesture) => {
           scriptSequence += 1;
-          const sourceLabel = boundNativeShellDiagnostic(
+          const sourceLabel = truncateDiagnosticText(
             String(source).replace(/\s+/g, " ").trim(),
             120,
           );
@@ -436,6 +429,52 @@ export async function destroyNativeShellWindow(mainWindow) {
   return true;
 }
 
+export const NATIVE_SHELL_CHILD_SERVER_CLOSE_TIMEOUT_MS = 1_000;
+export const NATIVE_SHELL_CHILD_SERVER_FORCE_GRACE_MS = 250;
+
+export async function closeNativeShellChildServer(
+  server,
+  {
+    timeoutMs = NATIVE_SHELL_CHILD_SERVER_CLOSE_TIMEOUT_MS,
+    forceGraceMs = NATIVE_SHELL_CHILD_SERVER_FORCE_GRACE_MS,
+  } = {},
+) {
+  const closeOutcome = new Promise((resolve) => {
+    try {
+      server.close((error) => resolve(error ? { status: "failed", error } : { status: "closed" }));
+    } catch (error) {
+      resolve({ status: "failed", error });
+    }
+  });
+  const waitForClose = (delayMs) =>
+    new Promise((resolve) => {
+      const timer = setTimeout(() => resolve({ status: "timeout" }), delayMs);
+      closeOutcome.then((outcome) => {
+        clearTimeout(timer);
+        resolve(outcome);
+      });
+    });
+  const first = await waitForClose(timeoutMs);
+  if (first.status === "closed") return;
+  if (first.status === "failed") throw first.error;
+
+  let forceError = null;
+  for (const closeConnections of [server.closeIdleConnections, server.closeAllConnections]) {
+    try {
+      closeConnections?.call(server);
+    } catch (error) {
+      forceError ??= error;
+    }
+  }
+  const forced = await waitForClose(forceGraceMs);
+  if (forced.status === "closed") return;
+  if (forced.status === "failed") throw forced.error;
+  throw new Error(
+    `native-shell server close exceeded ${timeoutMs}ms; forced closure was requested`,
+    forceError ? { cause: forceError } : undefined,
+  );
+}
+
 export async function settleNativeShellChildCleanup({
   mainWindow,
   guestServer,
@@ -445,6 +484,8 @@ export async function settleNativeShellChildCleanup({
   evidenceDirectory,
   app,
   cleanupFailedCapture = cleanupFailedNativeShellCapture,
+  serverCloseTimeoutMs = NATIVE_SHELL_CHILD_SERVER_CLOSE_TIMEOUT_MS,
+  serverForceGraceMs = NATIVE_SHELL_CHILD_SERVER_FORCE_GRACE_MS,
 }) {
   const failures = [];
   const settle = async (step, operation) => {
@@ -454,15 +495,21 @@ export async function settleNativeShellChildCleanup({
       failures.push({ step, error });
     }
   };
-  const closeServer = (server) =>
-    new Promise((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
 
   await settle("renderer-window", () => destroyNativeShellWindow(mainWindow));
   await Promise.all([
-    settle("guest-server", () => closeServer(guestServer)),
-    settle("responses-server", () => closeServer(responsesServer)),
+    settle("guest-server", () =>
+      closeNativeShellChildServer(guestServer, {
+        timeoutMs: serverCloseTimeoutMs,
+        forceGraceMs: serverForceGraceMs,
+      }),
+    ),
+    settle("responses-server", () =>
+      closeNativeShellChildServer(responsesServer, {
+        timeoutMs: serverCloseTimeoutMs,
+        forceGraceMs: serverForceGraceMs,
+      }),
+    ),
   ]);
   if (!manifestWritten) {
     await settle("failed-capture", () =>
@@ -477,15 +524,25 @@ export async function settleNativeShellChildCleanup({
   return failures;
 }
 
-export function resolveNativeShellChildFailure(primaryFailure, cleanupFailures) {
+export function normalizeNativeShellFailure(value) {
+  if (value instanceof Error) return value;
+  return new Error(
+    `native-shell capture failed with non-Error value: ${truncateDiagnosticText(String(value), 512)}`,
+  );
+}
+
+export function resolveNativeShellChildFailure(
+  { hasPrimaryFailure, primaryFailure },
+  cleanupFailures,
+) {
   if (cleanupFailures.length === 0) {
-    return { failure: primaryFailure, cleanupDiagnostic: null };
+    return { failure: hasPrimaryFailure ? primaryFailure : null, cleanupDiagnostic: null };
   }
   const cleanupError = new Error(
     `native-shell child cleanup failed at ${cleanupFailures.map(({ step }) => step).join(", ")}`,
     { cause: cleanupFailures[0].error },
   );
-  return primaryFailure
+  return hasPrimaryFailure
     ? {
         failure: primaryFailure,
         cleanupDiagnostic: formatNativeShellFailureForOutput(cleanupError),
@@ -1627,6 +1684,7 @@ async function runElectronChild() {
 
   let manifestWritten = false;
   let mainWindow = null;
+  let hasPrimaryFailure = false;
   let primaryFailure = null;
   let terminalFailure = null;
   try {
@@ -3107,7 +3165,8 @@ async function runElectronChild() {
       }),
     );
   } catch (error) {
-    primaryFailure = error;
+    hasPrimaryFailure = true;
+    primaryFailure = normalizeNativeShellFailure(error);
   } finally {
     const cleanupFailures = await settleNativeShellChildCleanup({
       mainWindow,
@@ -3118,13 +3177,16 @@ async function runElectronChild() {
       evidenceDirectory,
       app,
     });
-    const resolution = resolveNativeShellChildFailure(primaryFailure, cleanupFailures);
-    if (resolution.cleanupDiagnostic) {
+    const resolution = resolveNativeShellChildFailure(
+      { hasPrimaryFailure, primaryFailure },
+      cleanupFailures,
+    );
+    if (resolution.cleanupDiagnostic !== null) {
       console.error(resolution.cleanupDiagnostic);
     }
     terminalFailure = resolution.failure;
   }
-  if (terminalFailure) throw terminalFailure;
+  if (terminalFailure !== null) throw terminalFailure;
 }
 
 async function main() {

@@ -186,6 +186,10 @@
     "./httpReadiness": {
       "types": "./src/httpReadiness.ts",
       "import": "./src/httpReadiness.ts"
+    },
+    "./diagnosticText": {
+      "types": "./src/diagnosticText.ts",
+      "import": "./src/diagnosticText.ts"
     }
   },
   "scripts": {

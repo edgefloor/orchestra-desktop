@@ -17,11 +17,12 @@ import {
   NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES,
   NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS,
   boundedThreadSessionObservation,
-  boundNativeShellDiagnostic,
+  closeNativeShellChildServer,
   createNativeShellResponsesRequestJournal,
   destroyNativeShellWindow,
   executeNativeShellRendererStep,
   formatNativeShellFailureForOutput,
+  normalizeNativeShellFailure,
   prepareNativeShellGitFixture,
   readNativeDogfoodRunStateSummaries,
   resolveNativeShellChildFailure,
@@ -209,7 +210,6 @@ describe("native-shell acceptance capture contract", () => {
     expect(output.length).toBeLessThanOrEqual(4_096);
     expect(output).not.toContain(secret);
     expect(output).toContain("bounded output probe");
-    expect(boundNativeShellDiagnostic("xx😀later", 4)).toBe("xx…");
   });
 
   it("attributes otherwise raw renderer failures to their sequence and bounded source", async () => {
@@ -279,12 +279,65 @@ describe("native-shell acceptance capture contract", () => {
     ]);
 
     const primaryFailure = new Error("authoritative renderer failure");
-    const resolution = resolveNativeShellChildFailure(primaryFailure, failures);
+    const resolution = resolveNativeShellChildFailure(
+      { hasPrimaryFailure: true, primaryFailure },
+      failures,
+    );
     expect(resolution.failure).toBe(primaryFailure);
     expect(resolution.cleanupDiagnostic).toContain(
       "native-shell child cleanup failed at renderer-window",
     );
     expect(resolution.cleanupDiagnostic).not.toContain("window teardown failed");
+  });
+
+  it("bounds server shutdown and requests forced connection closure", async () => {
+    const calls = [];
+    const failure = await closeNativeShellChildServer(
+      {
+        close: () => calls.push("close"),
+        closeIdleConnections: () => calls.push("idle"),
+        closeAllConnections: () => calls.push("all"),
+      },
+      { timeoutMs: 5, forceGraceMs: 5 },
+    ).catch((error) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toContain("exceeded 5ms");
+    expect(failure.message).toContain("forced closure was requested");
+    expect(calls).toEqual(["close", "idle", "all"]);
+  });
+
+  it("accepts a server that closes during forced-closure grace", async () => {
+    const calls = [];
+    let completeClose;
+    const server = {
+      close: (complete) => {
+        calls.push("close");
+        completeClose = complete;
+      },
+      closeIdleConnections: () => calls.push("idle"),
+      closeAllConnections: () => {
+        calls.push("all");
+        completeClose();
+      },
+    };
+
+    await closeNativeShellChildServer(server, { timeoutMs: 5, forceGraceMs: 5 });
+
+    expect(calls).toEqual(["close", "idle", "all"]);
+  });
+
+  it("preserves a falsy primary failure ahead of cleanup failures", () => {
+    const primaryFailure = normalizeNativeShellFailure(null);
+    const resolution = resolveNativeShellChildFailure({ hasPrimaryFailure: true, primaryFailure }, [
+      { step: "renderer-window", error: new Error("cleanup failed") },
+    ]);
+
+    expect(resolution.failure).toBe(primaryFailure);
+    expect(primaryFailure.message).toContain("non-Error value: null");
+    expect(resolution.cleanupDiagnostic).toContain(
+      "native-shell child cleanup failed at renderer-window",
+    );
   });
 
   it("accepts assistant text only after typed deltas reach the matching terminal event", () => {
