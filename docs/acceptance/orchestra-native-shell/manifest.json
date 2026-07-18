@@ -4,8 +4,157 @@
   "role": "product-native-shell-evidence",
   "desktop": {
     "repository": "edgefloor/orchestra-desktop",
-    "commit": "fa24bf561bcd807e71c3aa786c83c0d8277307b6",
-    "tree": "622c518832281fb157283a62b54090e57fe2e53b"
+    "commit": "511d26606a3316a1612348535450840be54fcafa",
+    "tree": "70989e1c0c6222706b0b1e6380ef18660833665f"
+  },
+  "codex": {
+    "repository": "edgefloor/orchestra-codex",
+    "commit": "7fddc000e0531657002ec4fac59f5edbabb4695b",
+    "tree": "b1306b462645553d975b21f872ddc4ca75310f20",
+    "binarySha256": "e8122cd435805d75a12a97a47d6c59092fa7b827ebea91fedcf1390485cbcc13",
+    "build": {
+      "tool": "cargo",
+      "arguments": [
+        "build",
+        "--manifest-path",
+        "codex-rs/Cargo.toml",
+        "-p",
+        "codex-cli",
+        "--bin",
+        "codex"
+      ],
+      "profile": "debug",
+      "package": "codex-cli",
+      "binary": "codex"
+    }
+  },
+  "orchestraCore": {
+    "repository": "edgefloor/codex-orchestra",
+    "commit": "86d1b8f66b87b3ebc52d3b88ecea8b964fd2da28",
+    "tree": "5a9968a98df00848317b127c61d659781ef7e8fc"
+  },
+  "product": {
+    "pinsToml": "capabilities = [\n  \"automation/start\",\n  \"automation/steerIssue\",\n  \"host/framedStdio\",\n  \"host/replay\",\n  \"host/snapshot\",\n  \"orchestra/query\",\n  \"orchestra/threadItem\",\n  \"orchestra/worldState\",\n  \"thread/read\",\n]\n\n[product]\nversion = \"0.2.0-dev\"\nminimum_macos = \"13.0\"\n\n[sources]\norchestra_codex = \"7fddc000e0531657002ec4fac59f5edbabb4695b\"\norchestra_codex_tree = \"b1306b462645553d975b21f872ddc4ca75310f20\"\norchestra_codex_repository = \"https://github.com/edgefloor/orchestra-codex.git\"\ncodex_upstream = \"f90e7deea6a715bbd153044af6f475eefa749177\"\ncodex_upstream_tree = \"1e83e292b90e89d993703d08f05fb8579601bda2\"\ncodex_upstream_repository = \"https://github.com/openai/codex.git\"\norchestra_core_repository = \"https://github.com/edgefloor/codex-orchestra.git\"\norchestra_core_revision = \"86d1b8f66b87b3ebc52d3b88ecea8b964fd2da28\"\norchestra_core_tree = \"5a9968a98df00848317b127c61d659781ef7e8fc\"\norchestra_desktop = \"511d26606a3316a1612348535450840be54fcafa\"\norchestra_desktop_tree = \"70989e1c0c6222706b0b1e6380ef18660833665f\"\norchestra_desktop_repository = \"https://github.com/edgefloor/orchestra-desktop.git\"\nt3code_upstream = \"ecb35f75839925dd1ac6f854efeef5c9e291d11b\"\nt3code_upstream_tree = \"147cfa26a60049c8b89f836b3c4fdb474906b6a7\"\nt3code_upstream_repository = \"https://github.com/pingdotgg/t3code.git\"\nprotocol_tree = \"05796f62e38db8788e5277a4a280d950bd57a017\"\nprotocol_digest_algorithm = \"sha256-relative-path-nul-file-sha256-lf-v1\"\nprotocol_digest = \"98196f8e520f6560a3933ae7db30480b210d3d8b5818849d61a4f040d10d6655\"\nprotocol_file_count = \"709\"\nagents = \"4e1f842f63673db59018a7fa4a441c64c274caf2\"\nzod = \"1fb56a5c18c27102dbc92260a4007c7732a0ccca\"\nzod_repository = \"https://github.com/colinhacks/zod.git\"\nzod_version = \"4.4.3\"\nzod_package_revision = \"f3c9ec03ba7a28ae72d25cc295f38674bee0f559\"\nzod_package_integrity = \"sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==\"\nzod_package_shasum = \"b680f172885d18bbebf21a834ea25e55a1bbf356\"\nbun = \"0d9b296af33f2b851fcbf4df3e9ec89751734ba4\"\nbun_repository = \"https://github.com/oven-sh/bun.git\"\nbun_version = \"1.3.14\"\nevaluator_worker_source_sha256 = \"169c4a10c0631a33f94c4bda6307f1d552bd7cc4db1da3b907b63df4847f4287\"\nevaluator_lock_sha256 = \"c699079c216b7479aaf59d7856d9e7762a5b70ada858702a6034afd59bd33d1c\"\nevaluator_package_sha256 = \"471a1072db06bcb66aed6e8a6d215506a7fdc2169fb47295fc6154c2c83852c2\"\n\n[schemas]\nprotocol = \"codex-app-server+orchestra-v1\"\nsnapshot = \"orchestra-task-snapshot-v1\"\n\n[evaluator]\nrevision = \"bun-1.3.14-zod-4.4.3-sealed-2\"\nadapter_abi = \"orchestra-evaluator-abi-v1\"\ncanonicalizer = \"rfc8785-jcs-v1\"\nissue_format = \"orchestra-validation-issues-v1\"\n\n[limits]\nframe_bytes = 65536\ndelivery_queue = 4\nreplay_batch = 32\nreplay_tail = 1024\nworkflow_source_bytes = 4194304\nworkflow_module_count = 256\nworkflow_module_source_bytes = 1048576\nvalidation_request_bytes = 2097152\nvalidation_response_bytes = 2097152\nvalidation_bundle_bytes = 1048576\nvalidation_value_bytes = 1048576\nvalidation_value_depth = 64\nvalidation_value_nodes = 100000\nvalidation_collection_entries = 10000\nvalidation_string_bytes = 262144\nvalidation_issue_count = 128\nvalidation_issue_text_bytes = 512\nvalidation_wall_ms = 1000\n",
+    "pinsSha256": "84ea4ebda2ff95434558026ef7ffcf04684d53153e15667817439f312fe21414",
+    "manifestSha256": "b5be64d89bf7c90f8dcd78bd1c16acabc970618ab1b82dd16e3823a4a7bed7f7",
+    "releaseManifest": {
+      "schemaVersion": 1,
+      "productVersion": "0.2.0-dev",
+      "minimumMacos": "13.0",
+      "target": "aarch64-apple-darwin",
+      "sources": {
+        "agents": "4e1f842f63673db59018a7fa4a441c64c274caf2",
+        "bun": "0d9b296af33f2b851fcbf4df3e9ec89751734ba4",
+        "bun_repository": "https://github.com/oven-sh/bun.git",
+        "bun_version": "1.3.14",
+        "codex_upstream": "f90e7deea6a715bbd153044af6f475eefa749177",
+        "codex_upstream_repository": "https://github.com/openai/codex.git",
+        "codex_upstream_tree": "1e83e292b90e89d993703d08f05fb8579601bda2",
+        "evaluator_lock_sha256": "c699079c216b7479aaf59d7856d9e7762a5b70ada858702a6034afd59bd33d1c",
+        "evaluator_package_sha256": "471a1072db06bcb66aed6e8a6d215506a7fdc2169fb47295fc6154c2c83852c2",
+        "evaluator_worker_source_sha256": "169c4a10c0631a33f94c4bda6307f1d552bd7cc4db1da3b907b63df4847f4287",
+        "orchestra_codex": "7fddc000e0531657002ec4fac59f5edbabb4695b",
+        "orchestra_codex_repository": "https://github.com/edgefloor/orchestra-codex.git",
+        "orchestra_codex_tree": "b1306b462645553d975b21f872ddc4ca75310f20",
+        "orchestra_core_repository": "https://github.com/edgefloor/codex-orchestra.git",
+        "orchestra_core_revision": "86d1b8f66b87b3ebc52d3b88ecea8b964fd2da28",
+        "orchestra_core_tree": "5a9968a98df00848317b127c61d659781ef7e8fc",
+        "orchestra_desktop": "511d26606a3316a1612348535450840be54fcafa",
+        "orchestra_desktop_repository": "https://github.com/edgefloor/orchestra-desktop.git",
+        "orchestra_desktop_tree": "70989e1c0c6222706b0b1e6380ef18660833665f",
+        "protocol_digest": "98196f8e520f6560a3933ae7db30480b210d3d8b5818849d61a4f040d10d6655",
+        "protocol_digest_algorithm": "sha256-relative-path-nul-file-sha256-lf-v1",
+        "protocol_file_count": "709",
+        "protocol_tree": "05796f62e38db8788e5277a4a280d950bd57a017",
+        "t3code_upstream": "ecb35f75839925dd1ac6f854efeef5c9e291d11b",
+        "t3code_upstream_repository": "https://github.com/pingdotgg/t3code.git",
+        "t3code_upstream_tree": "147cfa26a60049c8b89f836b3c4fdb474906b6a7",
+        "zod": "1fb56a5c18c27102dbc92260a4007c7732a0ccca",
+        "zod_package_integrity": "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==",
+        "zod_package_revision": "f3c9ec03ba7a28ae72d25cc295f38674bee0f559",
+        "zod_package_shasum": "b680f172885d18bbebf21a834ea25e55a1bbf356",
+        "zod_repository": "https://github.com/colinhacks/zod.git",
+        "zod_version": "4.4.3"
+      },
+      "schemas": {
+        "protocol": {
+          "identity": "codex-app-server+orchestra-v1",
+          "sha256": "48e5e304c013dd850479f62f2f0253861c9924c615233b0562d63c3d3650341c"
+        },
+        "snapshot": {
+          "identity": "orchestra-task-snapshot-v1",
+          "sha256": "91630fd5d3de387454ed1105d5fbcd2ae9e25c47c9f6482d71436fdafd2fc868"
+        }
+      },
+      "evaluator": {
+        "revision": "bun-1.3.14-zod-4.4.3-sealed-2",
+        "adapterAbi": "orchestra-evaluator-abi-v1",
+        "canonicalizer": "rfc8785-jcs-v1",
+        "issueFormat": "orchestra-validation-issues-v1"
+      },
+      "capabilities": [
+        "automation/start",
+        "automation/steerIssue",
+        "host/framedStdio",
+        "host/replay",
+        "host/snapshot",
+        "orchestra/query",
+        "orchestra/threadItem",
+        "orchestra/worldState",
+        "thread/read"
+      ],
+      "limits": {
+        "delivery_queue": 4,
+        "frame_bytes": 65536,
+        "replay_batch": 32,
+        "replay_tail": 1024,
+        "validation_bundle_bytes": 1048576,
+        "validation_collection_entries": 10000,
+        "validation_issue_count": 128,
+        "validation_issue_text_bytes": 512,
+        "validation_request_bytes": 2097152,
+        "validation_response_bytes": 2097152,
+        "validation_string_bytes": 262144,
+        "validation_value_bytes": 1048576,
+        "validation_value_depth": 64,
+        "validation_value_nodes": 100000,
+        "validation_wall_ms": 1000,
+        "workflow_module_count": 256,
+        "workflow_module_source_bytes": 1048576,
+        "workflow_source_bytes": 4194304
+      },
+      "artifacts": {
+        "codex-cli": {
+          "bytes": 670526248,
+          "sha256": "e8122cd435805d75a12a97a47d6c59092fa7b827ebea91fedcf1390485cbcc13"
+        },
+        "desktop-main": {
+          "bytes": 993669,
+          "sha256": "76a385d73ad5f47ae39d6d107659be049448e4f3b6a734e3efa059fcde040d74"
+        },
+        "desktop-preload": {
+          "bytes": 17432,
+          "sha256": "c6d2c432d4fc51bf47b00329d30bbda8d8d7306097a4e44b71a278bdcc16c74f"
+        },
+        "desktop-renderer": {
+          "bytes": 3203,
+          "sha256": "ea84c3314e053f636456055625e1c0891943408db763fb43acceb9a20619626c"
+        },
+        "desktop-server": {
+          "bytes": 3916576,
+          "sha256": "ece3850bbfacda799852e1048ca929b8cff73408a7687bd85a202862aaede903"
+        },
+        "orchestra-product": {
+          "bytes": 5074544,
+          "sha256": "37b5a5dcabf707b94471426a908dcd5d868f662e311b43827c0c0af3778ac263"
+        },
+        "orchestra-validate-worker": {
+          "bytes": 63991010,
+          "sha256": "f8f888c2be13e1be4724622cab73f446766816b27c9eee60aaf45eedcf37714a"
+        }
+      },
+      "manifestSha256": "b5be64d89bf7c90f8dcd78bd1c16acabc970618ab1b82dd16e3823a4a7bed7f7"
+    }
   },
   "capture": {
     "electronVersion": "41.5.0",
@@ -13,6 +162,43 @@
     "platform": {
       "os": "darwin",
       "arch": "arm64"
+    },
+    "sourceClean": true,
+    "buildReceipts": {
+      "desktop": {
+        "tool": "bun",
+        "arguments": ["run", "build:desktop"],
+        "sourceCommit": "511d26606a3316a1612348535450840be54fcafa",
+        "sourceTree": "70989e1c0c6222706b0b1e6380ef18660833665f",
+        "artifacts": [
+          {
+            "path": "apps/desktop/dist-electron/main.cjs",
+            "sha256": "76a385d73ad5f47ae39d6d107659be049448e4f3b6a734e3efa059fcde040d74"
+          },
+          {
+            "path": "apps/desktop/dist-electron/preload.cjs",
+            "sha256": "c6d2c432d4fc51bf47b00329d30bbda8d8d7306097a4e44b71a278bdcc16c74f"
+          },
+          {
+            "path": "apps/server/dist/bin.mjs",
+            "sha256": "ece3850bbfacda799852e1048ca929b8cff73408a7687bd85a202862aaede903"
+          },
+          {
+            "path": "apps/web/dist/index.html",
+            "sha256": "ea84c3314e053f636456055625e1c0891943408db763fb43acceb9a20619626c"
+          }
+        ]
+      },
+      "evaluator": {
+        "tool": "scripts/evaluator-build.sh",
+        "arguments": ["target/orchestra-product/orchestra-validate-worker"],
+        "sourceCommit": "86d1b8f66b87b3ebc52d3b88ecea8b964fd2da28",
+        "sourceTree": "5a9968a98df00848317b127c61d659781ef7e8fc",
+        "artifact": {
+          "path": "target/orchestra-product/orchestra-validate-worker",
+          "sha256": "f8f888c2be13e1be4724622cab73f446766816b27c9eee60aaf45eedcf37714a"
+        }
+      }
     }
   },
   "productionEntry": "t3code://app/",
@@ -27,11 +213,11 @@
     },
     {
       "path": "apps/server/dist/bin.mjs",
-      "sha256": "e8a5d484e7928cae2dc0f24cb046f53ed8063fc25434d43bebaab2e7b170ead8"
+      "sha256": "ece3850bbfacda799852e1048ca929b8cff73408a7687bd85a202862aaede903"
     },
     {
       "path": "apps/web/dist/index.html",
-      "sha256": "5d8f34b530e27580e25986feedabe12709a9b276436e85ac5e798dde7980e861"
+      "sha256": "ea84c3314e053f636456055625e1c0891943408db763fb43acceb9a20619626c"
     }
   ],
   "screenshots": [
@@ -48,6 +234,7 @@
         "overflow": true,
         "browserVisible": true,
         "narrowDisclosure": true,
+        "drawerOpen": false,
         "webviewRect": {
           "x": 901,
           "y": 92,
@@ -65,11 +252,44 @@
           "visibility": "visible"
         }
       },
-      "sha256": "b84ec2415162831bfd15dea855e4c05c91a3818ba5e46ce47a5c96fce9eb7026"
+      "sha256": "ad028a05867fbe5f94dda5b9bd974fed11a39e13fdf8ab313d106f0384e4e249"
     },
     {
-      "scenario": "native-workspace-1024x768-dark",
-      "file": "docs/acceptance/orchestra-native-shell/native-workspace-1024x768-dark.png",
+      "scenario": "native-browser-1440x900-light",
+      "file": "docs/acceptance/orchestra-native-shell/native-browser-1440x900-light.png",
+      "width": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "theme": "light",
+      "layout": {
+        "width": 1440,
+        "height": 900,
+        "overflow": true,
+        "browserVisible": true,
+        "narrowDisclosure": true,
+        "drawerOpen": false,
+        "webviewRect": {
+          "x": 901,
+          "y": 92,
+          "width": 539,
+          "height": 808,
+          "display": "flex",
+          "visibility": "visible"
+        },
+        "wrapperRect": {
+          "x": 901,
+          "y": 92,
+          "width": 539,
+          "height": 808,
+          "display": "block",
+          "visibility": "visible"
+        }
+      },
+      "sha256": "2bf5061bf3138ce99cb1f3b18ac4ddf0ec7399da1f273dca56c79154e2a881ae"
+    },
+    {
+      "scenario": "native-workspace-1024x768-dark-drawer",
+      "file": "docs/acceptance/orchestra-native-shell/native-workspace-1024x768-dark-drawer.png",
       "width": 1024,
       "height": 768,
       "deviceScaleFactor": 1,
@@ -80,34 +300,68 @@
         "overflow": true,
         "browserVisible": true,
         "narrowDisclosure": true,
+        "drawerOpen": true,
         "webviewRect": {
           "x": -100000,
           "y": -100000,
-          "width": 539,
-          "height": 808,
+          "width": 429,
+          "height": 676,
           "display": "flex",
           "visibility": "visible"
         },
         "wrapperRect": {
           "x": -100000,
           "y": -100000,
-          "width": 539,
-          "height": 808,
+          "width": 429,
+          "height": 676,
           "display": "block",
           "visibility": "visible"
         }
       },
-      "sha256": "828a584ce17c0a8d7781000d706a2c615d07299fcdb45bc566f69bb7001aff51"
+      "sha256": "cdea7e8a32cc86242721c1e8aca9483bb20cb3087f171f70af80b11e464259b9"
+    },
+    {
+      "scenario": "native-workspace-1024x768-light-drawer",
+      "file": "docs/acceptance/orchestra-native-shell/native-workspace-1024x768-light-drawer.png",
+      "width": 1024,
+      "height": 768,
+      "deviceScaleFactor": 1,
+      "theme": "light",
+      "layout": {
+        "width": 1024,
+        "height": 768,
+        "overflow": true,
+        "browserVisible": true,
+        "narrowDisclosure": true,
+        "drawerOpen": true,
+        "webviewRect": {
+          "x": -100000,
+          "y": -100000,
+          "width": 429,
+          "height": 676,
+          "display": "flex",
+          "visibility": "visible"
+        },
+        "wrapperRect": {
+          "x": -100000,
+          "y": -100000,
+          "width": 429,
+          "height": 676,
+          "display": "block",
+          "visibility": "visible"
+        }
+      },
+      "sha256": "ce46cf75be74f0bef934042e81c78f4b96164c3aadbf6aeaf83ce2bdfee5b138"
     }
   ],
   "assertions": {
     "approvedPreviewPartition": {
-      "observed": "persist:t3code-preview-fddd098e8bf0f44687d5",
+      "observed": "persist:t3code-preview-a2ebff412a190a32a67c",
       "passed": true
     },
     "attachmentGuardAllowed": {
       "observed": {
-        "partition": "persist:t3code-preview-fddd098e8bf0f44687d5",
+        "partition": "persist:t3code-preview-a2ebff412a190a32a67c",
         "attachmentGuardAllowed": true,
         "sandbox": true,
         "contextIsolation": false,
@@ -128,17 +382,41 @@
       "passed": true
     },
     "backendReady": {
-      "observed": "http://127.0.0.1:64604/",
+      "observed": "http://127.0.0.1:55127/",
       "passed": true
     },
     "composerVisible": {
       "observed": true,
       "passed": true
     },
+    "currentCodexForkRecorded": {
+      "observed": {
+        "repository": "edgefloor/orchestra-codex",
+        "commit": "7fddc000e0531657002ec4fac59f5edbabb4695b",
+        "tree": "b1306b462645553d975b21f872ddc4ca75310f20",
+        "binarySha256": "e8122cd435805d75a12a97a47d6c59092fa7b827ebea91fedcf1390485cbcc13",
+        "build": {
+          "tool": "cargo",
+          "arguments": [
+            "build",
+            "--manifest-path",
+            "codex-rs/Cargo.toml",
+            "-p",
+            "codex-cli",
+            "--bin",
+            "codex"
+          ],
+          "profile": "debug",
+          "package": "codex-cli",
+          "binary": "codex"
+        }
+      },
+      "passed": true
+    },
     "guestBackWorked": {
       "observed": {
         "heading": "Native guest page A",
-        "href": "http://127.0.0.1:64605/a",
+        "href": "http://127.0.0.1:55128/a",
         "identity": "deterministic-native-guest-a",
         "loadCount": 2,
         "mutation": "not-mutated",
@@ -162,8 +440,8 @@
     },
     "guestFailureSurfaced": {
       "observed": {
-        "requestedUrl": "http://127.0.0.1:64606/unreachable",
-        "guestUrl": "http://127.0.0.1:64606/unreachable",
+        "requestedUrl": "http://127.0.0.1:55129/unreachable",
+        "guestUrl": "http://127.0.0.1:55129/unreachable",
         "rendererFailureVisible": true
       },
       "passed": true
@@ -171,7 +449,7 @@
     "guestForwardWorked": {
       "observed": {
         "heading": "Native guest page B",
-        "href": "http://127.0.0.1:64605/b",
+        "href": "http://127.0.0.1:55128/b",
         "identity": "deterministic-native-guest-b",
         "loadCount": 2,
         "mutation": "not-mutated",
@@ -196,7 +474,7 @@
     "guestPageALoaded": {
       "observed": {
         "heading": "Native guest page A",
-        "href": "http://127.0.0.1:64605/a",
+        "href": "http://127.0.0.1:55128/a",
         "identity": "deterministic-native-guest-a",
         "loadCount": 1,
         "mutation": "not-mutated",
@@ -204,8 +482,8 @@
         "requireType": "undefined",
         "title": "Native Guest A",
         "viewport": {
-          "height": 688,
-          "width": 539
+          "height": 800,
+          "width": 1280
         }
       },
       "passed": true
@@ -213,7 +491,7 @@
     "guestPageBLoaded": {
       "observed": {
         "heading": "Native guest page B",
-        "href": "http://127.0.0.1:64605/b",
+        "href": "http://127.0.0.1:55128/b",
         "identity": "deterministic-native-guest-b",
         "loadCount": 1,
         "mutation": "not-mutated",
@@ -230,7 +508,7 @@
     "guestRecovered": {
       "observed": {
         "heading": "Native guest page A",
-        "href": "http://127.0.0.1:64605/a",
+        "href": "http://127.0.0.1:55128/a",
         "identity": "deterministic-native-guest-a",
         "loadCount": 5,
         "mutation": "not-mutated",
@@ -247,7 +525,7 @@
     "guestReloadWorked": {
       "observed": {
         "heading": "Native guest page A",
-        "href": "http://127.0.0.1:64605/a",
+        "href": "http://127.0.0.1:55128/a",
         "identity": "deterministic-native-guest-a",
         "loadCount": 4,
         "mutation": "not-mutated",
@@ -273,6 +551,99 @@
       },
       "passed": true
     },
+    "narrowDiffSurfaceVisible": {
+      "observed": [
+        {
+          "scenario": "native-workspace-1024x768-dark-drawer",
+          "opened": true,
+          "closed": true,
+          "focusRestored": true,
+          "activeSurface": "Diff",
+          "composerReachable": true,
+          "taskVisible": true,
+          "trace": [
+            {
+              "stage": "initial",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Add panel surface"
+            },
+            {
+              "stage": "first-open-attempt",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Add panel surface"
+            },
+            {
+              "stage": "closed",
+              "open": false,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Toggle right panel"
+            },
+            {
+              "stage": "reopened",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            }
+          ],
+          "guestRepaint": {
+            "beforeLoadCount": 7,
+            "afterLoadCount": 8,
+            "advanced": true
+          }
+        },
+        {
+          "scenario": "native-workspace-1024x768-light-drawer",
+          "opened": true,
+          "closed": true,
+          "focusRestored": true,
+          "activeSurface": "Diff",
+          "composerReachable": true,
+          "taskVisible": true,
+          "trace": [
+            {
+              "stage": "initial",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            },
+            {
+              "stage": "first-open-attempt",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            },
+            {
+              "stage": "closed",
+              "open": false,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Toggle right panel"
+            },
+            {
+              "stage": "reopened",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            }
+          ],
+          "guestRepaint": {
+            "beforeLoadCount": 8,
+            "afterLoadCount": 9,
+            "advanced": true
+          }
+        }
+      ],
+      "passed": true
+    },
     "narrowDisclosureReachable": {
       "observed": {
         "width": 1024,
@@ -280,21 +651,661 @@
         "overflow": true,
         "browserVisible": true,
         "narrowDisclosure": true,
+        "drawerOpen": true,
         "webviewRect": {
           "x": -100000,
           "y": -100000,
-          "width": 539,
-          "height": 808,
+          "width": 429,
+          "height": 676,
           "display": "flex",
           "visibility": "visible"
         },
         "wrapperRect": {
           "x": -100000,
           "y": -100000,
-          "width": 539,
-          "height": 808,
+          "width": 429,
+          "height": 676,
           "display": "block",
           "visibility": "visible"
+        }
+      },
+      "passed": true
+    },
+    "narrowDrawerClosed": {
+      "observed": [
+        {
+          "scenario": "native-workspace-1024x768-dark-drawer",
+          "opened": true,
+          "closed": true,
+          "focusRestored": true,
+          "activeSurface": "Diff",
+          "composerReachable": true,
+          "taskVisible": true,
+          "trace": [
+            {
+              "stage": "initial",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Add panel surface"
+            },
+            {
+              "stage": "first-open-attempt",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Add panel surface"
+            },
+            {
+              "stage": "closed",
+              "open": false,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Toggle right panel"
+            },
+            {
+              "stage": "reopened",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            }
+          ],
+          "guestRepaint": {
+            "beforeLoadCount": 7,
+            "afterLoadCount": 8,
+            "advanced": true
+          }
+        },
+        {
+          "scenario": "native-workspace-1024x768-light-drawer",
+          "opened": true,
+          "closed": true,
+          "focusRestored": true,
+          "activeSurface": "Diff",
+          "composerReachable": true,
+          "taskVisible": true,
+          "trace": [
+            {
+              "stage": "initial",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            },
+            {
+              "stage": "first-open-attempt",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            },
+            {
+              "stage": "closed",
+              "open": false,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Toggle right panel"
+            },
+            {
+              "stage": "reopened",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            }
+          ],
+          "guestRepaint": {
+            "beforeLoadCount": 8,
+            "afterLoadCount": 9,
+            "advanced": true
+          }
+        }
+      ],
+      "passed": true
+    },
+    "narrowDrawerFocusRestored": {
+      "observed": [
+        {
+          "scenario": "native-workspace-1024x768-dark-drawer",
+          "opened": true,
+          "closed": true,
+          "focusRestored": true,
+          "activeSurface": "Diff",
+          "composerReachable": true,
+          "taskVisible": true,
+          "trace": [
+            {
+              "stage": "initial",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Add panel surface"
+            },
+            {
+              "stage": "first-open-attempt",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Add panel surface"
+            },
+            {
+              "stage": "closed",
+              "open": false,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Toggle right panel"
+            },
+            {
+              "stage": "reopened",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            }
+          ],
+          "guestRepaint": {
+            "beforeLoadCount": 7,
+            "afterLoadCount": 8,
+            "advanced": true
+          }
+        },
+        {
+          "scenario": "native-workspace-1024x768-light-drawer",
+          "opened": true,
+          "closed": true,
+          "focusRestored": true,
+          "activeSurface": "Diff",
+          "composerReachable": true,
+          "taskVisible": true,
+          "trace": [
+            {
+              "stage": "initial",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            },
+            {
+              "stage": "first-open-attempt",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            },
+            {
+              "stage": "closed",
+              "open": false,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Toggle right panel"
+            },
+            {
+              "stage": "reopened",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            }
+          ],
+          "guestRepaint": {
+            "beforeLoadCount": 8,
+            "afterLoadCount": 9,
+            "advanced": true
+          }
+        }
+      ],
+      "passed": true
+    },
+    "narrowDrawerOpened": {
+      "observed": [
+        {
+          "scenario": "native-workspace-1024x768-dark-drawer",
+          "opened": true,
+          "closed": true,
+          "focusRestored": true,
+          "activeSurface": "Diff",
+          "composerReachable": true,
+          "taskVisible": true,
+          "trace": [
+            {
+              "stage": "initial",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Add panel surface"
+            },
+            {
+              "stage": "first-open-attempt",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Add panel surface"
+            },
+            {
+              "stage": "closed",
+              "open": false,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Toggle right panel"
+            },
+            {
+              "stage": "reopened",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            }
+          ],
+          "guestRepaint": {
+            "beforeLoadCount": 7,
+            "afterLoadCount": 8,
+            "advanced": true
+          }
+        },
+        {
+          "scenario": "native-workspace-1024x768-light-drawer",
+          "opened": true,
+          "closed": true,
+          "focusRestored": true,
+          "activeSurface": "Diff",
+          "composerReachable": true,
+          "taskVisible": true,
+          "trace": [
+            {
+              "stage": "initial",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            },
+            {
+              "stage": "first-open-attempt",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            },
+            {
+              "stage": "closed",
+              "open": false,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Toggle right panel"
+            },
+            {
+              "stage": "reopened",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            }
+          ],
+          "guestRepaint": {
+            "beforeLoadCount": 8,
+            "afterLoadCount": 9,
+            "advanced": true
+          }
+        }
+      ],
+      "passed": true
+    },
+    "narrowTaskComposerReachable": {
+      "observed": [
+        {
+          "scenario": "native-workspace-1024x768-dark-drawer",
+          "opened": true,
+          "closed": true,
+          "focusRestored": true,
+          "activeSurface": "Diff",
+          "composerReachable": true,
+          "taskVisible": true,
+          "trace": [
+            {
+              "stage": "initial",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Add panel surface"
+            },
+            {
+              "stage": "first-open-attempt",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Add panel surface"
+            },
+            {
+              "stage": "closed",
+              "open": false,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Toggle right panel"
+            },
+            {
+              "stage": "reopened",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            }
+          ],
+          "guestRepaint": {
+            "beforeLoadCount": 7,
+            "afterLoadCount": 8,
+            "advanced": true
+          }
+        },
+        {
+          "scenario": "native-workspace-1024x768-light-drawer",
+          "opened": true,
+          "closed": true,
+          "focusRestored": true,
+          "activeSurface": "Diff",
+          "composerReachable": true,
+          "taskVisible": true,
+          "trace": [
+            {
+              "stage": "initial",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            },
+            {
+              "stage": "first-open-attempt",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            },
+            {
+              "stage": "closed",
+              "open": false,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": "Toggle right panel"
+            },
+            {
+              "stage": "reopened",
+              "open": true,
+              "ariaPressed": "true",
+              "dataPressed": "",
+              "activeLabel": null
+            }
+          ],
+          "guestRepaint": {
+            "beforeLoadCount": 8,
+            "afterLoadCount": 9,
+            "advanced": true
+          }
+        }
+      ],
+      "passed": true
+    },
+    "nativeAttentionResolved": {
+      "observed": {
+        "waiting": {
+          "label": "Task attention",
+          "text": "Attention\n1\n1 native item\n\nNative approvals remain above the composer; task and Run updates resolve this list.\n\nWorkflow gate · accept-native-finding\napproval required for `accept-native-finding`\nwaiting gate",
+          "textTruncated": false,
+          "runLabels": [],
+          "runStatuses": [],
+          "expandedButtons": 0,
+          "collapsedButtons": 1
+        },
+        "completed": {
+          "label": "Task attention",
+          "text": "Attention\n0\nNo items need intervention\n\nNative approvals remain above the composer; task and Run updates resolve this list.\n\nEmpty — approvals, gates, effects, reconciliation, and provider state are clear.",
+          "textTruncated": false,
+          "runLabels": [],
+          "runStatuses": [],
+          "expandedButtons": 0,
+          "collapsedButtons": 0
+        }
+      },
+      "passed": true
+    },
+    "nativeChildProjected": {
+      "observed": {
+        "stepId": "inspect-native-runtime",
+        "childText": "Child /root/orchestra_17844125632468d0008e1d852_inspect_native_runtime_r1_a1 · 019f7746-e758-7742-80a1-9a6188e88ef4",
+        "childTextTruncated": false,
+        "outputName": "finding",
+        "outputValue": "\"deterministic native child\"",
+        "outputValueTruncated": false
+      },
+      "passed": true
+    },
+    "nativeDogfoodIdentityRecovered": {
+      "observed": {
+        "workflow": {
+          "waiting": {
+            "label": "Task Workflow Runs",
+            "text": "1 native Run · detail loads on request\nOrchestra workflow2/3 steps · approval required for `accept-native-finding`\nWaiting\naccept-native-finding · waitingApproval\ninspect-native-runtime · completed\nverify-native-repository · completed",
+            "textTruncated": false,
+            "runLabels": ["Workflow run 1784412563246-8d0008e1d852"],
+            "runStatuses": ["waiting"],
+            "expandedButtons": 0,
+            "collapsedButtons": 1
+          },
+          "completed": {
+            "label": "Task Workflow Runs",
+            "text": "1 native Run · detail loads on request\nOrchestra workflow3/3 steps · run complete\nCompleted\naccept-native-finding · completed\ninspect-native-runtime · completed\nverify-native-repository · completed",
+            "textTruncated": false,
+            "runLabels": ["Workflow run 1784412563246-8d0008e1d852"],
+            "runStatuses": ["completed"],
+            "expandedButtons": 0,
+            "collapsedButtons": 1
+          },
+          "sameRun": true,
+          "waitingEventSequence": 14,
+          "completedEventSequence": 21
+        },
+        "symphony": {
+          "validation": {
+            "valid": true,
+            "profilePath": "WORKFLOW.md",
+            "text": "Symphony automation\nidle\n\nTask-scoped native automation for Native Browser acceptance. Run state is reloaded from Codex after renderer or host restarts.\n\nConfiguration and profile validation\nProfile path\n\nResolved inside the task repository by Codex. Paths outside the repository are rejected.\n\nPreview issue\nIssue state\nIssue labels\nAttempt\nExisting root Run\nReattach\n\nReloads the bounded native projection for this task; child histories remain in their Codex tasks.\n\nProfile is valid\nnative-symphony-dogfood\nDigest fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nWORKFLOW INPUTS\nautomation · object · required\nissue · object · required\ntask_prompt · string · required\nSECRET REFERENCES\nenvironment ORCHESTRA_NATIVE_DOGFOOD_LINEAR_API_KEY digest bfda1aa284a5494185c6845d96cea764e1558c978455c84b864fead9794043e3\ntracker.api_key tracker credential is unavailable; fixture validation remains available but live Linear reads will be skipped\nRENDERED TASK PROMPT\nImplement DOGFOOD-1: Native Browser acceptance\n\nWork only on the claimed acceptance issue and return bounded verification evidence.\nCanonical profile\nRead active Linear\nRead terminal Linear\nRefresh issue\nStart automation\nValidate and preview",
+            "textTruncated": false
+          },
+          "started": {
+            "alert": "re-resolve the referenced Linear credential, then retry",
+            "issueRowCount": 0,
+            "runId": "automation-1784412563728-fdb5fa98ed0d",
+            "text": "orchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work",
+            "textTruncated": false,
+            "workspaceText": "Symphony automation\nidle\n\nTask-scoped native automation for Native Browser acceptance. Run state is reloaded from Codex after renderer or host restarts.\n\nStart accepted native Run revision 2 under lease 0.\nConfiguration and profile validation\norchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work\n\nIssues\nActivity\nRecovery\nEvents\nqueued 0\nrunning 0\nblocked 0\nwaiting gate 0\nhandoff 0\nterminal 0\nIssue\tTracker state\tExecution\tPriority\tAttempt\tTask / Workflow\tLast activity\n\nNo issues are present in this bounded native snapshot.\n\nSelect an issue to inspect its durable task, workflow, effects, hooks, and next action.\nRead active Linear\nRead terminal Linear\nRefresh issue\nPause\nInspect\nRefresh\nCancel run\nValidate and preview"
+          },
+          "inspected": {
+            "runId": "automation-1784412563728-fdb5fa98ed0d",
+            "status": "running",
+            "instanceCount": 1,
+            "totalRootCount": 1,
+            "text": "orchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work",
+            "textTruncated": false
+          },
+          "sameRootAfterInspect": true,
+          "issueChildFabricated": false
+        },
+        "reload": {
+          "workflow": {
+            "label": "Task Workflow Runs",
+            "text": "1 native Run · detail loads on request\nOrchestra workflow3/3 steps · run complete\nCompleted\naccept-native-finding · completed\ninspect-native-runtime · completed\nverify-native-repository · completed",
+            "textTruncated": false,
+            "runLabels": ["Workflow run 1784412563246-8d0008e1d852"],
+            "runStatuses": ["completed"],
+            "expandedButtons": 0,
+            "collapsedButtons": 1
+          },
+          "evidence": {
+            "expanded": true,
+            "contentState": "text",
+            "stepId": "verify-native-repository",
+            "evidenceName": "verify-native-repository-1.json",
+            "evidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+            "displayedEvidenceIdPrefix": "baa13f55437f",
+            "expectedEvidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+            "kind": "check",
+            "provenance": "runtime_check",
+            "availability": "available",
+            "content": {
+              "argv": ["git", "rev-parse", "--is-inside-work-tree"],
+              "cwd": null,
+              "timeout_ms": 120000,
+              "exit_code": 0,
+              "stdout": "true\n",
+              "stderr": ""
+            },
+            "runText": "Orchestra workflow2/3 steps · approval required for `accept-native-finding`\nWaiting\n1784412563246-8d0008e1d852\nRevision 1\ninvoked\nPromotion notRequired\n\nrun complete\n\nApproval gate · accept-native-finding\ncompleted\n0 outputs\nStep · inspect-native-runtime\ncompleted\n1 outputs\nStep · verify-native-repository\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\npassed\n4 bytes\ntrue\nverify-native-repository-1.json\ncheck\nruntime check\navailable\nEvidence identity: baa13f55437f\nid baa13f55437f\n171 bytes\nruntime-reported sha256 cf958686c20535f35505296310a48694fa811cb5d0281b6f340600b464bdd17b\n\nPlain-text preview · extension-declared application/json\n\n{\n  \"argv\": [\n    \"git\",\n    \"rev-parse\",\n    \"--is-inside-work-tree\"\n  ],\n  \"cwd\": null,\n  \"timeout_ms\": 120000,\n  \"exit_code\": 0,\n  \"stdout\": \"true\\n\",\n  \"stderr\": \"\"\n}\n\nRecovery and decision history",
+            "runTextTruncated": false
+          },
+          "symphony": {
+            "runId": "automation-1784412563728-fdb5fa98ed0d",
+            "status": "running",
+            "instanceCount": 1,
+            "totalRootCount": 1,
+            "text": "orchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work",
+            "textTruncated": false
+          },
+          "sameWorkflowRun": true,
+          "sameSymphonyRoot": true
+        }
+      },
+      "passed": true
+    },
+    "nativeDogfoodProviderRestartRecovered": {
+      "observed": {
+        "stop": {
+          "command": {
+            "type": "thread.session.stop",
+            "commandId": "cmd-native-provider-restart-stop",
+            "threadId": "thread-native-shell-acceptance"
+          },
+          "receiptSequence": 28,
+          "sessionEventSequence": 29,
+          "thread": {
+            "snapshotSequence": 30,
+            "session": {
+              "status": "stopped",
+              "providerName": "codex",
+              "providerInstanceId": "codex",
+              "runtimeMode": "full-access",
+              "activeTurnId": null,
+              "hasLastError": false,
+              "updatedAt": "2026-07-18T22:09:24.078Z"
+            }
+          },
+          "responsesRequestCount": 5
+        },
+        "recovery": {
+          "trigger": "Symphony Inspect / automation.status",
+          "sessionEventSequence": 34,
+          "thread": {
+            "snapshotSequence": 34,
+            "session": {
+              "status": "ready",
+              "providerName": "codex",
+              "providerInstanceId": "codex",
+              "runtimeMode": "full-access",
+              "activeTurnId": null,
+              "hasLastError": false,
+              "updatedAt": "2026-07-18T22:09:24.192Z"
+            }
+          },
+          "typedSymphonyStatus": {
+            "runId": "automation-1784412563728-fdb5fa98ed0d",
+            "status": "running"
+          },
+          "workflow": {
+            "label": "Task Workflow Runs",
+            "text": "1 native Run · detail loads on request\nOrchestra workflow3/3 steps · run complete\nCompleted\naccept-native-finding · completed\ninspect-native-runtime · completed\nverify-native-repository · completed",
+            "textTruncated": false,
+            "runLabels": ["Workflow run 1784412563246-8d0008e1d852"],
+            "runStatuses": ["completed"],
+            "expandedButtons": 0,
+            "collapsedButtons": 1
+          },
+          "evidence": {
+            "expanded": true,
+            "contentState": "text",
+            "stepId": "verify-native-repository",
+            "evidenceName": "verify-native-repository-1.json",
+            "evidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+            "displayedEvidenceIdPrefix": "baa13f55437f",
+            "expectedEvidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+            "kind": "check",
+            "provenance": "runtime_check",
+            "availability": "available",
+            "content": {
+              "argv": ["git", "rev-parse", "--is-inside-work-tree"],
+              "cwd": null,
+              "timeout_ms": 120000,
+              "exit_code": 0,
+              "stdout": "true\n",
+              "stderr": ""
+            },
+            "runText": "Orchestra workflow3/3 steps · run complete\nCompleted\n1784412563246-8d0008e1d852\nRevision 2\nresumed\nPromotion notRequired\n\nrun complete\n\nApproval gate · accept-native-finding\ncompleted\n0 outputs\nStep · inspect-native-runtime\ncompleted\n1 outputs\nStep · verify-native-repository\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\npassed\n4 bytes\ntrue\nverify-native-repository-1.json\ncheck\nruntime check\navailable\nEvidence identity: baa13f55437f\nid baa13f55437f\n171 bytes\nruntime-reported sha256 cf958686c20535f35505296310a48694fa811cb5d0281b6f340600b464bdd17b\n\nPlain-text preview · extension-declared application/json\n\n{\n  \"argv\": [\n    \"git\",\n    \"rev-parse\",\n    \"--is-inside-work-tree\"\n  ],\n  \"cwd\": null,\n  \"timeout_ms\": 120000,\n  \"exit_code\": 0,\n  \"stdout\": \"true\\n\",\n  \"stderr\": \"\"\n}\n\nRecovery and decision history",
+            "runTextTruncated": false
+          },
+          "symphony": {
+            "runId": "automation-1784412563728-fdb5fa98ed0d",
+            "status": "running",
+            "instanceCount": 1,
+            "totalRootCount": 1,
+            "text": "orchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work",
+            "textTruncated": false
+          },
+          "responsesRequestCount": 5
+        },
+        "sameWorkflowRun": true,
+        "sameSymphonyRoot": true,
+        "sameSymphonyStatus": true
+      },
+      "passed": true
+    },
+    "nativeDogfoodResponsesExact": {
+      "observed": {
+        "requestCount": 5
+      },
+      "passed": true
+    },
+    "nativeEvidenceLazyExpanded": {
+      "observed": {
+        "before": {
+          "exposed": true,
+          "stepId": "verify-native-repository",
+          "evidenceName": "verify-native-repository-1.json",
+          "evidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+          "displayedEvidenceIdPrefix": "baa13f55437f",
+          "kind": "check",
+          "provenance": "runtime_check",
+          "availability": "available",
+          "contentAbsentBeforeExpand": true,
+          "runText": "Orchestra workflow2/3 steps · approval required for `accept-native-finding`\nWaiting\n1784412563246-8d0008e1d852\nRevision 1\ninvoked\nPromotion notRequired\n\nrun complete\n\nApproval gate · accept-native-finding\ncompleted\n0 outputs\nStep · inspect-native-runtime\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n\nChild /root/orchestra_17844125632468d0008e1d852_inspect_native_runtime_r1_a1 · 019f7746-e758-7742-80a1-9a6188e88ef4\n\nfinding\n28 bytes\n\"deterministic native child\"\nStep · verify-native-repository\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\npassed\n4 bytes\ntrue\nverify-native-repository-1.json\ncheck\nruntime check\navailable\nEvidence identity: baa13f55437f\nid baa13f55437f\n171 bytes\nruntime-reported sha256 cf958686c20535f35505296310a48694fa811cb5d0281b6f340600b464bdd17b\nRecovery and decision history",
+          "runTextTruncated": false
+        },
+        "after": {
+          "expanded": true,
+          "contentState": "text",
+          "stepId": "verify-native-repository",
+          "evidenceName": "verify-native-repository-1.json",
+          "evidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+          "displayedEvidenceIdPrefix": "baa13f55437f",
+          "expectedEvidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+          "kind": "check",
+          "provenance": "runtime_check",
+          "availability": "available",
+          "content": {
+            "argv": ["git", "rev-parse", "--is-inside-work-tree"],
+            "cwd": null,
+            "timeout_ms": 120000,
+            "exit_code": 0,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "runText": "Orchestra workflow2/3 steps · approval required for `accept-native-finding`\nWaiting\n1784412563246-8d0008e1d852\nRevision 1\ninvoked\nPromotion notRequired\n\nrun complete\n\nApproval gate · accept-native-finding\ncompleted\n0 outputs\nStep · inspect-native-runtime\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n\nChild /root/orchestra_17844125632468d0008e1d852_inspect_native_runtime_r1_a1 · 019f7746-e758-7742-80a1-9a6188e88ef4\n\nfinding\n28 bytes\n\"deterministic native child\"\nStep · verify-native-repository\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\npassed\n4 bytes\ntrue\nverify-native-repository-1.json\ncheck\nruntime check\navailable\nEvidence identity: baa13f55437f\nid baa13f55437f\n171 bytes\nruntime-reported sha256 cf958686c20535f35505296310a48694fa811cb5d0281b6f340600b464bdd17b\n\nPlain-text preview · extension-declared application/json\n\n{\n  \"argv\": [\n    \"git\",\n    \"rev-parse\",\n    \"--is-inside-work-tree\"\n  ],\n  \"cwd\": null,\n  \"timeout_ms\": 120000,\n  \"exit_code\": 0,\n  \"stdout\": \"true\\n\",\n  \"stderr\": \"\"\n}\n\nRecovery and decision history",
+          "runTextTruncated": false
         }
       },
       "passed": true
@@ -305,13 +1316,68 @@
     },
     "nativeRouteRecoveredAfterReload": {
       "observed": {
-        "hash": "#/e63eadca-1ee7-4059-9b01-2ef59fa1a058/thread-native-shell-acceptance",
+        "hash": "#/ee9db0d0-c95d-4cb2-927c-b8b7fd084bd4/thread-native-shell-acceptance",
         "titleVisible": true
+      },
+      "passed": true
+    },
+    "nativeSymphonySkippedIntake": {
+      "observed": {
+        "validation": {
+          "valid": true,
+          "profilePath": "WORKFLOW.md",
+          "text": "Symphony automation\nidle\n\nTask-scoped native automation for Native Browser acceptance. Run state is reloaded from Codex after renderer or host restarts.\n\nConfiguration and profile validation\nProfile path\n\nResolved inside the task repository by Codex. Paths outside the repository are rejected.\n\nPreview issue\nIssue state\nIssue labels\nAttempt\nExisting root Run\nReattach\n\nReloads the bounded native projection for this task; child histories remain in their Codex tasks.\n\nProfile is valid\nnative-symphony-dogfood\nDigest fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nWORKFLOW INPUTS\nautomation · object · required\nissue · object · required\ntask_prompt · string · required\nSECRET REFERENCES\nenvironment ORCHESTRA_NATIVE_DOGFOOD_LINEAR_API_KEY digest bfda1aa284a5494185c6845d96cea764e1558c978455c84b864fead9794043e3\ntracker.api_key tracker credential is unavailable; fixture validation remains available but live Linear reads will be skipped\nRENDERED TASK PROMPT\nImplement DOGFOOD-1: Native Browser acceptance\n\nWork only on the claimed acceptance issue and return bounded verification evidence.\nCanonical profile\nRead active Linear\nRead terminal Linear\nRefresh issue\nStart automation\nValidate and preview",
+          "textTruncated": false
+        },
+        "started": {
+          "alert": "re-resolve the referenced Linear credential, then retry",
+          "issueRowCount": 0,
+          "runId": "automation-1784412563728-fdb5fa98ed0d",
+          "text": "orchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work",
+          "textTruncated": false,
+          "workspaceText": "Symphony automation\nidle\n\nTask-scoped native automation for Native Browser acceptance. Run state is reloaded from Codex after renderer or host restarts.\n\nStart accepted native Run revision 2 under lease 0.\nConfiguration and profile validation\norchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work\n\nIssues\nActivity\nRecovery\nEvents\nqueued 0\nrunning 0\nblocked 0\nwaiting gate 0\nhandoff 0\nterminal 0\nIssue\tTracker state\tExecution\tPriority\tAttempt\tTask / Workflow\tLast activity\n\nNo issues are present in this bounded native snapshot.\n\nSelect an issue to inspect its durable task, workflow, effects, hooks, and next action.\nRead active Linear\nRead terminal Linear\nRefresh issue\nPause\nInspect\nRefresh\nCancel run\nValidate and preview"
+        },
+        "inspected": {
+          "runId": "automation-1784412563728-fdb5fa98ed0d",
+          "status": "running",
+          "instanceCount": 1,
+          "totalRootCount": 1,
+          "text": "orchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work",
+          "textTruncated": false
+        },
+        "sameRootAfterInspect": true,
+        "issueChildFabricated": false
       },
       "passed": true
     },
     "nativeTaskVisible": {
       "observed": "Native Browser acceptance",
+      "passed": true
+    },
+    "nativeWorkflowLifecycleRendered": {
+      "observed": {
+        "waiting": {
+          "label": "Task Workflow Runs",
+          "text": "1 native Run · detail loads on request\nOrchestra workflow2/3 steps · approval required for `accept-native-finding`\nWaiting\naccept-native-finding · waitingApproval\ninspect-native-runtime · completed\nverify-native-repository · completed",
+          "textTruncated": false,
+          "runLabels": ["Workflow run 1784412563246-8d0008e1d852"],
+          "runStatuses": ["waiting"],
+          "expandedButtons": 0,
+          "collapsedButtons": 1
+        },
+        "completed": {
+          "label": "Task Workflow Runs",
+          "text": "1 native Run · detail loads on request\nOrchestra workflow3/3 steps · run complete\nCompleted\naccept-native-finding · completed\ninspect-native-runtime · completed\nverify-native-repository · completed",
+          "textTruncated": false,
+          "runLabels": ["Workflow run 1784412563246-8d0008e1d852"],
+          "runStatuses": ["completed"],
+          "expandedButtons": 0,
+          "collapsedButtons": 1
+        },
+        "sameRun": true,
+        "waitingEventSequence": 14,
+        "completedEventSequence": 21
+      },
       "passed": true
     },
     "noDocumentHorizontalOverflow": {
@@ -321,7 +1387,15 @@
           "overflow": true
         },
         {
-          "scenario": "native-workspace-1024x768-dark",
+          "scenario": "native-browser-1440x900-light",
+          "overflow": true
+        },
+        {
+          "scenario": "native-workspace-1024x768-dark-drawer",
+          "overflow": true
+        },
+        {
+          "scenario": "native-workspace-1024x768-light-drawer",
           "overflow": true
         }
       ],
@@ -335,7 +1409,7 @@
       "passed": true
     },
     "productionMainLoaded": {
-      "observed": "t3code://app/#/e63eadca-1ee7-4059-9b01-2ef59fa1a058/thread-native-shell-acceptance",
+      "observed": "t3code://app/#/ee9db0d0-c95d-4cb2-927c-b8b7fd084bd4/thread-native-shell-acceptance",
       "passed": true
     },
     "productionPreloadBridge": {
@@ -349,17 +1423,107 @@
       },
       "passed": true
     },
+    "retainedDesktopCapabilitiesProbed": {
+      "observed": {
+        "workspace": {
+          "projectVisible": true,
+          "taskVisible": true,
+          "localCheckoutVisible": true,
+          "branchControl": null,
+          "contextTabs": ["Workflow", "Attention"]
+        },
+        "context": {
+          "workflowRunId": "1784412563246-8d0008e1d852",
+          "attentionResolved": true
+        },
+        "modelPicker": {
+          "trigger": "GPT-5.4",
+          "text": "GPT-5.6-Sol\nCodex\n⌘1\nGPT-5.6-Terra\nCodex\n⌘2\nGPT-5.6-Luna\nCodex\n⌘3\nGPT-5.5\nCodex\n⌘4\nGPT-5.4\nCodex\n⌘5\nGPT-5.4-Mini\nCodex\n⌘6\nGPT-5.2\nCodex\n⌘7"
+        },
+        "settings": {
+          "hash": "#/settings",
+          "generalVisible": true
+        },
+        "vcs": {
+          "popupVisible": true,
+          "items": [
+            {
+              "label": "Commit",
+              "disabled": false
+            },
+            {
+              "label": "Push",
+              "disabled": true
+            },
+            {
+              "label": "Create PR",
+              "disabled": true
+            }
+          ],
+          "selectedLabel": null,
+          "fixtureRemote": {
+            "name": "origin",
+            "transport": "local-bare",
+            "externalMutation": false
+          }
+        },
+        "surfaces": {
+          "Files": {
+            "title": "Files",
+            "panelVisible": true
+          },
+          "Terminal": {
+            "title": "Terminal 1",
+            "panelVisible": true
+          },
+          "Browser": {
+            "title": "Browser",
+            "panelVisible": true
+          },
+          "Diff": {
+            "title": "Diff",
+            "panelVisible": true
+          }
+        },
+        "mutations": {
+          "commit": "unobserved",
+          "push": "unobserved"
+        }
+      },
+      "passed": true
+    },
     "taskTabsVisible": {
       "observed": true,
+      "passed": true
+    },
+    "themeMatrixCaptured": {
+      "observed": [
+        {
+          "scenario": "native-browser-1440x900-dark",
+          "theme": "dark"
+        },
+        {
+          "scenario": "native-browser-1440x900-light",
+          "theme": "light"
+        },
+        {
+          "scenario": "native-workspace-1024x768-dark-drawer",
+          "theme": "dark"
+        },
+        {
+          "scenario": "native-workspace-1024x768-light-drawer",
+          "theme": "light"
+        }
+      ],
       "passed": true
     }
   },
   "guest": {
-    "origin": "http://127.0.0.1:64605",
-    "fixtureSha256": "2ba5daef85f7bdc5c6fa6a2f79598504e8ff99bc479fc78e5d7b313c5be74af0"
+    "origin": "http://127.0.0.1:55128",
+    "fixtureSha256": "6d1a6818115342ef2c31c163dec6f53ef25e7ba471d02a5a46a7d86e63c55dde"
   },
   "runtime": {
-    "rendererUrl": "t3code://app/#/e63eadca-1ee7-4059-9b01-2ef59fa1a058/thread-native-shell-acceptance",
+    "rendererUrl": "t3code://app/#/ee9db0d0-c95d-4cb2-927c-b8b7fd084bd4/thread-native-shell-acceptance",
     "appViewport": {
       "width": 1024,
       "height": 768
@@ -367,15 +1531,15 @@
     "guest": {
       "webContentsId": 2,
       "type": "webview",
-      "url": "http://127.0.0.1:64605/a",
+      "url": "http://127.0.0.1:55128/a",
       "title": "Native Guest A",
-      "partition": "persist:t3code-preview-fddd098e8bf0f44687d5",
+      "partition": "persist:t3code-preview-a2ebff412a190a32a67c",
       "viewport": {
         "height": 688,
         "width": 539
       },
       "attachment": {
-        "partition": "persist:t3code-preview-fddd098e8bf0f44687d5",
+        "partition": "persist:t3code-preview-a2ebff412a190a32a67c",
         "attachmentGuardAllowed": true,
         "sandbox": true,
         "contextIsolation": false,
@@ -391,6 +1555,255 @@
       "nodeIntegration": false,
       "nodeIntegrationInSubFrames": false
     },
+    "nativeDogfood": {
+      "responsesRequestCount": 5,
+      "waitingProjectionVisible": true,
+      "completedProjectionVisible": true,
+      "workflow": {
+        "waiting": {
+          "label": "Task Workflow Runs",
+          "text": "1 native Run · detail loads on request\nOrchestra workflow2/3 steps · approval required for `accept-native-finding`\nWaiting\naccept-native-finding · waitingApproval\ninspect-native-runtime · completed\nverify-native-repository · completed",
+          "textTruncated": false,
+          "runLabels": ["Workflow run 1784412563246-8d0008e1d852"],
+          "runStatuses": ["waiting"],
+          "expandedButtons": 0,
+          "collapsedButtons": 1
+        },
+        "completed": {
+          "label": "Task Workflow Runs",
+          "text": "1 native Run · detail loads on request\nOrchestra workflow3/3 steps · run complete\nCompleted\naccept-native-finding · completed\ninspect-native-runtime · completed\nverify-native-repository · completed",
+          "textTruncated": false,
+          "runLabels": ["Workflow run 1784412563246-8d0008e1d852"],
+          "runStatuses": ["completed"],
+          "expandedButtons": 0,
+          "collapsedButtons": 1
+        },
+        "sameRun": true,
+        "waitingEventSequence": 14,
+        "completedEventSequence": 21
+      },
+      "child": {
+        "stepId": "inspect-native-runtime",
+        "childText": "Child /root/orchestra_17844125632468d0008e1d852_inspect_native_runtime_r1_a1 · 019f7746-e758-7742-80a1-9a6188e88ef4",
+        "childTextTruncated": false,
+        "outputName": "finding",
+        "outputValue": "\"deterministic native child\"",
+        "outputValueTruncated": false
+      },
+      "attention": {
+        "waiting": {
+          "label": "Task attention",
+          "text": "Attention\n1\n1 native item\n\nNative approvals remain above the composer; task and Run updates resolve this list.\n\nWorkflow gate · accept-native-finding\napproval required for `accept-native-finding`\nwaiting gate",
+          "textTruncated": false,
+          "runLabels": [],
+          "runStatuses": [],
+          "expandedButtons": 0,
+          "collapsedButtons": 1
+        },
+        "completed": {
+          "label": "Task attention",
+          "text": "Attention\n0\nNo items need intervention\n\nNative approvals remain above the composer; task and Run updates resolve this list.\n\nEmpty — approvals, gates, effects, reconciliation, and provider state are clear.",
+          "textTruncated": false,
+          "runLabels": [],
+          "runStatuses": [],
+          "expandedButtons": 0,
+          "collapsedButtons": 0
+        }
+      },
+      "evidence": {
+        "before": {
+          "exposed": true,
+          "stepId": "verify-native-repository",
+          "evidenceName": "verify-native-repository-1.json",
+          "evidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+          "displayedEvidenceIdPrefix": "baa13f55437f",
+          "kind": "check",
+          "provenance": "runtime_check",
+          "availability": "available",
+          "contentAbsentBeforeExpand": true,
+          "runText": "Orchestra workflow2/3 steps · approval required for `accept-native-finding`\nWaiting\n1784412563246-8d0008e1d852\nRevision 1\ninvoked\nPromotion notRequired\n\nrun complete\n\nApproval gate · accept-native-finding\ncompleted\n0 outputs\nStep · inspect-native-runtime\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n\nChild /root/orchestra_17844125632468d0008e1d852_inspect_native_runtime_r1_a1 · 019f7746-e758-7742-80a1-9a6188e88ef4\n\nfinding\n28 bytes\n\"deterministic native child\"\nStep · verify-native-repository\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\npassed\n4 bytes\ntrue\nverify-native-repository-1.json\ncheck\nruntime check\navailable\nEvidence identity: baa13f55437f\nid baa13f55437f\n171 bytes\nruntime-reported sha256 cf958686c20535f35505296310a48694fa811cb5d0281b6f340600b464bdd17b\nRecovery and decision history",
+          "runTextTruncated": false
+        },
+        "after": {
+          "expanded": true,
+          "contentState": "text",
+          "stepId": "verify-native-repository",
+          "evidenceName": "verify-native-repository-1.json",
+          "evidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+          "displayedEvidenceIdPrefix": "baa13f55437f",
+          "expectedEvidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+          "kind": "check",
+          "provenance": "runtime_check",
+          "availability": "available",
+          "content": {
+            "argv": ["git", "rev-parse", "--is-inside-work-tree"],
+            "cwd": null,
+            "timeout_ms": 120000,
+            "exit_code": 0,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "runText": "Orchestra workflow2/3 steps · approval required for `accept-native-finding`\nWaiting\n1784412563246-8d0008e1d852\nRevision 1\ninvoked\nPromotion notRequired\n\nrun complete\n\nApproval gate · accept-native-finding\ncompleted\n0 outputs\nStep · inspect-native-runtime\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n\nChild /root/orchestra_17844125632468d0008e1d852_inspect_native_runtime_r1_a1 · 019f7746-e758-7742-80a1-9a6188e88ef4\n\nfinding\n28 bytes\n\"deterministic native child\"\nStep · verify-native-repository\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\npassed\n4 bytes\ntrue\nverify-native-repository-1.json\ncheck\nruntime check\navailable\nEvidence identity: baa13f55437f\nid baa13f55437f\n171 bytes\nruntime-reported sha256 cf958686c20535f35505296310a48694fa811cb5d0281b6f340600b464bdd17b\n\nPlain-text preview · extension-declared application/json\n\n{\n  \"argv\": [\n    \"git\",\n    \"rev-parse\",\n    \"--is-inside-work-tree\"\n  ],\n  \"cwd\": null,\n  \"timeout_ms\": 120000,\n  \"exit_code\": 0,\n  \"stdout\": \"true\\n\",\n  \"stderr\": \"\"\n}\n\nRecovery and decision history",
+          "runTextTruncated": false
+        }
+      },
+      "symphony": {
+        "validation": {
+          "valid": true,
+          "profilePath": "WORKFLOW.md",
+          "text": "Symphony automation\nidle\n\nTask-scoped native automation for Native Browser acceptance. Run state is reloaded from Codex after renderer or host restarts.\n\nConfiguration and profile validation\nProfile path\n\nResolved inside the task repository by Codex. Paths outside the repository are rejected.\n\nPreview issue\nIssue state\nIssue labels\nAttempt\nExisting root Run\nReattach\n\nReloads the bounded native projection for this task; child histories remain in their Codex tasks.\n\nProfile is valid\nnative-symphony-dogfood\nDigest fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nWORKFLOW INPUTS\nautomation · object · required\nissue · object · required\ntask_prompt · string · required\nSECRET REFERENCES\nenvironment ORCHESTRA_NATIVE_DOGFOOD_LINEAR_API_KEY digest bfda1aa284a5494185c6845d96cea764e1558c978455c84b864fead9794043e3\ntracker.api_key tracker credential is unavailable; fixture validation remains available but live Linear reads will be skipped\nRENDERED TASK PROMPT\nImplement DOGFOOD-1: Native Browser acceptance\n\nWork only on the claimed acceptance issue and return bounded verification evidence.\nCanonical profile\nRead active Linear\nRead terminal Linear\nRefresh issue\nStart automation\nValidate and preview",
+          "textTruncated": false
+        },
+        "started": {
+          "alert": "re-resolve the referenced Linear credential, then retry",
+          "issueRowCount": 0,
+          "runId": "automation-1784412563728-fdb5fa98ed0d",
+          "text": "orchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work",
+          "textTruncated": false,
+          "workspaceText": "Symphony automation\nidle\n\nTask-scoped native automation for Native Browser acceptance. Run state is reloaded from Codex after renderer or host restarts.\n\nStart accepted native Run revision 2 under lease 0.\nConfiguration and profile validation\norchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work\n\nIssues\nActivity\nRecovery\nEvents\nqueued 0\nrunning 0\nblocked 0\nwaiting gate 0\nhandoff 0\nterminal 0\nIssue\tTracker state\tExecution\tPriority\tAttempt\tTask / Workflow\tLast activity\n\nNo issues are present in this bounded native snapshot.\n\nSelect an issue to inspect its durable task, workflow, effects, hooks, and next action.\nRead active Linear\nRead terminal Linear\nRefresh issue\nPause\nInspect\nRefresh\nCancel run\nValidate and preview"
+        },
+        "inspected": {
+          "runId": "automation-1784412563728-fdb5fa98ed0d",
+          "status": "running",
+          "instanceCount": 1,
+          "totalRootCount": 1,
+          "text": "orchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work",
+          "textTruncated": false
+        },
+        "sameRootAfterInspect": true,
+        "issueChildFabricated": false
+      },
+      "reload": {
+        "workflow": {
+          "label": "Task Workflow Runs",
+          "text": "1 native Run · detail loads on request\nOrchestra workflow3/3 steps · run complete\nCompleted\naccept-native-finding · completed\ninspect-native-runtime · completed\nverify-native-repository · completed",
+          "textTruncated": false,
+          "runLabels": ["Workflow run 1784412563246-8d0008e1d852"],
+          "runStatuses": ["completed"],
+          "expandedButtons": 0,
+          "collapsedButtons": 1
+        },
+        "evidence": {
+          "expanded": true,
+          "contentState": "text",
+          "stepId": "verify-native-repository",
+          "evidenceName": "verify-native-repository-1.json",
+          "evidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+          "displayedEvidenceIdPrefix": "baa13f55437f",
+          "expectedEvidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+          "kind": "check",
+          "provenance": "runtime_check",
+          "availability": "available",
+          "content": {
+            "argv": ["git", "rev-parse", "--is-inside-work-tree"],
+            "cwd": null,
+            "timeout_ms": 120000,
+            "exit_code": 0,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "runText": "Orchestra workflow2/3 steps · approval required for `accept-native-finding`\nWaiting\n1784412563246-8d0008e1d852\nRevision 1\ninvoked\nPromotion notRequired\n\nrun complete\n\nApproval gate · accept-native-finding\ncompleted\n0 outputs\nStep · inspect-native-runtime\ncompleted\n1 outputs\nStep · verify-native-repository\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\npassed\n4 bytes\ntrue\nverify-native-repository-1.json\ncheck\nruntime check\navailable\nEvidence identity: baa13f55437f\nid baa13f55437f\n171 bytes\nruntime-reported sha256 cf958686c20535f35505296310a48694fa811cb5d0281b6f340600b464bdd17b\n\nPlain-text preview · extension-declared application/json\n\n{\n  \"argv\": [\n    \"git\",\n    \"rev-parse\",\n    \"--is-inside-work-tree\"\n  ],\n  \"cwd\": null,\n  \"timeout_ms\": 120000,\n  \"exit_code\": 0,\n  \"stdout\": \"true\\n\",\n  \"stderr\": \"\"\n}\n\nRecovery and decision history",
+          "runTextTruncated": false
+        },
+        "symphony": {
+          "runId": "automation-1784412563728-fdb5fa98ed0d",
+          "status": "running",
+          "instanceCount": 1,
+          "totalRootCount": 1,
+          "text": "orchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work",
+          "textTruncated": false
+        },
+        "sameWorkflowRun": true,
+        "sameSymphonyRoot": true
+      },
+      "restart": {
+        "stop": {
+          "command": {
+            "type": "thread.session.stop",
+            "commandId": "cmd-native-provider-restart-stop",
+            "threadId": "thread-native-shell-acceptance"
+          },
+          "receiptSequence": 28,
+          "sessionEventSequence": 29,
+          "thread": {
+            "snapshotSequence": 30,
+            "session": {
+              "status": "stopped",
+              "providerName": "codex",
+              "providerInstanceId": "codex",
+              "runtimeMode": "full-access",
+              "activeTurnId": null,
+              "hasLastError": false,
+              "updatedAt": "2026-07-18T22:09:24.078Z"
+            }
+          },
+          "responsesRequestCount": 5
+        },
+        "recovery": {
+          "trigger": "Symphony Inspect / automation.status",
+          "sessionEventSequence": 34,
+          "thread": {
+            "snapshotSequence": 34,
+            "session": {
+              "status": "ready",
+              "providerName": "codex",
+              "providerInstanceId": "codex",
+              "runtimeMode": "full-access",
+              "activeTurnId": null,
+              "hasLastError": false,
+              "updatedAt": "2026-07-18T22:09:24.192Z"
+            }
+          },
+          "typedSymphonyStatus": {
+            "runId": "automation-1784412563728-fdb5fa98ed0d",
+            "status": "running"
+          },
+          "workflow": {
+            "label": "Task Workflow Runs",
+            "text": "1 native Run · detail loads on request\nOrchestra workflow3/3 steps · run complete\nCompleted\naccept-native-finding · completed\ninspect-native-runtime · completed\nverify-native-repository · completed",
+            "textTruncated": false,
+            "runLabels": ["Workflow run 1784412563246-8d0008e1d852"],
+            "runStatuses": ["completed"],
+            "expandedButtons": 0,
+            "collapsedButtons": 1
+          },
+          "evidence": {
+            "expanded": true,
+            "contentState": "text",
+            "stepId": "verify-native-repository",
+            "evidenceName": "verify-native-repository-1.json",
+            "evidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+            "displayedEvidenceIdPrefix": "baa13f55437f",
+            "expectedEvidenceId": "baa13f55437f8d1577dc32a5f7c7c00c36a9067935328026a6bbdd4d2eb7b249",
+            "kind": "check",
+            "provenance": "runtime_check",
+            "availability": "available",
+            "content": {
+              "argv": ["git", "rev-parse", "--is-inside-work-tree"],
+              "cwd": null,
+              "timeout_ms": 120000,
+              "exit_code": 0,
+              "stdout": "true\n",
+              "stderr": ""
+            },
+            "runText": "Orchestra workflow3/3 steps · run complete\nCompleted\n1784412563246-8d0008e1d852\nRevision 2\nresumed\nPromotion notRequired\n\nrun complete\n\nApproval gate · accept-native-finding\ncompleted\n0 outputs\nStep · inspect-native-runtime\ncompleted\n1 outputs\nStep · verify-native-repository\ncompleted\n1 outputs\n1 attempts\n1 rounds\nctx e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\npassed\n4 bytes\ntrue\nverify-native-repository-1.json\ncheck\nruntime check\navailable\nEvidence identity: baa13f55437f\nid baa13f55437f\n171 bytes\nruntime-reported sha256 cf958686c20535f35505296310a48694fa811cb5d0281b6f340600b464bdd17b\n\nPlain-text preview · extension-declared application/json\n\n{\n  \"argv\": [\n    \"git\",\n    \"rev-parse\",\n    \"--is-inside-work-tree\"\n  ],\n  \"cwd\": null,\n  \"timeout_ms\": 120000,\n  \"exit_code\": 0,\n  \"stdout\": \"true\\n\",\n  \"stderr\": \"\"\n}\n\nRecovery and decision history",
+            "runTextTruncated": false
+          },
+          "symphony": {
+            "runId": "automation-1784412563728-fdb5fa98ed0d",
+            "status": "running",
+            "instanceCount": 1,
+            "totalRootCount": 1,
+            "text": "orchestra-native-dogfood · Symphony\nrunning\nreconciliation complete\nRoot Run automation-1784412563728-fdb5fa98ed0d\n0 running\n0 queued\n0 waiting\n0 blocked\nOwner task 019f7746-e6bc-78a3-a8d6-34edf15496aa\nSource 1f242fa66d6cea16e4969e0cfe96ddaf6eb3849d\nProfile r1 · active · fdb5fa98ed0dbcc86a7c7fda080c4b68df20f1e57bd2829fbab0b0b8c9bcb120\nLease 0 · revision 2\n\ntracker intake skipped; preserve cursor and retained work\n\nCoordination\nskipped\ncycle 1\nscan revision 0\nstart → complete\nre-resolve the referenced Linear credential, then retry\n\ntracker intake skipped; preserve cursor and retained work",
+            "textTruncated": false
+          },
+          "responsesRequestCount": 5
+        },
+        "sameWorkflowRun": true,
+        "sameSymphonyRoot": true,
+        "sameSymphonyStatus": true
+      }
+    },
     "navigation": [
       {
         "action": "navigate-page-a",
@@ -401,7 +1814,7 @@
         },
         "observed": {
           "heading": "Native guest page A",
-          "href": "http://127.0.0.1:64605/a",
+          "href": "http://127.0.0.1:55128/a",
           "identity": "deterministic-native-guest-a",
           "loadCount": 1,
           "mutation": "not-mutated",
@@ -409,8 +1822,8 @@
           "requireType": "undefined",
           "title": "Native Guest A",
           "viewport": {
-            "height": 688,
-            "width": 539
+            "height": 800,
+            "width": 1280
           }
         },
         "passed": true
@@ -424,7 +1837,7 @@
         },
         "observed": {
           "heading": "Native guest page B",
-          "href": "http://127.0.0.1:64605/b",
+          "href": "http://127.0.0.1:55128/b",
           "identity": "deterministic-native-guest-b",
           "loadCount": 1,
           "mutation": "not-mutated",
@@ -447,7 +1860,7 @@
         },
         "observed": {
           "heading": "Native guest page A",
-          "href": "http://127.0.0.1:64605/a",
+          "href": "http://127.0.0.1:55128/a",
           "identity": "deterministic-native-guest-a",
           "loadCount": 2,
           "mutation": "not-mutated",
@@ -470,7 +1883,7 @@
         },
         "observed": {
           "heading": "Native guest page B",
-          "href": "http://127.0.0.1:64605/b",
+          "href": "http://127.0.0.1:55128/b",
           "identity": "deterministic-native-guest-b",
           "loadCount": 2,
           "mutation": "not-mutated",
@@ -494,7 +1907,7 @@
         },
         "observed": {
           "heading": "Native guest page A",
-          "href": "http://127.0.0.1:64605/a",
+          "href": "http://127.0.0.1:55128/a",
           "identity": "deterministic-native-guest-a",
           "loadCount": 4,
           "mutation": "not-mutated",
@@ -514,8 +1927,8 @@
           "rendererFailureVisible": true
         },
         "observed": {
-          "requestedUrl": "http://127.0.0.1:64606/unreachable",
-          "guestUrl": "http://127.0.0.1:64606/unreachable",
+          "requestedUrl": "http://127.0.0.1:55129/unreachable",
+          "guestUrl": "http://127.0.0.1:55129/unreachable",
           "rendererFailureVisible": true
         },
         "passed": true
@@ -529,7 +1942,7 @@
         },
         "observed": {
           "heading": "Native guest page A",
-          "href": "http://127.0.0.1:64605/a",
+          "href": "http://127.0.0.1:55128/a",
           "identity": "deterministic-native-guest-a",
           "loadCount": 5,
           "mutation": "not-mutated",
@@ -549,9 +1962,50 @@
       "processGroupEmpty": true
     }
   },
-  "humanReview": {
+  "agentReview": {
     "status": "observed",
-    "reviewedAt": "2026-07-18T13:24:11.000Z",
-    "notes": "Directly inspected both real Electron captures. The native project, task, tabs, truthful unauthenticated recovery card, and composer are visible in both layouts. The wide layout shows the real production webview and guest page; the narrow layout keeps the Browser disclosure reachable without visible clipping. Fresh dynamic loopback ports account for allowed wide-image variability between runs."
+    "reviewedAt": "2026-07-18T22:10:35.000Z",
+    "scenarios": [
+      {
+        "scenario": "native-browser-1440x900-dark",
+        "clipping": "pass",
+        "contrast": "pass",
+        "layering": "pass",
+        "drawerGeometry": "not-applicable",
+        "activeTaskContinuity": "pass",
+        "nativeSurfaceLegibility": "pass",
+        "notes": "Observed the complete dark desktop composition: the active task, completed workflow, changed-files tree, composer, browser tabs, controls, address bar, and guest webview remain legible without unintended overlap or clipping."
+      },
+      {
+        "scenario": "native-browser-1440x900-light",
+        "clipping": "pass",
+        "contrast": "pass",
+        "layering": "pass",
+        "drawerGeometry": "not-applicable",
+        "activeTaskContinuity": "pass",
+        "nativeSurfaceLegibility": "pass",
+        "notes": "Observed the complete light desktop composition: task and workflow content retain clear hierarchy and contrast while the browser surface remains fully bounded, readable, and visually distinct."
+      },
+      {
+        "scenario": "native-workspace-1024x768-dark-drawer",
+        "clipping": "pass",
+        "contrast": "pass",
+        "layering": "pass",
+        "drawerGeometry": "pass",
+        "activeTaskContinuity": "pass",
+        "nativeSurfaceLegibility": "pass",
+        "notes": "Observed the dark narrow layout: the right drawer is correctly layered and bounded, its Diff tabs and controls are legible, and the dimmed active task remains identifiable behind the overlay."
+      },
+      {
+        "scenario": "native-workspace-1024x768-light-drawer",
+        "clipping": "pass",
+        "contrast": "pass",
+        "layering": "pass",
+        "drawerGeometry": "pass",
+        "activeTaskContinuity": "pass",
+        "nativeSurfaceLegibility": "pass",
+        "notes": "Observed the light narrow layout: the drawer boundary, active Diff tab, toolbar, and empty-state message are clear, while the task sidebar and underlying workflow context preserve continuity."
+      }
+    ]
   }
 }
