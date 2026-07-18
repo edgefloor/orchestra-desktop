@@ -16,6 +16,7 @@ import {
   NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS,
   NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES,
   NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS,
+  executeNativeShellRendererStep,
   prepareNativeShellGitFixture,
   withNativeShellEventTimeout,
 } from "./capture-orchestra-native-shell.mjs";
@@ -50,6 +51,19 @@ import {
 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 
 describe("native-shell acceptance capture contract", () => {
+  it("attributes renderer script failures to a bounded native capture step", async () => {
+    const renderer = {
+      executeJavaScript: () => Promise.reject(new Error("Script failed to execute")),
+      getURL: () => `t3code://app/${"x".repeat(300)}`,
+    };
+
+    await expect(
+      executeNativeShellRendererStep(renderer, "window.fixture()", "attach guard probe"),
+    ).rejects.toThrow(
+      /^attach guard probe renderer script failed at .{1,256}: Script failed to execute$/,
+    );
+  });
+
   it("accepts assistant text only after typed deltas reach the matching terminal event", () => {
     const event = (messageId, text, streaming) => ({
       kind: "event",

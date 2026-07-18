@@ -367,6 +367,16 @@ async function waitFor(predicate, context, timeoutMs = 30_000) {
   });
 }
 
+export async function executeNativeShellRendererStep(renderer, source, context) {
+  try {
+    return await renderer.executeJavaScript(source, true);
+  } catch (error) {
+    const rendererUrl = renderer.getURL().slice(0, 256);
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${context} renderer script failed at ${rendererUrl}: ${message}`);
+  }
+}
+
 function scrubProviderCredentials(environment) {
   for (const key of Object.keys(environment)) {
     if (
@@ -1394,18 +1404,24 @@ async function runElectronChild() {
         ),
       "production preload bridge",
     );
-    await renderer.executeJavaScript(`window.desktopBridge.setTheme("dark")`, true);
-    await renderer.executeJavaScript(
+    await executeNativeShellRendererStep(
+      renderer,
+      `window.desktopBridge.setTheme("dark")`,
+      "set native capture theme",
+    );
+    await executeNativeShellRendererStep(
+      renderer,
       `(() => { const probe = document.createElement('webview'); probe.id = 'orchestra-rejected-webview-probe'; probe.setAttribute('partition', ${JSON.stringify(rejectedProbePartition)}); probe.setAttribute('src', 'data:text/html,guard-probe'); probe.style.display = 'none'; document.body.append(probe); })()`,
-      true,
+      "attach rejected webview guard probe",
     );
     rejectedAttachmentObservation = await waitFor(
       () => rejectedAttachmentObservation,
       "rejected production will-attach-webview probe",
     );
-    await renderer.executeJavaScript(
+    await executeNativeShellRendererStep(
+      renderer,
       `document.querySelector('#orchestra-rejected-webview-probe')?.remove()`,
-      true,
+      "remove rejected webview guard probe",
     );
 
     const bootstrap = await waitFor(
