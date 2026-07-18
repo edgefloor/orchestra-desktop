@@ -412,7 +412,11 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   const rootUnavailable = Boolean(errors["run:run"] || errors["steps:run"]);
 
   return (
-    <section aria-label={`Workflow run ${event.runId}`} className="rounded-md px-0.5 py-0.5">
+    <section
+      aria-label={`Workflow run ${event.runId}`}
+      className="rounded-md px-0.5 py-0.5"
+      data-workflow-run-status={nativeState}
+    >
       <div>
         <button
           type="button"
@@ -498,6 +502,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                 <div
                   key={step.id}
                   className="mt-2 rounded border border-border/45 bg-background/25"
+                  data-workflow-step-id={step.id}
                 >
                   <button
                     type="button"
@@ -531,7 +536,11 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                         ) : null}
                       </div>
                       {step.agent ? (
-                        <p className="font-mono text-[10px]">
+                        <p
+                          className="font-mono text-[10px]"
+                          data-workflow-child-task-path={step.agent.taskPath}
+                          data-workflow-child-thread-id={step.agent.threadId}
+                        >
                           Child {step.agent.taskPath} · {step.agent.threadId}
                         </p>
                       ) : null}
@@ -558,14 +567,21 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                       {outputs[step.id]?.map((output) => {
                         const value = formatBoundedOutputValue(output.value);
                         return (
-                          <div key={output.name} className="rounded border border-border/40 p-2">
+                          <div
+                            key={output.name}
+                            className="rounded border border-border/40 p-2"
+                            data-workflow-output-name={output.name}
+                          >
                             <div className="flex items-center gap-1.5 text-foreground/75">
                               <FileKeyIcon className="size-3" />
                               <span className="font-medium">{output.name}</span>
                               <span>{output.canonicalBytes} bytes</span>
                             </div>
                             {value ? (
-                              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-[10px]">
+                              <pre
+                                className="mt-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-[10px]"
+                                data-workflow-output-value
+                              >
                                 {value}
                               </pre>
                             ) : (
@@ -587,6 +603,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                         return (
                           <div
                             className="rounded border border-border/40 p-2"
+                            data-workflow-evidence-name={item.name}
                             key={item.evidenceId}
                           >
                             <button

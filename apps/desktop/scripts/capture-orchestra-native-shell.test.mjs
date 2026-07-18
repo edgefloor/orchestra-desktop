@@ -578,6 +578,28 @@ describe("native-shell acceptance capture contract", () => {
     expect(captureSource).not.toContain('aria-label="Evidence identity"');
   });
 
+  it("observes workflow projections through one shared structural step boundary", async () => {
+    const captureSource = await NodeFSP.readFile(
+      NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),
+      "utf8",
+    );
+    const helperStart = captureSource.indexOf("async function observeExpandedWorkflowStep");
+    const helperEnd = captureSource.indexOf(
+      "async function observeActiveRightPanelSurface",
+      helperStart,
+    );
+    const workflowObserverSource = captureSource.slice(helperStart, helperEnd);
+
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    expect(workflowObserverSource).toContain("[data-workflow-step-id=");
+    expect(workflowObserverSource).toContain("[data-workflow-child-task-path]");
+    expect(workflowObserverSource).toContain("[data-workflow-output-name=");
+    expect(workflowObserverSource).toContain("[data-workflow-output-value]");
+    expect(workflowObserverSource).toContain("[data-workflow-evidence-name=");
+    expect(workflowObserverSource).not.toContain(".parentElement");
+  });
+
   it("opens the retained Git menu accessibly and reads only its visible structured items", async () => {
     const captureSource = await NodeFSP.readFile(
       NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),

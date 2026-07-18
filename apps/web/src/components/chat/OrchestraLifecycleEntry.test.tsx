@@ -51,6 +51,7 @@ describe("OrchestraLifecycleEntry", () => {
     );
 
     expect(markup).toContain('aria-label="Workflow run run-1"');
+    expect(markup).toContain('data-workflow-run-status="recovering"');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toMatch(/aria-controls="[^"]+-run-details"/);
     expect(markup).not.toContain('role="tree"');
@@ -72,6 +73,12 @@ describe("OrchestraLifecycleEntry", () => {
     expect(lifecycleSource).toContain("pointer-coarse:min-h-11");
     expect(lifecycleSource).toContain('role="alert"');
     expect(lifecycleSource).toContain("data-evidence-identity");
+    expect(lifecycleSource).toContain("data-workflow-step-id");
+    expect(lifecycleSource).toContain("data-workflow-child-task-path");
+    expect(lifecycleSource).toContain("data-workflow-child-thread-id");
+    expect(lifecycleSource).toContain("data-workflow-output-name");
+    expect(lifecycleSource).toContain("data-workflow-output-value");
+    expect(lifecycleSource).toContain("data-workflow-evidence-name");
   });
 
   it("renders the actual Evidence identity for sighted and assistive readers", () => {

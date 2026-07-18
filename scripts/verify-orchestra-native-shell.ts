@@ -41,6 +41,8 @@ import {
   ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID,
   ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
   ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME,
+  ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS,
+  ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS,
 } from "./lib/orchestra-native-dogfood-contract.mjs";
 
 export {
@@ -173,15 +175,18 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     ],
     "manifest.runtime.nativeDogfood.child",
   );
+  const childText = stringField(child.childText, "manifest.runtime.nativeDogfood.child.childText");
+  const childOutputValue = stringField(
+    child.outputValue,
+    "manifest.runtime.nativeDogfood.child.outputValue",
+  );
   if (
     child.stepId !== ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID ||
-    !stringField(child.childText, "manifest.runtime.nativeDogfood.child.childText").includes(
-      "Child /root/",
-    ) ||
+    !childText.startsWith("Child /root/") ||
+    childText.length > ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS ||
     child.outputName !== ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME ||
-    !stringField(child.outputValue, "manifest.runtime.nativeDogfood.child.outputValue").includes(
-      ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
-    ) ||
+    childOutputValue !== JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING) ||
+    childOutputValue.length > ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS ||
     child.childTextTruncated !== false ||
     child.outputValueTruncated !== false
   ) {

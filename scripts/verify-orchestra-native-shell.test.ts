@@ -12,6 +12,10 @@ import {
   makeNativeShellAssertion,
 } from "./lib/orchestra-native-shell-contract.mjs";
 import { sha256 } from "./lib/orchestra-evidence-primitives.mjs";
+import {
+  ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS,
+  ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS,
+} from "./lib/orchestra-native-dogfood-contract.mjs";
 
 import {
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
@@ -1034,11 +1038,33 @@ describe("Orchestra native-shell evidence verifier", () => {
   it("requires the exact bounded native child projection", async () => {
     const wrongChild = await makeFixture((manifest) => {
       const child = manifest.runtime.nativeDogfood.child as Record<string, unknown>;
-      child.outputValue = '"fabricated child"';
+      child.outputValue = '"fabricated deterministic native child suffix"';
       manifest.assertions.nativeChildProjected!.observed = child;
     });
 
     await expect(verifyOrchestraNativeShell({ rootDir: wrongChild.rootDir })).rejects.toThrow(
+      "manifest.runtime.nativeDogfood.child must contain the genuine bounded native child projection",
+    );
+
+    const oversizedChild = await makeFixture((manifest) => {
+      const child = manifest.runtime.nativeDogfood.child as Record<string, unknown>;
+      child.childText = `Child /root/${"x".repeat(ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS)}`;
+      child.childTextTruncated = false;
+      manifest.assertions.nativeChildProjected!.observed = child;
+    });
+    await expect(verifyOrchestraNativeShell({ rootDir: oversizedChild.rootDir })).rejects.toThrow(
+      "manifest.runtime.nativeDogfood.child must contain the genuine bounded native child projection",
+    );
+
+    const oversizedOutput = await makeFixture((manifest) => {
+      const child = manifest.runtime.nativeDogfood.child as Record<string, unknown>;
+      child.outputValue = `${JSON.stringify("deterministic native child")}${"x".repeat(
+        ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS,
+      )}`;
+      child.outputValueTruncated = false;
+      manifest.assertions.nativeChildProjected!.observed = child;
+    });
+    await expect(verifyOrchestraNativeShell({ rootDir: oversizedOutput.rootDir })).rejects.toThrow(
       "manifest.runtime.nativeDogfood.child must contain the genuine bounded native child projection",
     );
   });

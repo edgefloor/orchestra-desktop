@@ -65,6 +65,8 @@ import {
   ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID,
   ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
   ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME,
+  ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS,
+  ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS,
   ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT,
   ORCHESTRA_NATIVE_DOGFOOD_PARENT_PROMPT,
   ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,
@@ -1104,7 +1106,10 @@ async function observeSymphonyRoot(renderer, runId, context) {
   );
 }
 
-async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelector, context) {
+async function observeExpandedWorkflowStep(
+  renderer,
+  { workflowRunSelector, stepId, context, observationSource },
+) {
   return renderer.executeJavaScript(
     `new Promise((resolve, reject) => {
       const deadline = window.setTimeout(() => {
@@ -1122,20 +1127,43 @@ async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelec
           }
         }
         if (run.innerText.includes('Loading bounded native run tree…')) return;
-        const stepButton = [...run.querySelectorAll('button[aria-controls]')]
-          .find((button) => button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID)}));
+        const step = run.querySelector(${JSON.stringify(`[data-workflow-step-id="${stepId}"]`)});
+        if (!(step instanceof HTMLElement)) return;
+        const stepButton = step.querySelector(':scope > button[aria-controls]');
         if (!(stepButton instanceof HTMLButtonElement)) return;
         if (stepButton.getAttribute('aria-expanded') === 'false') {
           stepButton.click();
           return;
         }
-        const step = stepButton.parentElement;
-        if (!(step instanceof HTMLElement) || step.innerText.includes('Loading step outputs and evidence references…')) return;
-        const evidenceButton = [...step.querySelectorAll('button[aria-expanded]:not([aria-controls])')]
-          .find((button) => button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME)}));
-        if (!(evidenceButton instanceof HTMLButtonElement)) return;
-        const evidence = evidenceButton.parentElement;
-        if (!(evidence instanceof HTMLElement)) return;
+        if (step.innerText.includes('Loading step outputs and evidence references…')) return;
+        const observation = (() => {
+          ${observationSource}
+        })();
+        if (observation === null) return;
+        window.clearTimeout(deadline);
+        observer.disconnect();
+        resolve(observation);
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
+      complete();
+    })`,
+    true,
+  );
+}
+
+async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelector, context) {
+  return observeExpandedWorkflowStep(renderer, {
+    workflowRunSelector,
+    stepId: ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID,
+    context,
+    observationSource: `
+        const evidence = step.querySelector(${JSON.stringify(
+          `[data-workflow-evidence-name="${ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME}"]`,
+        )});
+        if (!(evidence instanceof HTMLElement)) return null;
+        const evidenceButton = evidence.querySelector(':scope > button[aria-expanded]');
+        if (!(evidenceButton instanceof HTMLButtonElement)) return null;
         const text = evidence.innerText;
         const labels = [...evidenceButton.querySelectorAll(':scope > span')]
           .map((span) => span.textContent?.trim() ?? '');
@@ -1147,9 +1175,7 @@ async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelec
         const identityPrefix = identityAttribute && visibleIdentity?.textContent?.trim() === 'id ' + identityAttribute
           ? identityAttribute
           : null;
-        window.clearTimeout(deadline);
-        observer.disconnect();
-        resolve({
+        return {
           exposed: true,
           stepId: ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID)},
           evidenceName: ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME)},
@@ -1161,105 +1187,60 @@ async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelec
           contentAbsentBeforeExpand: evidenceButton.getAttribute('aria-expanded') === 'false' && !text.includes('Plain-text preview'),
           runText: run.innerText.slice(0, 4000),
           runTextTruncated: run.innerText.length > 4000,
-        });
-      };
-      const observer = new MutationObserver(complete);
-      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
-      complete();
-    })`,
-    true,
-  );
+        };
+    `,
+  });
 }
 
 async function observeNativeChildProjection(renderer, workflowRunSelector, context) {
-  return renderer.executeJavaScript(
-    `new Promise((resolve, reject) => {
-      const deadline = window.setTimeout(() => {
-        observer.disconnect();
-        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
-      }, 45000);
-      const complete = () => {
-        const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
-        if (!(run instanceof HTMLElement)) return;
-        const runDisclosure = run.querySelector(':scope > div > button[aria-controls]');
-        if (runDisclosure instanceof HTMLButtonElement && runDisclosure.getAttribute('aria-expanded') === 'false') {
-          runDisclosure.click();
-          return;
-        }
-        if (run.innerText.includes('Loading bounded native run tree…')) return;
-        const stepButton = [...run.querySelectorAll('button[aria-controls]')]
-          .find((button) => button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID)}));
-        if (!(stepButton instanceof HTMLButtonElement)) return;
-        if (stepButton.getAttribute('aria-expanded') === 'false') {
-          stepButton.click();
-          return;
-        }
-        const step = stepButton.parentElement;
-        if (!(step instanceof HTMLElement) || step.innerText.includes('Loading step outputs and evidence references…')) return;
-        const child = [...step.querySelectorAll('p')]
-          .find((node) => node.textContent?.trim().startsWith('Child '));
-        const outputName = [...step.querySelectorAll('span')]
-          .find((node) => node.textContent?.trim() === ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME)});
-        const outputCard = outputName?.parentElement?.parentElement;
-        const outputValue = outputCard?.querySelector('pre');
-        if (!(child instanceof HTMLElement) || !(outputName instanceof HTMLElement) || !(outputValue instanceof HTMLElement)) return;
+  return observeExpandedWorkflowStep(renderer, {
+    workflowRunSelector,
+    stepId: ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID,
+    context,
+    observationSource: `
+        const child = step.querySelector('[data-workflow-child-task-path][data-workflow-child-thread-id]');
+        const output = step.querySelector(${JSON.stringify(
+          `[data-workflow-output-name="${ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME}"]`,
+        )});
+        const outputValue = output?.querySelector('[data-workflow-output-value]');
+        if (!(child instanceof HTMLElement) || !(output instanceof HTMLElement) || !(outputValue instanceof HTMLElement)) return null;
+        const childTaskPath = child.getAttribute('data-workflow-child-task-path');
+        const childThreadId = child.getAttribute('data-workflow-child-thread-id');
+        if (!childTaskPath || !childThreadId) return null;
         const childText = child.innerText;
+        if (childText.trim() !== 'Child ' + childTaskPath + ' · ' + childThreadId) return null;
         const valueText = outputValue.innerText;
-        window.clearTimeout(deadline);
-        observer.disconnect();
-        resolve({
+        return {
           stepId: ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID)},
-          childText: childText.slice(0, 1000),
-          childTextTruncated: childText.length > 1000,
-          outputName: outputName.innerText.trim(),
-          outputValue: valueText.slice(0, 4000),
-          outputValueTruncated: valueText.length > 4000,
-        });
-      };
-      const observer = new MutationObserver(complete);
-      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
-      complete();
-    })`,
-    true,
-  );
+          childText: childText.slice(0, ${ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS}),
+          childTextTruncated: childText.length > ${ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS},
+          outputName: output.getAttribute('data-workflow-output-name'),
+          outputValue: valueText.slice(0, ${ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS}),
+          outputValueTruncated: valueText.length > ${ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS},
+        };
+    `,
+  });
 }
 
 async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, context) {
-  return renderer.executeJavaScript(
-    `new Promise((resolve, reject) => {
-      const deadline = window.setTimeout(() => {
-        observer.disconnect();
-        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
-      }, 45000);
-      const complete = () => {
-        const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
-        if (!(run instanceof HTMLElement)) return;
-        const runDisclosure = run.querySelector(':scope > div > button[aria-controls]');
-        if (runDisclosure instanceof HTMLButtonElement && runDisclosure.getAttribute('aria-expanded') === 'false') {
-          runDisclosure.click();
-          return;
-        }
-        if (run.innerText.includes('Loading bounded native run tree…')) return;
-        const stepButton = [...run.querySelectorAll('button[aria-controls]')]
-          .find((button) => button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID)}));
-        if (!(stepButton instanceof HTMLButtonElement)) return;
-        if (stepButton.getAttribute('aria-expanded') === 'false') {
-          stepButton.click();
-          return;
-        }
-        const step = stepButton.parentElement;
-        if (!(step instanceof HTMLElement) || step.innerText.includes('Loading step outputs and evidence references…')) return;
-        const evidenceButton = [...step.querySelectorAll('button[aria-expanded]:not([aria-controls])')]
-          .find((button) => button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME)}));
-        if (!(evidenceButton instanceof HTMLButtonElement)) return;
+  return observeExpandedWorkflowStep(renderer, {
+    workflowRunSelector,
+    stepId: ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID,
+    context,
+    observationSource: `
+        const evidence = step.querySelector(${JSON.stringify(
+          `[data-workflow-evidence-name="${ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME}"]`,
+        )});
+        if (!(evidence instanceof HTMLElement)) return null;
+        const evidenceButton = evidence.querySelector(':scope > button[aria-expanded]');
+        if (!(evidenceButton instanceof HTMLButtonElement)) return null;
         if (evidenceButton.getAttribute('aria-expanded') === 'false') {
           evidenceButton.click();
-          return;
+          return null;
         }
-        const evidence = evidenceButton.parentElement;
-        if (!(evidence instanceof HTMLElement) || evidence.innerText.includes('Loading authorized evidence…')) return;
+        if (evidence.innerText.includes('Loading authorized evidence…')) return null;
         const preview = evidence.querySelector('pre');
-        if (!(preview instanceof HTMLElement) || !evidence.innerText.includes('Plain-text preview')) return;
+        if (!(preview instanceof HTMLElement) || !evidence.innerText.includes('Plain-text preview')) return null;
         let content;
         try {
           content = JSON.parse(preview.textContent ?? '');
@@ -1277,9 +1258,7 @@ async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, co
         const identityPrefix = identityAttribute && visibleIdentity?.textContent?.trim() === 'id ' + identityAttribute
           ? identityAttribute
           : null;
-        window.clearTimeout(deadline);
-        observer.disconnect();
-        resolve({
+        return {
           expanded: true,
           contentState: 'text',
           stepId: ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID)},
@@ -1293,14 +1272,9 @@ async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, co
           content,
           runText: run.innerText.slice(0, 4000),
           runTextTruncated: run.innerText.length > 4000,
-        });
-      };
-      const observer = new MutationObserver(complete);
-      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
-      complete();
-    })`,
-    true,
-  );
+        };
+    `,
+  });
 }
 
 async function observeActiveRightPanelSurface(renderer, expectedTitle, context) {
@@ -1473,7 +1447,6 @@ async function observeWorkspaceContext(
       const required = ${JSON.stringify(requiredTexts)}.map((text) => text.toLowerCase());
       const expectedLabels = ${JSON.stringify(expectedRunLabels)};
       const expectedStatus = ${JSON.stringify(expectedRunStatus)};
-      const statusLabels = new Set(['cancelled', 'completed', 'failed', 'paused', 'queued', 'recovering', 'running', 'unavailable', 'waiting']);
       let clicked = false;
       const deadline = window.setTimeout(() => {
         observer.disconnect();
@@ -1495,14 +1468,7 @@ async function observeWorkspaceContext(
         const runLabels = runs
           .map((run) => run.getAttribute('aria-label'))
           .filter(Boolean);
-        const runStatuses = runs.map((run) => {
-          const rootDisclosure = run.querySelector(':scope > div > button[aria-controls]');
-          if (!(rootDisclosure instanceof HTMLButtonElement)) return null;
-          return [...rootDisclosure.children]
-            .filter((child) => child instanceof HTMLElement)
-            .map((child) => child.innerText.trim().toLowerCase())
-            .find((value) => statusLabels.has(value)) ?? null;
-        });
+        const runStatuses = runs.map((run) => run.getAttribute('data-workflow-run-status'));
         if (${JSON.stringify(expectedRunCount)} !== null && runLabels.length !== ${JSON.stringify(expectedRunCount)}) return;
         if (expectedLabels !== null && JSON.stringify(runLabels) !== JSON.stringify(expectedLabels)) return;
         if (expectedStatus !== null && !runStatuses.every((status) => status === expectedStatus)) return;
@@ -2747,12 +2713,17 @@ async function runElectronChild() {
       nativeChildProjected: makeNativeShellAssertion(
         nativeDogfoodObservation.child,
         nativeDogfoodObservation.child?.stepId === ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID &&
-          nativeDogfoodObservation.child.childText.includes("Child /root/") &&
+          nativeDogfoodObservation.child.childText.startsWith("Child /root/") &&
+          nativeDogfoodObservation.child.childText.length <=
+            ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS &&
+          nativeDogfoodObservation.child.childTextTruncated === false &&
           nativeDogfoodObservation.child.outputName ===
             ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME &&
-          nativeDogfoodObservation.child.outputValue.includes(
-            ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
-          ),
+          nativeDogfoodObservation.child.outputValue ===
+            JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING) &&
+          nativeDogfoodObservation.child.outputValue.length <=
+            ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS &&
+          nativeDogfoodObservation.child.outputValueTruncated === false,
       ),
       nativeWorkflowLifecycleRendered: makeNativeShellAssertion(
         nativeDogfoodObservation.workflow,

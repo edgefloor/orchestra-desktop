@@ -17,6 +17,8 @@ export const ORCHESTRA_NATIVE_DOGFOOD_MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID = "verify-native-repository";
 export const ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID = "inspect-native-runtime";
 export const ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME = "finding";
+export const ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS = 1_000;
+export const ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS = 4_000;
 export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME = `${ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID}-1.json`;
 export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH = `checks/${ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME}`;
 export const ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT =
@@ -431,8 +433,10 @@ function assertWaitingOutcome(outcome) {
     checkpoint.status !== "waiting_approval" ||
     !step ||
     step.status !== "completed" ||
-    step.outputs?.finding !== ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING ||
-    finalResponse?.finding !== ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING
+    step.outputs?.[ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME] !==
+      ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING ||
+    finalResponse?.[ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME] !==
+      ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING
   ) {
     contractError(
       "workflow_projection_mismatch",
@@ -549,8 +553,10 @@ function assertCompletedOutcome(outcome, runId) {
     checkStep?.status !== "completed" ||
     approvalStep?.status !== "completed" ||
     approvalStep.approval_decision !== "accept" ||
-    agentStep.outputs?.finding !== ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING ||
-    finalResponse?.finding !== ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING
+    agentStep.outputs?.[ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME] !==
+      ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING ||
+    finalResponse?.[ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME] !==
+      ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING
   ) {
     contractError(
       "resume_projection_mismatch",
