@@ -11,6 +11,9 @@ import * as Stream from "effect/Stream";
 
 import {
   accumulateNativeShellAssistantMessage,
+  NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS,
+  NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES,
+  NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS,
   withNativeShellEventTimeout,
 } from "./capture-orchestra-native-shell.mjs";
 
@@ -86,6 +89,71 @@ describe("native-shell acceptance capture contract", () => {
       text: "Native workflow is waiting for approval.",
     });
     expect(state.has("assistant:waiting")).toBe(false);
+  });
+
+  it("rejects extra assistant content and fails closed on bounded reconstruction limits", () => {
+    const event = (messageId, text, streaming) => ({
+      kind: "event",
+      event: {
+        sequence: 2,
+        type: "thread.message-sent",
+        payload: { messageId, role: "assistant", text, streaming },
+      },
+    });
+    const expectedText = "Native workflow is waiting for approval.";
+    let state = new Map();
+    let output;
+
+    [state] = accumulateNativeShellAssistantMessage(
+      state,
+      event("assistant:extra", `${expectedText} extra`, true),
+      expectedText,
+    );
+    [state, output] = accumulateNativeShellAssistantMessage(
+      state,
+      event("assistant:extra", "", false),
+      expectedText,
+    );
+    expect(output).toEqual([]);
+    expect(state.has("assistant:extra")).toBe(false);
+
+    expect(() =>
+      accumulateNativeShellAssistantMessage(
+        new Map(),
+        event(
+          "assistant:oversized",
+          "x".repeat(NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS + 1),
+          true,
+        ),
+        expectedText,
+      ),
+    ).toThrow(`exceeded ${NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS} characters`);
+
+    state = new Map(
+      Array.from({ length: NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES }, (_, index) => [
+        `assistant:pending:${index}`,
+        "x",
+      ]),
+    );
+    expect(() =>
+      accumulateNativeShellAssistantMessage(
+        state,
+        event("assistant:pending:overflow", "x", true),
+        expectedText,
+      ),
+    ).toThrow(`exceeded ${NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES} pending messages`);
+
+    state = new Map([
+      ["assistant:total:a", "x".repeat(NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS)],
+      ["assistant:total:b", "x".repeat(NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS)],
+    ]);
+    expect(() =>
+      accumulateNativeShellAssistantMessage(
+        state,
+        event("assistant:total:overflow", "x", true),
+        expectedText,
+      ),
+    ).toThrow(`exceeded ${NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS} accumulated characters`);
   });
 
   it.effect("emits only the reconstructed terminal assistant event from the typed stream", () => {

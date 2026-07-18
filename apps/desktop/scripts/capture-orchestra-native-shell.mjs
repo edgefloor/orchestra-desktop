@@ -666,6 +666,10 @@ export function withNativeShellEventTimeout(effect, context, duration = "45 seco
   );
 }
 
+export const NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES = 16;
+export const NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS = 24_000;
+export const NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS = 48_000;
+
 export function accumulateNativeShellAssistantMessage(textByMessageId, item, expectedText) {
   const event = item.kind === "event" ? item.event : null;
   if (event?.type !== "thread.message-sent" || event.payload.role !== "assistant") {
@@ -673,14 +677,39 @@ export function accumulateNativeShellAssistantMessage(textByMessageId, item, exp
   }
 
   const nextTextByMessageId = new Map(textByMessageId);
-  const accumulatedText = `${nextTextByMessageId.get(event.payload.messageId) ?? ""}${event.payload.text}`;
+  const existingText = nextTextByMessageId.get(event.payload.messageId) ?? "";
+  const accumulatedText = `${existingText}${event.payload.text}`;
+  if (accumulatedText.length > NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS) {
+    throw new Error(
+      `typed assistant message ${event.payload.messageId} exceeded ${NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS} characters`,
+    );
+  }
   if (event.payload.streaming) {
+    if (
+      !nextTextByMessageId.has(event.payload.messageId) &&
+      nextTextByMessageId.size >= NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES
+    ) {
+      throw new Error(
+        `typed assistant stream exceeded ${NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES} pending messages`,
+      );
+    }
+    const retainedCharacterCount = [...nextTextByMessageId.values()].reduce(
+      (total, text) => total + text.length,
+      0,
+    );
+    const nextCharacterCount =
+      retainedCharacterCount - existingText.length + accumulatedText.length;
+    if (nextCharacterCount > NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS) {
+      throw new Error(
+        `typed assistant stream exceeded ${NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS} accumulated characters`,
+      );
+    }
     nextTextByMessageId.set(event.payload.messageId, accumulatedText);
     return [nextTextByMessageId, []];
   }
 
   nextTextByMessageId.delete(event.payload.messageId);
-  if (!accumulatedText.includes(expectedText)) {
+  if (accumulatedText !== expectedText) {
     return [nextTextByMessageId, []];
   }
   return [
