@@ -20,7 +20,9 @@ import {
   isExactNativeDogfoodResponseCount,
   isNarrowDrawerOpenedObservation,
   isNativeEvidenceObservation,
+  isNativeGitCheckEvidenceObservation,
   isNativeWorkflowLifecycleObservation,
+  isUniqueNativeSymphonyInspection,
   type NativeShellScenario,
   ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY,
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
@@ -178,6 +180,11 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
   }
   const evidence = record(dogfood.evidence, "manifest.runtime.nativeDogfood.evidence");
   const expandedEvidence = record(evidence.after, "manifest.runtime.nativeDogfood.evidence.after");
+  if (!isNativeGitCheckEvidenceObservation(expandedEvidence)) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.evidence.after must prove the exact verify-native-repository check",
+    );
+  }
   const expandedRunText = stringField(
     expandedEvidence.runText,
     "manifest.runtime.nativeDogfood.evidence.after.runText",
@@ -208,6 +215,10 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     symphonyStarted.text,
     "manifest.runtime.nativeDogfood.symphony.started.text",
   ).toLowerCase();
+  const symphonyInspected = record(
+    symphony.inspected,
+    "manifest.runtime.nativeDogfood.symphony.inspected",
+  );
   if (
     symphonyValidation.valid !== true ||
     !stringField(
@@ -218,7 +229,8 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     !symphonyText.includes("skipped") ||
     symphonyStarted.issueRowCount !== 0 ||
     symphony.issueChildFabricated !== false ||
-    symphony.sameRootAfterInspect !== true
+    symphony.sameRootAfterInspect !== true ||
+    !isUniqueNativeSymphonyInspection(symphonyStarted, symphonyInspected)
   ) {
     throw new Error(
       "manifest.runtime.nativeDogfood.symphony must prove one running skipped-intake Root with no Issue child",
@@ -236,8 +248,8 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     reloadRunLabels.length !== 1 ||
     reloadRunLabels[0] !== workflowRunLabel ||
     reloadSymphony.runId !== symphonyRunId ||
-    reloadSymphony.instanceCount !== 1 ||
-    !isNativeEvidenceObservation(reload.evidence)
+    !isUniqueNativeSymphonyInspection(symphonyStarted, reloadSymphony) ||
+    !isNativeGitCheckEvidenceObservation(reload.evidence)
   ) {
     throw new Error(
       "manifest.runtime.nativeDogfood.reload must recover the same Run, Evidence, and Root",
@@ -281,11 +293,11 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     typedSymphony.runId !== symphonyRunId ||
     typedSymphony.status !== "running" ||
     restartSymphony.runId !== symphonyRunId ||
-    restartSymphony.instanceCount !== 1 ||
+    !isUniqueNativeSymphonyInspection(symphonyStarted, restartSymphony) ||
     !Array.isArray(restartRunLabels) ||
     restartRunLabels.length !== 1 ||
     restartRunLabels[0] !== workflowRunLabel ||
-    !isNativeEvidenceObservation(recovery.evidence) ||
+    !isNativeGitCheckEvidenceObservation(recovery.evidence) ||
     restart.sameWorkflowRun !== true ||
     restart.sameSymphonyRoot !== true ||
     restart.sameSymphonyStatus !== true
@@ -301,10 +313,14 @@ export async function verifyOrchestraNativeShell(
   options: {
     readonly rootDir?: string;
     readonly manifestPath?: string;
+    readonly productPinsPath?: string;
   } = {},
 ): Promise<void> {
   const rootDir = NodePath.resolve(options.rootDir ?? DEFAULT_ROOT);
   const manifestPath = NodePath.resolve(rootDir, options.manifestPath ?? DEFAULT_MANIFEST);
+  const productPinsPath = NodePath.resolve(
+    options.productPinsPath ?? NodePath.join(rootDir, "..", "orchestra", "product", "pins.toml"),
+  );
   const manifest = JSON.parse(await NodeFSP.readFile(manifestPath, "utf8")) as unknown;
 
   requireFields(
@@ -403,6 +419,12 @@ export async function verifyOrchestraNativeShell(
   );
   const product = typedManifest.product as Record<string, unknown>;
   const pinsToml = stringField(product.pinsToml, "manifest.product.pinsToml");
+  const trustedPinsToml = await NodeFSP.readFile(productPinsPath);
+  if (!Buffer.from(pinsToml, "utf8").equals(trustedPinsToml)) {
+    throw new Error(
+      `manifest.product.pinsToml must exactly match trusted standalone Product pins at ${productPinsPath}`,
+    );
+  }
   requireSha256(product.pinsSha256, "manifest.product.pinsSha256");
   if (sha256(Buffer.from(pinsToml, "utf8")) !== product.pinsSha256) {
     throw new Error("manifest.product.pinsSha256 does not match manifest.product.pinsToml");

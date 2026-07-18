@@ -19,11 +19,26 @@ import {
   ORCHESTRA_NATIVE_SHELL_SCREENSHOT_NAMES,
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
   readNativeShellPngDimensions,
-  verifyOrchestraNativeShell,
+  verifyOrchestraNativeShell as verifyOrchestraNativeShellImplementation,
 } from "./verify-orchestra-native-shell.ts";
 
 const temporaryRoots: string[] = [];
 const acceptanceDirectory = "docs/acceptance/orchestra-native-shell";
+
+function fixtureProductPinsPath(rootDir: string): string {
+  return NodePath.join(rootDir, "product", "pins.toml");
+}
+
+function verifyOrchestraNativeShell(options: {
+  readonly rootDir: string;
+  readonly manifestPath?: string;
+  readonly productPinsPath?: string;
+}): Promise<void> {
+  return verifyOrchestraNativeShellImplementation({
+    ...options,
+    productPinsPath: options.productPinsPath ?? fixtureProductPinsPath(options.rootDir),
+  });
+}
 
 type MutableManifest = {
   schemaVersion: number;
@@ -300,6 +315,8 @@ async function makeFixture(
     `issue_format = ${JSON.stringify(unsignedReleaseManifest.evaluator.issueFormat)}`,
     "",
   ].join("\n");
+  await NodeFSP.mkdir(NodePath.dirname(fixtureProductPinsPath(rootDir)), { recursive: true });
+  await NodeFSP.writeFile(fixtureProductPinsPath(rootDir), pinsToml);
   const workflowWaiting = {
     label: "Task Workflow Runs",
     text: "Waiting",
@@ -317,8 +334,23 @@ async function makeFixture(
   const evidence = {
     before: { exposed: true, contentAbsentBeforeExpand: true },
     after: {
+      stepId: "verify-native-repository",
+      evidenceName: "verify-native-repository-1.json",
+      evidenceId: sha256(Buffer.from("checks/verify-native-repository-1.json")),
+      displayedEvidenceIdPrefix: sha256(
+        Buffer.from("checks/verify-native-repository-1.json"),
+      ).slice(0, 12),
+      kind: "check",
+      provenance: "runtime_check",
+      availability: "available",
       expanded: true,
       contentState: "text",
+      content: {
+        argv: ["git", "rev-parse", "--is-inside-work-tree"],
+        exit_code: 0,
+        stdout: "true\n",
+        stderr: "",
+      },
       runText: "Child /root/child deterministic native child Plain-text preview",
     },
   };
@@ -332,7 +364,7 @@ async function makeFixture(
       text: "running with skipped intake",
       issueRowCount: 0,
     },
-    inspected: { runId: "automation-cycle8", instanceCount: 1 },
+    inspected: { runId: "automation-cycle8", instanceCount: 1, totalRootCount: 1 },
     sameRootAfterInspect: true,
     issueChildFabricated: false,
   };
@@ -347,8 +379,8 @@ async function makeFixture(
   };
   const reload = {
     workflow: workflowCompleted,
-    evidence,
-    symphony: { runId: "automation-cycle8", instanceCount: 1 },
+    evidence: structuredClone(evidence.after),
+    symphony: { runId: "automation-cycle8", instanceCount: 1, totalRootCount: 1 },
     sameWorkflowRun: true,
     sameSymphonyRoot: true,
   };
@@ -360,9 +392,9 @@ async function makeFixture(
     recovery: {
       thread: { session: { status: "ready" } },
       typedSymphonyStatus: { runId: "automation-cycle8", status: "running" },
-      symphony: { runId: "automation-cycle8", instanceCount: 1 },
+      symphony: { runId: "automation-cycle8", instanceCount: 1, totalRootCount: 1 },
       workflow: workflowCompleted,
-      evidence,
+      evidence: structuredClone(evidence.after),
       responsesRequestCount: 5,
     },
     sameWorkflowRun: true,
@@ -809,17 +841,22 @@ describe("Orchestra native-shell evidence verifier", () => {
       "manifest.product.pinsSha256 does not match manifest.product.pinsToml",
     );
 
-    const wrongPinnedRepository = await makeFixture((manifest) => {
+    const substitutedPins = await makeFixture((manifest) => {
       manifest.product.pinsToml = manifest.product.pinsToml.replace(
         "https://github.com/oven-sh/bun.git",
         "https://example.invalid/bun.git",
       );
       manifest.product.pinsSha256 = sha256(Buffer.from(manifest.product.pinsToml));
+      const releaseManifest = manifest.product.releaseManifest;
+      const sources = releaseManifest.sources as Record<string, unknown>;
+      sources.bun_repository = "https://example.invalid/bun.git";
+      const { manifestSha256: _previousDigest, ...unsignedReleaseManifest } = releaseManifest;
+      const replacementDigest = sha256(Buffer.from(JSON.stringify(unsignedReleaseManifest)));
+      releaseManifest.manifestSha256 = replacementDigest;
+      manifest.product.manifestSha256 = replacementDigest;
     });
-    await expect(
-      verifyOrchestraNativeShell({ rootDir: wrongPinnedRepository.rootDir }),
-    ).rejects.toThrow(
-      "manifest.product.pinsToml sources.bun_repository does not match the Product manifest",
+    await expect(verifyOrchestraNativeShell({ rootDir: substitutedPins.rootDir })).rejects.toThrow(
+      "manifest.product.pinsToml must exactly match trusted standalone Product pins",
     );
   });
 
@@ -871,6 +908,95 @@ describe("Orchestra native-shell evidence verifier", () => {
       verifyOrchestraNativeShell({ rootDir: falseRetainedProbe.rootDir }),
     ).rejects.toThrow(
       "manifest.assertions.retainedDesktopCapabilitiesProbed observed value contradicts passed:true",
+    );
+  });
+
+  it("requires the exact git check Evidence initially and after reload and restart", async () => {
+    const wrongInitialEvidence = await makeFixture((manifest) => {
+      const dogfood = manifest.runtime.nativeDogfood;
+      const evidence = dogfood.evidence as { after: Record<string, unknown> };
+      evidence.after.evidenceId = "f".repeat(64);
+      manifest.assertions.nativeChildProjected!.observed = evidence.after;
+      manifest.assertions.nativeEvidenceLazyExpanded!.observed = evidence;
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: wrongInitialEvidence.rootDir }),
+    ).rejects.toThrow(
+      "manifest.runtime.nativeDogfood.evidence.after must prove the exact verify-native-repository check",
+    );
+
+    const wrongReloadEvidence = await makeFixture((manifest) => {
+      const dogfood = manifest.runtime.nativeDogfood;
+      const reload = dogfood.reload as { evidence: { content: Record<string, unknown> } };
+      reload.evidence.content.stdout = "false\n";
+      manifest.assertions.nativeDogfoodIdentityRecovered!.observed = {
+        workflow: dogfood.workflow,
+        symphony: dogfood.symphony,
+        reload,
+      };
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: wrongReloadEvidence.rootDir }),
+    ).rejects.toThrow(
+      "manifest.runtime.nativeDogfood.reload must recover the same Run, Evidence, and Root",
+    );
+
+    const wrongRestartEvidence = await makeFixture((manifest) => {
+      const dogfood = manifest.runtime.nativeDogfood;
+      const restart = dogfood.restart as {
+        recovery: { evidence: { content: Record<string, unknown> } };
+      };
+      restart.recovery.evidence.content.exit_code = 1;
+      manifest.assertions.nativeDogfoodProviderRestartRecovered!.observed = restart;
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: wrongRestartEvidence.rootDir }),
+    ).rejects.toThrow(
+      "manifest.runtime.nativeDogfood.restart must recover the same Run, Evidence, and Root after a stopped/ready provider cycle",
+    );
+  });
+
+  it("rejects duplicate Symphony Roots initially and after reload and restart", async () => {
+    const duplicateInitialRoot = await makeFixture((manifest) => {
+      const dogfood = manifest.runtime.nativeDogfood;
+      const symphony = dogfood.symphony as { inspected: Record<string, unknown> };
+      symphony.inspected.totalRootCount = 2;
+      manifest.assertions.nativeSymphonySkippedIntake!.observed = symphony;
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: duplicateInitialRoot.rootDir }),
+    ).rejects.toThrow(
+      "manifest.runtime.nativeDogfood.symphony must prove one running skipped-intake Root with no Issue child",
+    );
+
+    const duplicateReloadRoot = await makeFixture((manifest) => {
+      const dogfood = manifest.runtime.nativeDogfood;
+      const reload = dogfood.reload as { symphony: Record<string, unknown> };
+      reload.symphony.instanceCount = 2;
+      manifest.assertions.nativeDogfoodIdentityRecovered!.observed = {
+        workflow: dogfood.workflow,
+        symphony: dogfood.symphony,
+        reload,
+      };
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: duplicateReloadRoot.rootDir }),
+    ).rejects.toThrow(
+      "manifest.runtime.nativeDogfood.reload must recover the same Run, Evidence, and Root",
+    );
+
+    const duplicateRestartRoot = await makeFixture((manifest) => {
+      const dogfood = manifest.runtime.nativeDogfood;
+      const restart = dogfood.restart as {
+        recovery: { symphony: Record<string, unknown> };
+      };
+      restart.recovery.symphony.totalRootCount = 2;
+      manifest.assertions.nativeDogfoodProviderRestartRecovered!.observed = restart;
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: duplicateRestartRoot.rootDir }),
+    ).rejects.toThrow(
+      "manifest.runtime.nativeDogfood.restart must recover the same Run, Evidence, and Root after a stopped/ready provider cycle",
     );
   });
 
