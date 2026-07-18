@@ -423,6 +423,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
           aria-controls={`${disclosureId}-run-details`}
           aria-expanded={expanded}
           className="flex min-h-6 w-full items-center gap-1.5 rounded text-left hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 pointer-coarse:min-h-11"
+          data-workflow-run-disclosure
           onClick={toggleRoot}
         >
           <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground/70">
@@ -509,6 +510,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                     aria-controls={stepDetailsId}
                     aria-expanded={stepExpanded}
                     className="flex w-full items-center gap-2 px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+                    data-workflow-step-disclosure
                     onClick={() => toggleStep(step.id)}
                   >
                     {stepExpanded ? (
@@ -603,12 +605,25 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                         return (
                           <div
                             className="rounded border border-border/40 p-2"
+                            data-workflow-evidence-availability={reference.availability}
+                            data-workflow-evidence-content-state={
+                              !itemExpanded
+                                ? "collapsed"
+                                : loading.has(contentKey)
+                                  ? "loading"
+                                  : error
+                                    ? "error"
+                                    : (contentState?.kind ?? "pending")
+                            }
+                            data-workflow-evidence-kind={item.kind}
                             data-workflow-evidence-name={item.name}
+                            data-workflow-evidence-provenance={reference.provenance}
                             key={item.evidenceId}
                           >
                             <button
                               aria-expanded={itemExpanded}
                               className="flex min-h-6 w-full items-center gap-2 text-left pointer-coarse:min-h-11"
+                              data-workflow-evidence-disclosure
                               onClick={() => toggleEvidence(step.id, item)}
                               type="button"
                             >
@@ -647,7 +662,10 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                                     <p className="mb-1 text-[10px] text-muted-foreground">
                                       Plain-text preview · extension-declared {content.mediaType}
                                     </p>
-                                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-2 font-mono text-[10px] text-foreground/75">
+                                    <pre
+                                      className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-2 font-mono text-[10px] text-foreground/75"
+                                      data-workflow-evidence-preview
+                                    >
                                       {contentState.content}
                                     </pre>
                                   </div>

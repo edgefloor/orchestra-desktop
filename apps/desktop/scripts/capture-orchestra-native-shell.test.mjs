@@ -592,12 +592,23 @@ describe("native-shell acceptance capture contract", () => {
 
     expect(helperStart).toBeGreaterThanOrEqual(0);
     expect(helperEnd).toBeGreaterThan(helperStart);
+    expect(workflowObserverSource).toContain("[data-workflow-run-disclosure]");
     expect(workflowObserverSource).toContain("[data-workflow-step-id=");
+    expect(workflowObserverSource).toContain("[data-workflow-step-disclosure]");
     expect(workflowObserverSource).toContain("[data-workflow-child-task-path]");
     expect(workflowObserverSource).toContain("[data-workflow-output-name=");
     expect(workflowObserverSource).toContain("[data-workflow-output-value]");
     expect(workflowObserverSource).toContain("[data-workflow-evidence-name=");
+    expect(workflowObserverSource).toContain("[data-workflow-evidence-disclosure]");
+    expect(workflowObserverSource).toContain(
+      "getAttribute('data-workflow-evidence-content-state')",
+    );
+    expect(workflowObserverSource).toContain("[data-workflow-evidence-preview]");
     expect(workflowObserverSource).not.toContain(".parentElement");
+    expect(workflowObserverSource).not.toContain(":scope > div > button[aria-controls]");
+    expect(workflowObserverSource).not.toContain(":scope > button[aria-controls]");
+    expect(workflowObserverSource).not.toContain("Loading bounded native run tree");
+    expect(workflowObserverSource).not.toContain("Loading step outputs and evidence references");
   });
 
   it("opens the retained Git menu accessibly and reads only its visible structured items", async () => {

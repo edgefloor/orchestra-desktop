@@ -1119,23 +1119,21 @@ async function observeExpandedWorkflowStep(
       const complete = () => {
         const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
         if (!(run instanceof HTMLElement)) return;
-        const runDisclosure = run.querySelector(':scope > div > button[aria-controls]');
+        const runDisclosure = run.querySelector('[data-workflow-run-disclosure]');
         if (runDisclosure instanceof HTMLButtonElement) {
           if (runDisclosure.getAttribute('aria-expanded') === 'false') {
             runDisclosure.click();
             return;
           }
         }
-        if (run.innerText.includes('Loading bounded native run tree…')) return;
         const step = run.querySelector(${JSON.stringify(`[data-workflow-step-id="${stepId}"]`)});
         if (!(step instanceof HTMLElement)) return;
-        const stepButton = step.querySelector(':scope > button[aria-controls]');
+        const stepButton = step.querySelector('[data-workflow-step-disclosure]');
         if (!(stepButton instanceof HTMLButtonElement)) return;
         if (stepButton.getAttribute('aria-expanded') === 'false') {
           stepButton.click();
           return;
         }
-        if (step.innerText.includes('Loading step outputs and evidence references…')) return;
         const observation = (() => {
           ${observationSource}
         })();
@@ -1162,11 +1160,9 @@ async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelec
           `[data-workflow-evidence-name="${ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME}"]`,
         )});
         if (!(evidence instanceof HTMLElement)) return null;
-        const evidenceButton = evidence.querySelector(':scope > button[aria-expanded]');
+        const evidenceButton = evidence.querySelector('[data-workflow-evidence-disclosure]');
         if (!(evidenceButton instanceof HTMLButtonElement)) return null;
         const text = evidence.innerText;
-        const labels = [...evidenceButton.querySelectorAll(':scope > span')]
-          .map((span) => span.textContent?.trim() ?? '');
         const identityElement = evidence.querySelector('[data-evidence-identity]');
         const identityAttribute = identityElement instanceof HTMLElement
           ? identityElement.getAttribute('data-evidence-identity')?.match(/^[0-9a-f]{12}$/)?.[0] ?? null
@@ -1181,10 +1177,10 @@ async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelec
           evidenceName: ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME)},
           evidenceId: ${JSON.stringify(sha256(Buffer.from(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH)))},
           displayedEvidenceIdPrefix: identityPrefix,
-          kind: labels.at(-3) ?? null,
-          provenance: labels.at(-2)?.replaceAll(' ', '_') ?? null,
-          availability: labels.at(-1) ?? null,
-          contentAbsentBeforeExpand: evidenceButton.getAttribute('aria-expanded') === 'false' && !text.includes('Plain-text preview'),
+          kind: evidence.getAttribute('data-workflow-evidence-kind'),
+          provenance: evidence.getAttribute('data-workflow-evidence-provenance'),
+          availability: evidence.getAttribute('data-workflow-evidence-availability'),
+          contentAbsentBeforeExpand: evidence.getAttribute('data-workflow-evidence-content-state') === 'collapsed' && !evidence.querySelector('[data-workflow-evidence-preview]'),
           runText: run.innerText.slice(0, 4000),
           runTextTruncated: run.innerText.length > 4000,
         };
@@ -1232,15 +1228,15 @@ async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, co
           `[data-workflow-evidence-name="${ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME}"]`,
         )});
         if (!(evidence instanceof HTMLElement)) return null;
-        const evidenceButton = evidence.querySelector(':scope > button[aria-expanded]');
+        const evidenceButton = evidence.querySelector('[data-workflow-evidence-disclosure]');
         if (!(evidenceButton instanceof HTMLButtonElement)) return null;
         if (evidenceButton.getAttribute('aria-expanded') === 'false') {
           evidenceButton.click();
           return null;
         }
-        if (evidence.innerText.includes('Loading authorized evidence…')) return null;
-        const preview = evidence.querySelector('pre');
-        if (!(preview instanceof HTMLElement) || !evidence.innerText.includes('Plain-text preview')) return null;
+        if (evidence.getAttribute('data-workflow-evidence-content-state') !== 'text') return null;
+        const preview = evidence.querySelector('[data-workflow-evidence-preview]');
+        if (!(preview instanceof HTMLElement)) return null;
         let content;
         try {
           content = JSON.parse(preview.textContent ?? '');
@@ -1248,8 +1244,6 @@ async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, co
           content = null;
         }
         const text = evidence.innerText;
-        const labels = [...evidenceButton.querySelectorAll(':scope > span')]
-          .map((span) => span.textContent?.trim() ?? '');
         const identityElement = evidence.querySelector('[data-evidence-identity]');
         const identityAttribute = identityElement instanceof HTMLElement
           ? identityElement.getAttribute('data-evidence-identity')?.match(/^[0-9a-f]{12}$/)?.[0] ?? null
@@ -1266,9 +1260,9 @@ async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, co
           evidenceId: ${JSON.stringify(sha256(Buffer.from(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH)))},
           displayedEvidenceIdPrefix: identityPrefix,
           expectedEvidenceId: ${JSON.stringify(sha256(Buffer.from(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH)))},
-          kind: labels.at(-3) ?? null,
-          provenance: labels.at(-2)?.replaceAll(' ', '_') ?? null,
-          availability: labels.at(-1) ?? null,
+          kind: evidence.getAttribute('data-workflow-evidence-kind'),
+          provenance: evidence.getAttribute('data-workflow-evidence-provenance'),
+          availability: evidence.getAttribute('data-workflow-evidence-availability'),
           content,
           runText: run.innerText.slice(0, 4000),
           runTextTruncated: run.innerText.length > 4000,
