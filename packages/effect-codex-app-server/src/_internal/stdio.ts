@@ -49,15 +49,59 @@ type ChildProcessTerminationHandle = Pick<
   "exitCode" | "pid"
 >;
 
+export const CODEX_APP_SERVER_STDERR_MAX_CHARS = 4_096;
+
+export function makeBoundedChildStderr(maxChars = CODEX_APP_SERVER_STDERR_MAX_CHARS) {
+  const decoder = new TextDecoder();
+  let stderr = "";
+  let stderrTruncated = false;
+  return Object.freeze({
+    push(chunk: Uint8Array) {
+      if (stderrTruncated) return;
+      const decoded = decoder.decode(chunk);
+      const remaining = Math.max(0, maxChars - stderr.length);
+      if (decoded.length <= remaining) {
+        stderr += decoded;
+        return;
+      }
+      stderr = `${stderr}${decoded.slice(0, Math.max(0, remaining - 1))}…`;
+      stderrTruncated = true;
+    },
+    snapshot() {
+      const normalized = stderr.trim();
+      return {
+        ...(normalized.length > 0 ? { stderr: normalized } : {}),
+        stderrTruncated,
+      };
+    },
+  });
+}
+
 export const makeTerminationError = (
   handle: ChildProcessTerminationHandle,
+  readStderr: () => { readonly stderr?: string; readonly stderrTruncated?: boolean } = () => ({}),
+  awaitStderr: Effect.Effect<void> = Effect.void,
 ): Effect.Effect<CodexError.CodexAppServerError> =>
-  Effect.match(handle.exitCode, {
+  Effect.matchEffect(handle.exitCode, {
     onFailure: (cause) =>
-      new CodexError.CodexAppServerTransportError({
-        operation: "read-process-exit-status",
-        pid: handle.pid,
-        cause,
-      }),
-    onSuccess: (code) => new CodexError.CodexAppServerProcessExitedError({ code, pid: handle.pid }),
+      Effect.succeed(
+        new CodexError.CodexAppServerTransportError({
+          operation: "read-process-exit-status",
+          pid: handle.pid,
+          cause,
+        }),
+      ),
+    onSuccess: (code) =>
+      awaitStderr.pipe(
+        Effect.andThen(
+          Effect.sync(
+            () =>
+              new CodexError.CodexAppServerProcessExitedError({
+                code,
+                pid: handle.pid,
+                ...readStderr(),
+              }),
+          ),
+        ),
+      ),
   });

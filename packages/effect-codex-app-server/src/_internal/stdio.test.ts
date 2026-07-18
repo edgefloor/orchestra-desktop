@@ -4,7 +4,11 @@ import * as PlatformError from "effect/PlatformError";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import * as CodexError from "../errors.ts";
-import { makeTerminationError } from "./stdio.ts";
+import {
+  CODEX_APP_SERVER_STDERR_MAX_CHARS,
+  makeBoundedChildStderr,
+  makeTerminationError,
+} from "./stdio.ts";
 
 describe("Codex App Server child process termination", () => {
   it.effect("retains the process identifier with the exit code", () =>
@@ -18,6 +22,45 @@ describe("Codex App Server child process termination", () => {
       assert.equal(error.pid, 51);
       assert.equal(error.code, 9);
       assert.equal(error.message, "Codex App Server process exited with code 9");
+    }),
+  );
+
+  it.effect("retains bounded child stderr with the abnormal exit", () =>
+    Effect.gen(function* () {
+      const stderr = makeBoundedChildStderr();
+      stderr.push(new TextEncoder().encode(`fatal config ${"x".repeat(8_000)}`));
+      const error = yield* makeTerminationError(
+        {
+          pid: ChildProcessSpawner.ProcessId(53),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+        },
+        stderr.snapshot,
+      );
+
+      assert.instanceOf(error, CodexError.CodexAppServerProcessExitedError);
+      assert.equal(error.stderr?.length, CODEX_APP_SERVER_STDERR_MAX_CHARS);
+      assert.isTrue(error.stderrTruncated);
+      assert.include(error.message, "fatal config");
+      assert.notInclude(error.message, "x".repeat(8_000));
+    }),
+  );
+
+  it.effect("waits for the stderr stream before constructing the exit diagnostic", () =>
+    Effect.gen(function* () {
+      let stderr = "before drain";
+      const error = yield* makeTerminationError(
+        {
+          pid: ChildProcessSpawner.ProcessId(54),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+        },
+        () => ({ stderr }),
+        Effect.sync(() => {
+          stderr = "after drain";
+        }),
+      );
+
+      assert.instanceOf(error, CodexError.CodexAppServerProcessExitedError);
+      assert.equal(error.stderr, "after drain");
     }),
   );
 

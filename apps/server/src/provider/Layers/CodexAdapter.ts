@@ -58,6 +58,7 @@ import {
   CodexResumeCursorSchema,
   CodexSessionRuntimeThreadIdMissingError,
   makeCodexSessionRuntime,
+  redactCodexDiagnostic,
   type CodexSessionRuntimeError,
   type CodexSessionRuntimeOptions,
   type CodexSessionRuntimeShape,
@@ -1461,7 +1462,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
               new ProviderAdapterProcessError({
                 provider: PROVIDER,
                 threadId: input.threadId,
-                detail: cause.message,
+                detail: redactCodexDiagnostic(cause.message),
                 cause,
               }),
           ),
