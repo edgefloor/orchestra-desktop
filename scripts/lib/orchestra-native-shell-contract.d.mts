@@ -2,6 +2,8 @@ export interface NativeShellScenario {
   readonly scenario: string;
   readonly width: number;
   readonly height: number;
+  readonly theme: "dark" | "light";
+  readonly drawerOpen: boolean;
 }
 
 export interface NativeShellAssertion {
@@ -19,6 +21,10 @@ export function buildNativeGuestFixture(origin: string): {
   readonly digest: string;
 };
 export function makeNativeShellAssertion(observed: unknown, passed?: boolean): NativeShellAssertion;
+export function isExactNativeDogfoodResponseCount(requestCount: number): boolean;
+export function isNativeWorkflowLifecycleObservation(observation: unknown): boolean;
+export function isNativeEvidenceObservation(observation: unknown): boolean;
+export function isNarrowDrawerOpenedObservation(observations: unknown): boolean;
 export function assertNativeShellAssertions(
   assertions: Readonly<Record<string, NativeShellAssertion>>,
 ): void;

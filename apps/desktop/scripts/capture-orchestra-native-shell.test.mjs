@@ -11,6 +11,10 @@ import {
   buildNativeGuestFixture,
   canConnectToNativeShellPort,
   cleanupFailedNativeShellCapture,
+  isExactNativeDogfoodResponseCount,
+  isNarrowDrawerOpenedObservation,
+  isNativeEvidenceObservation,
+  isNativeWorkflowLifecycleObservation,
   makeNativeShellAssertion,
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
@@ -51,6 +55,54 @@ describe("native-shell acceptance capture contract", () => {
     expect(() => assertNativeShellAssertions(missing)).toThrow("sealed contract");
   });
 
+  it.each([
+    {
+      failure: "timeout",
+      assertion: "nativeDogfoodResponsesExact",
+      observed: { failure: "timeout", requestCount: 4 },
+      evaluate: () => isExactNativeDogfoodResponseCount(4),
+    },
+    {
+      failure: "duplicate Runs",
+      assertion: "nativeWorkflowLifecycleRendered",
+      observed: { runIds: ["run-cycle8", "run-cycle8-duplicate"] },
+      evaluate: () =>
+        isNativeWorkflowLifecycleObservation({
+          sameRun: true,
+          waiting: { runLabels: ["run-cycle8", "run-cycle8-duplicate"], text: "Waiting" },
+          completed: { runLabels: ["run-cycle8"], text: "Completed" },
+        }),
+    },
+    {
+      failure: "missing evidence",
+      assertion: "nativeEvidenceLazyExpanded",
+      observed: { evidenceCount: 0 },
+      evaluate: () =>
+        isNativeEvidenceObservation({
+          before: { exposed: true, contentAbsentBeforeExpand: true },
+          after: { expanded: false, contentState: "absent" },
+        }),
+    },
+    {
+      failure: "drawer failure",
+      assertion: "narrowDrawerOpened",
+      observed: { opened: false, drawerOpen: false },
+      evaluate: () => isNarrowDrawerOpenedObservation([{ opened: true }, { opened: false }]),
+    },
+  ])("fails closed for $failure", ({ assertion, observed, evaluate }) => {
+    const assertions = Object.fromEntries(
+      ORCHESTRA_NATIVE_SHELL_ASSERTIONS.map((name) => [
+        name,
+        makeNativeShellAssertion({ proof: name }, true),
+      ]),
+    );
+    const passed = evaluate();
+    expect(passed).toBe(false);
+    assertions[assertion] = makeNativeShellAssertion(observed, passed);
+
+    expect(() => assertNativeShellAssertions(assertions)).toThrow(assertion);
+  });
+
   it("seals both themes and real narrow drawer scenarios", () => {
     expect(ORCHESTRA_NATIVE_SHELL_SCREENSHOTS).toEqual([
       {
@@ -86,12 +138,16 @@ describe("native-shell acceptance capture contract", () => {
 
   it("enters Electron child mode only for the explicit acceptance capability", () => {
     expect(shouldRunNativeShellElectronChild({})).toBe(false);
-    expect(shouldRunNativeShellElectronChild({ ORCHESTRA_NATIVE_ACCEPTANCE_CHILD: "0" })).toBe(
-      false,
-    );
-    expect(shouldRunNativeShellElectronChild({ ORCHESTRA_NATIVE_ACCEPTANCE_CHILD: "1" })).toBe(
-      true,
-    );
+    expect(
+      shouldRunNativeShellElectronChild({
+        ORCHESTRA_NATIVE_ACCEPTANCE_CHILD: "0",
+      }),
+    ).toBe(false);
+    expect(
+      shouldRunNativeShellElectronChild({
+        ORCHESTRA_NATIVE_ACCEPTANCE_CHILD: "1",
+      }),
+    ).toBe(true);
   });
 
   it("removes partial generated evidence and the isolated runtime after failure", async () => {
@@ -111,9 +167,14 @@ describe("native-shell acceptance capture contract", () => {
       ),
     ]);
 
-    await cleanupFailedNativeShellCapture({ runtimeDirectory, evidenceDirectory });
+    await cleanupFailedNativeShellCapture({
+      runtimeDirectory,
+      evidenceDirectory,
+    });
 
-    await expect(NodeFSP.stat(runtimeDirectory)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(NodeFSP.stat(runtimeDirectory)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     await expect(
       NodeFSP.stat(NodePath.join(evidenceDirectory, "manifest.json")),
     ).rejects.toMatchObject({ code: "ENOENT" });

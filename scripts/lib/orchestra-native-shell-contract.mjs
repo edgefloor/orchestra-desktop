@@ -31,6 +31,7 @@ export const ORCHESTRA_NATIVE_SHELL_ASSERTIONS = Object.freeze(
     "nativeSymphonySkippedIntake",
     "nativeDogfoodIdentityRecovered",
     "nativeDogfoodProviderRestartRecovered",
+    "retainedDesktopCapabilitiesProbed",
     "composerVisible",
     "taskTabsVisible",
     "realWebviewAttached",
@@ -103,6 +104,37 @@ export function buildNativeGuestFixture(origin) {
 
 export function makeNativeShellAssertion(observed, passed = Boolean(observed)) {
   return { observed, passed };
+}
+
+export function isExactNativeDogfoodResponseCount(requestCount) {
+  return requestCount === 5;
+}
+
+export function isNativeWorkflowLifecycleObservation(observation) {
+  return (
+    observation?.sameRun === true &&
+    observation.waiting?.runLabels.length === 1 &&
+    observation.waiting.text.includes("Waiting") &&
+    observation.completed?.runLabels.length === 1 &&
+    observation.completed.text.includes("Completed")
+  );
+}
+
+export function isNativeEvidenceObservation(observation) {
+  return (
+    observation?.before?.exposed === true &&
+    observation.before.contentAbsentBeforeExpand === true &&
+    observation.after?.expanded === true &&
+    observation.after.contentState === "text"
+  );
+}
+
+export function isNarrowDrawerOpenedObservation(observations) {
+  return (
+    Array.isArray(observations) &&
+    observations.length === 2 &&
+    observations.every(({ opened }) => opened === true)
+  );
 }
 
 export function assertNativeShellAssertions(assertions) {
@@ -211,9 +243,13 @@ export async function cleanupFailedNativeShellCapture({
 }) {
   await Promise.all([
     ...(removeRuntime ? [NodeFSP.rm(runtimeDirectory, { recursive: true, force: true })] : []),
-    NodeFSP.rm(NodePath.join(evidenceDirectory, "manifest.json"), { force: true }),
+    NodeFSP.rm(NodePath.join(evidenceDirectory, "manifest.json"), {
+      force: true,
+    }),
     ...ORCHESTRA_NATIVE_SHELL_SCREENSHOTS.map(({ scenario }) =>
-      NodeFSP.rm(NodePath.join(evidenceDirectory, `${scenario}.png`), { force: true }),
+      NodeFSP.rm(NodePath.join(evidenceDirectory, `${scenario}.png`), {
+        force: true,
+      }),
     ),
   ]);
 }

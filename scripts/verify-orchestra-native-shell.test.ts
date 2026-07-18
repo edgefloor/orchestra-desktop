@@ -30,6 +30,25 @@ type MutableManifest = {
   id: string;
   role: string;
   desktop: { repository: string; commit: string; tree: string };
+  codex: {
+    repository: string;
+    commit: string;
+    tree: string;
+    binarySha256: string;
+    build: {
+      tool: string;
+      arguments: string[];
+      profile: string;
+      package: string;
+      binary: string;
+    };
+  };
+  orchestraCore: { repository: string; commit: string; tree: string };
+  product: {
+    pinsSha256: string;
+    manifestSha256: string;
+    releaseManifest: Record<string, unknown>;
+  };
   capture: {
     electronVersion: string;
     chromiumVersion: string;
@@ -50,6 +69,7 @@ type MutableManifest = {
       overflow: boolean;
       browserVisible: boolean;
       narrowDisclosure: boolean;
+      drawerOpen: boolean;
       webviewRect: null;
       wrapperRect: null;
     };
@@ -84,10 +104,15 @@ type MutableManifest = {
       nodeIntegration: boolean;
       nodeIntegrationInSubFrames: boolean;
     };
-    navigation: Array<{ action: string; expected: unknown; observed: unknown; passed: boolean }>;
+    navigation: Array<{
+      action: string;
+      expected: unknown;
+      observed: unknown;
+      passed: boolean;
+    }>;
     cleanup: { portsClosed: boolean; processGroupEmpty: boolean | null };
   };
-  humanReview: { status: string; reviewedAt: string; notes: string };
+  agentReview: { status: string; reviewedAt: string; notes: string };
 };
 
 async function makeFixture(
@@ -95,12 +120,16 @@ async function makeFixture(
 ): Promise<{ readonly rootDir: string; readonly manifest: MutableManifest }> {
   const rootDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "orchestra-native-shell-"));
   temporaryRoots.push(rootDir);
-  await NodeFSP.mkdir(NodePath.join(rootDir, acceptanceDirectory), { recursive: true });
+  await NodeFSP.mkdir(NodePath.join(rootDir, acceptanceDirectory), {
+    recursive: true,
+  });
 
   const buildArtifacts: MutableManifest["buildArtifacts"] = [];
   for (const path of ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS) {
     const bytes = Buffer.from(`native build artifact: ${path}`);
-    await NodeFSP.mkdir(NodePath.dirname(NodePath.join(rootDir, path)), { recursive: true });
+    await NodeFSP.mkdir(NodePath.dirname(NodePath.join(rootDir, path)), {
+      recursive: true,
+    });
     await NodeFSP.writeFile(NodePath.join(rootDir, path), bytes);
     buildArtifacts.push({ path, sha256: sha256(bytes) });
   }
@@ -117,19 +146,107 @@ async function makeFixture(
       width: contract.width,
       height: contract.height,
       deviceScaleFactor: 1,
-      theme: "dark",
+      theme: contract.theme,
       layout: {
         width: contract.width,
         height: contract.height,
         overflow: true,
         browserVisible: true,
         narrowDisclosure: true,
+        drawerOpen: contract.drawerOpen,
         webviewRect: null,
         wrapperRect: null,
       },
       sha256: sha256(image),
     });
   }
+
+  const codexBinarySha256 = sha256(Buffer.from("source-bound codex-cli"));
+  const productArtifacts = Object.fromEntries(
+    [
+      "codex-cli",
+      "desktop-main",
+      "desktop-preload",
+      "desktop-renderer",
+      "desktop-server",
+      "orchestra-product",
+      "orchestra-validate-worker",
+    ].map((name) => [
+      name,
+      {
+        bytes: name.length,
+        sha256: name === "codex-cli" ? codexBinarySha256 : sha256(Buffer.from(name)),
+      },
+    ]),
+  );
+  for (const [index, productName] of [
+    "desktop-main",
+    "desktop-preload",
+    "desktop-server",
+    "desktop-renderer",
+  ].entries()) {
+    (productArtifacts[productName] as { sha256: string }).sha256 = buildArtifacts[index]!.sha256;
+  }
+  const unsignedReleaseManifest = {
+    schemaVersion: 1,
+    productVersion: "0.2.0-dev",
+    minimumMacos: "13.0",
+    target: "aarch64-apple-darwin",
+    sources: {
+      agents: "1".repeat(40),
+      bun: "2".repeat(40),
+      bun_repository: "https://github.com/oven-sh/bun.git",
+      bun_version: "1.3.14",
+      codex_upstream: "3".repeat(40),
+      codex_upstream_repository: "https://github.com/openai/codex.git",
+      codex_upstream_tree: "4".repeat(40),
+      evaluator_lock_sha256: "5".repeat(64),
+      evaluator_package_sha256: "6".repeat(64),
+      evaluator_worker_source_sha256: "7".repeat(64),
+      orchestra_codex: "7fddc000e0531657002ec4fac59f5edbabb4695b",
+      orchestra_codex_repository: "https://github.com/edgefloor/orchestra-codex.git",
+      orchestra_codex_tree: "b1306b462645553d975b21f872ddc4ca75310f20",
+      orchestra_core_repository: "https://github.com/edgefloor/codex-orchestra.git",
+      orchestra_core_revision: "ef4470f54f791c26dab1fec92edbbcc8cf47a9f6",
+      orchestra_core_tree: "30f8c2ef452243f4a930623d5da635acffd35077",
+      orchestra_desktop: "b3e6534f82c62e6d30fdbac0d0e7aa9aa7301750",
+      orchestra_desktop_repository: "https://github.com/edgefloor/orchestra-desktop.git",
+      orchestra_desktop_tree: "974192a2af184643d37df51ca70dea77d24decc9",
+      protocol_digest: "8".repeat(64),
+      protocol_digest_algorithm: "sha256-relative-path-nul-file-sha256-lf-v1",
+      protocol_file_count: "709",
+      protocol_tree: "9".repeat(40),
+      t3code_upstream: "a".repeat(40),
+      t3code_upstream_repository: "https://github.com/pingdotgg/t3code.git",
+      t3code_upstream_tree: "b".repeat(40),
+      zod: "c".repeat(40),
+      zod_package_integrity: "sha512-fixture",
+      zod_package_revision: "d".repeat(40),
+      zod_package_shasum: "e".repeat(40),
+      zod_repository: "https://github.com/colinhacks/zod.git",
+      zod_version: "4.4.3",
+    },
+    schemas: {
+      protocol: {
+        identity: "codex-app-server+orchestra-v1",
+        sha256: "f".repeat(64),
+      },
+      snapshot: {
+        identity: "orchestra-task-snapshot-v1",
+        sha256: "0".repeat(64),
+      },
+    },
+    evaluator: {
+      revision: "bun-1.3.14-zod-4.4.3-sealed-2",
+      adapterAbi: "orchestra-evaluator-abi-v1",
+      canonicalizer: "rfc8785-jcs-v1",
+      issueFormat: "orchestra-validation-issues-v1",
+    },
+    capabilities: ["orchestra/query"],
+    limits: { validation_wall_ms: 1_000 },
+    artifacts: productArtifacts,
+  };
+  const productManifestSha256 = sha256(Buffer.from(JSON.stringify(unsignedReleaseManifest)));
 
   const manifest: MutableManifest = {
     schemaVersion: 1,
@@ -139,6 +256,40 @@ async function makeFixture(
       repository: "edgefloor/orchestra-desktop",
       commit: "b3e6534f82c62e6d30fdbac0d0e7aa9aa7301750",
       tree: "974192a2af184643d37df51ca70dea77d24decc9",
+    },
+    codex: {
+      repository: "edgefloor/orchestra-codex",
+      commit: "7fddc000e0531657002ec4fac59f5edbabb4695b",
+      tree: "b1306b462645553d975b21f872ddc4ca75310f20",
+      binarySha256: codexBinarySha256,
+      build: {
+        tool: "cargo",
+        arguments: [
+          "build",
+          "--manifest-path",
+          "codex-rs/Cargo.toml",
+          "-p",
+          "codex-cli",
+          "--bin",
+          "codex",
+        ],
+        profile: "debug",
+        package: "codex-cli",
+        binary: "codex",
+      },
+    },
+    orchestraCore: {
+      repository: "edgefloor/codex-orchestra",
+      commit: "ef4470f54f791c26dab1fec92edbbcc8cf47a9f6",
+      tree: "30f8c2ef452243f4a930623d5da635acffd35077",
+    },
+    product: {
+      pinsSha256: "1".repeat(64),
+      manifestSha256: productManifestSha256,
+      releaseManifest: {
+        ...unsignedReleaseManifest,
+        manifestSha256: productManifestSha256,
+      },
     },
     capture: {
       electronVersion: "41.5.0",
@@ -193,10 +344,15 @@ async function makeFixture(
         "reload",
         "load-failure",
         "recover-page-a",
-      ].map((action) => ({ action, expected: action, observed: action, passed: true })),
+      ].map((action) => ({
+        action,
+        expected: action,
+        observed: action,
+        passed: true,
+      })),
       cleanup: { portsClosed: true, processGroupEmpty: true },
     },
-    humanReview: {
+    agentReview: {
       status: "observed",
       reviewedAt: "2026-07-18T12:34:56.000Z",
       notes: "Wide and narrow native-shell captures were inspected.",
@@ -242,10 +398,12 @@ describe("Orchestra native-shell evidence verifier", () => {
     );
   });
 
-  it("requires exactly the ordered wide and narrow dark screenshots", async () => {
+  it("requires exactly the ordered wide and narrow dark/light screenshots", async () => {
     expect(ORCHESTRA_NATIVE_SHELL_SCREENSHOT_NAMES).toEqual([
       "native-browser-1440x900-dark",
-      "native-workspace-1024x768-dark",
+      "native-browser-1440x900-light",
+      "native-workspace-1024x768-dark-drawer",
+      "native-workspace-1024x768-light-drawer",
     ]);
     const { rootDir } = await makeFixture((manifest) => {
       manifest.screenshots.reverse();
@@ -285,7 +443,7 @@ describe("Orchestra native-shell evidence verifier", () => {
     );
   });
 
-  it("requires production entry, guest identity, and observed human review", async () => {
+  it("requires production entry, guest identity, and observed agent review", async () => {
     const invalidCases: Array<{
       readonly mutate: (manifest: MutableManifest) => void;
       readonly message: string;
@@ -310,21 +468,21 @@ describe("Orchestra native-shell evidence verifier", () => {
       },
       {
         mutate: (manifest) => {
-          manifest.humanReview.status = "pending";
+          manifest.agentReview.status = "pending";
         },
-        message: "manifest.humanReview.status must be observed",
+        message: "manifest.agentReview.status must be observed",
       },
       {
         mutate: (manifest) => {
-          manifest.humanReview.notes = " ";
+          manifest.agentReview.notes = " ";
         },
-        message: "manifest.humanReview.notes must be non-empty",
+        message: "manifest.agentReview.notes must be non-empty",
       },
       {
         mutate: (manifest) => {
-          manifest.humanReview.reviewedAt = "0";
+          manifest.agentReview.reviewedAt = "0";
         },
-        message: "manifest.humanReview.reviewedAt must be an ISO timestamp",
+        message: "manifest.agentReview.reviewedAt must be an ISO timestamp",
       },
     ];
 
@@ -400,6 +558,29 @@ describe("Orchestra native-shell evidence verifier", () => {
       const { rootDir } = await makeFixture(invalidCase.mutate);
       await expect(verifyOrchestraNativeShell({ rootDir })).rejects.toThrow(invalidCase.message);
     }
+  });
+
+  it("requires the source-bound Codex receipt and exact Product source tuple", async () => {
+    const invalidBuild = await makeFixture((manifest) => {
+      manifest.codex.build.arguments.pop();
+    });
+    await expect(verifyOrchestraNativeShell({ rootDir: invalidBuild.rootDir })).rejects.toThrow(
+      "manifest.codex.build.arguments must exactly match the source-bound Codex build contract",
+    );
+
+    const mismatchedTuple = await makeFixture((manifest) => {
+      manifest.codex.commit = "a".repeat(40);
+    });
+    await expect(verifyOrchestraNativeShell({ rootDir: mismatchedTuple.rootDir })).rejects.toThrow(
+      "manifest Product sources must exactly match the captured core, Codex, and Desktop tuple",
+    );
+
+    const mismatchedExecutable = await makeFixture((manifest) => {
+      manifest.codex.binarySha256 = "f".repeat(64);
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: mismatchedExecutable.rootDir }),
+    ).rejects.toThrow("manifest.codex.binarySha256 must match the Product Codex executable");
   });
 
   it("rejects a desktop tree that does not belong to the resolved source commit", async () => {

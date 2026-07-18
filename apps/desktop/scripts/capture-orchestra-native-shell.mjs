@@ -8,11 +8,26 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 
+import { makeWsRpcProtocolClient } from "@t3tools/client-runtime/rpc";
+import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+import * as Socket from "effect/unstable/socket/Socket";
+
 import {
   assertNativeShellAssertions,
   buildNativeGuestFixture,
   canConnectToNativeShellPort,
   cleanupFailedNativeShellCapture,
+  isExactNativeDogfoodResponseCount,
+  isNarrowDrawerOpenedObservation,
+  isNativeEvidenceObservation,
+  isNativeWorkflowLifecycleObservation,
   isNativeShellProcessGroupEmpty,
   makeNativeShellAssertion,
   ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY,
@@ -57,6 +72,195 @@ const threadTitle = "Native Browser acceptance";
 const rejectedProbePartition = "persist:orchestra-native-shell-rejected";
 const requiredAssertionNames = ORCHESTRA_NATIVE_SHELL_ASSERTIONS;
 const screenshotScenarios = ORCHESTRA_NATIVE_SHELL_SCREENSHOTS;
+
+function runChecked(command, args, options = {}) {
+  return NodeChildProcess.execFileSync(command, args, {
+    ...options,
+    encoding: "utf8",
+    stdio: options.stdio ?? ["ignore", "pipe", "pipe"],
+  });
+}
+
+function cleanCargoEnvironment() {
+  const environment = { ...process.env };
+  delete environment.CARGO_TARGET_DIR;
+  return environment;
+}
+
+function rustHostTarget() {
+  const verboseVersion = runChecked("rustc", ["-vV"]);
+  const host = verboseVersion
+    .split("\n")
+    .find((line) => line.startsWith("host: "))
+    ?.slice("host: ".length)
+    .trim();
+  if (!host) throw new Error("rustc -vV did not report a host target");
+  return host;
+}
+
+async function prepareNativeProductIdentity({
+  runtimeDirectory,
+  dogfoodCodexRepository,
+  dogfoodCodexPath,
+}) {
+  if (runGit(dogfoodCodexRepository, ["status", "--porcelain"]).length > 0) {
+    throw new Error("native dogfood Codex repository must be clean before its source-bound build");
+  }
+  const expectedCodexPath = NodePath.join(
+    dogfoodCodexRepository,
+    "codex-rs",
+    "target",
+    "debug",
+    "codex",
+  );
+  if (NodePath.resolve(dogfoodCodexPath) !== NodePath.resolve(expectedCodexPath)) {
+    throw new Error(
+      `native dogfood Codex path must be the source-bound debug output: ${expectedCodexPath}`,
+    );
+  }
+  const codexBuildCommand = [
+    "build",
+    "--manifest-path",
+    "codex-rs/Cargo.toml",
+    "-p",
+    "codex-cli",
+    "--bin",
+    "codex",
+  ];
+  runChecked("cargo", codexBuildCommand, {
+    cwd: dogfoodCodexRepository,
+    env: cleanCargoEnvironment(),
+    stdio: "inherit",
+  });
+  if (!NodeFS.existsSync(dogfoodCodexPath)) {
+    throw new Error(`source-bound native dogfood Codex build is missing: ${dogfoodCodexPath}`);
+  }
+  if (runGit(dogfoodCodexRepository, ["status", "--porcelain"]).length > 0) {
+    throw new Error("native dogfood Codex build changed its clean source checkout");
+  }
+  const dogfoodCodexIdentity = {
+    repository: "edgefloor/orchestra-codex",
+    commit: runGit(dogfoodCodexRepository, ["rev-parse", "HEAD"]),
+    tree: runGit(dogfoodCodexRepository, ["rev-parse", "HEAD^{tree}"]),
+    binarySha256: sha256(await NodeFSP.readFile(dogfoodCodexPath)),
+    build: {
+      tool: "cargo",
+      arguments: codexBuildCommand,
+      profile: "debug",
+      package: "codex-cli",
+      binary: "codex",
+    },
+  };
+
+  const orchestraRepository =
+    process.env.ORCHESTRA_NATIVE_DOGFOOD_CORE_REPOSITORY?.trim() ||
+    NodePath.resolve(repoRoot, "..", "orchestra");
+  if (runGit(orchestraRepository, ["status", "--porcelain", "--untracked-files=no"]).length > 0) {
+    throw new Error("native dogfood Orchestra core repository must have no tracked changes");
+  }
+  const orchestraProductBuildCommand = [
+    "build",
+    "--manifest-path",
+    NodePath.join(orchestraRepository, "Cargo.toml"),
+    "-p",
+    "codex-orchestra-product",
+  ];
+  runChecked("cargo", orchestraProductBuildCommand, {
+    cwd: orchestraRepository,
+    env: cleanCargoEnvironment(),
+    stdio: "inherit",
+  });
+  const orchestraProductPath = NodePath.join(
+    orchestraRepository,
+    "target",
+    "debug",
+    "orchestra-product",
+  );
+  const orchestraEvaluatorPath = NodePath.join(
+    orchestraRepository,
+    "target",
+    "orchestra-product",
+    "orchestra-validate-worker",
+  );
+  for (const executable of [orchestraProductPath, orchestraEvaluatorPath]) {
+    if (!NodeFS.existsSync(executable)) {
+      throw new Error(`native dogfood Product executable is missing: ${executable}`);
+    }
+  }
+  runChecked(orchestraProductPath, ["doctor", "--root", orchestraRepository], {
+    cwd: orchestraRepository,
+    stdio: "inherit",
+  });
+
+  const productManifestPath = NodePath.join(runtimeDirectory, "release-manifest.json");
+  const productArtifacts = [
+    ["codex-cli", dogfoodCodexPath],
+    ["orchestra-product", orchestraProductPath],
+    ["orchestra-validate-worker", orchestraEvaluatorPath],
+    ["desktop-main", mainBundle],
+    ["desktop-preload", NodePath.join(desktopDir, "dist-electron", "preload.cjs")],
+    ["desktop-server", NodePath.join(repoRoot, "apps", "server", "dist", "bin.mjs")],
+    ["desktop-renderer", NodePath.join(repoRoot, "apps", "web", "dist", "index.html")],
+  ];
+  runChecked(
+    orchestraProductPath,
+    [
+      "manifest",
+      "--root",
+      orchestraRepository,
+      "--target",
+      rustHostTarget(),
+      "--output",
+      productManifestPath,
+      ...productArtifacts.flatMap(([name, path]) => ["--artifact", `${name}=${path}`]),
+    ],
+    { cwd: orchestraRepository, stdio: "inherit" },
+  );
+  runChecked(orchestraProductPath, ["verify-manifest", "--manifest", productManifestPath], {
+    cwd: orchestraRepository,
+    stdio: "inherit",
+  });
+  const releaseManifest = JSON.parse(await NodeFSP.readFile(productManifestPath, "utf8"));
+  if (releaseManifest.artifacts?.["codex-cli"]?.sha256 !== dogfoodCodexIdentity.binarySha256) {
+    throw new Error("Product manifest Codex artifact does not match the source-bound binary");
+  }
+  const desktopCommit = runGit(repoRoot, ["rev-parse", "HEAD"]);
+  const desktopTree = runGit(repoRoot, ["rev-parse", "HEAD^{tree}"]);
+  if (
+    releaseManifest.sources?.orchestra_codex !== dogfoodCodexIdentity.commit ||
+    releaseManifest.sources?.orchestra_codex_tree !== dogfoodCodexIdentity.tree ||
+    releaseManifest.sources?.orchestra_desktop !== desktopCommit ||
+    releaseManifest.sources?.orchestra_desktop_tree !== desktopTree
+  ) {
+    throw new Error(
+      "Product manifest sources do not match the source-bound Codex and Desktop tuple",
+    );
+  }
+  const orchestraCoreCommit = releaseManifest.sources?.orchestra_core_revision;
+  const orchestraCoreTree = releaseManifest.sources?.orchestra_core_tree;
+  if (
+    runGit(orchestraRepository, ["rev-parse", "--verify", `${orchestraCoreCommit}^{commit}`]) !==
+      orchestraCoreCommit ||
+    runGit(orchestraRepository, ["rev-parse", `${orchestraCoreCommit}^{tree}`]) !==
+      orchestraCoreTree
+  ) {
+    throw new Error("Product manifest Orchestra core identity does not resolve in the core fork");
+  }
+  const productPinsPath = NodePath.join(orchestraRepository, "product", "pins.toml");
+  return {
+    dogfoodCodexIdentity,
+    orchestraCoreIdentity: {
+      repository: "edgefloor/codex-orchestra",
+      commit: orchestraCoreCommit,
+      tree: orchestraCoreTree,
+    },
+    productIdentity: {
+      pinsSha256: sha256(await NodeFSP.readFile(productPinsPath)),
+      manifestSha256: releaseManifest.manifestSha256,
+      releaseManifest,
+    },
+  };
+}
 
 async function waitFor(predicate, context, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
@@ -129,20 +333,12 @@ async function launchUnderElectron() {
     process.env.ORCHESTRA_NATIVE_DOGFOOD_CODEX_REPOSITORY?.trim() || defaultCodexRepository;
   const dogfoodCodexPath =
     process.env.ORCHESTRA_NATIVE_DOGFOOD_CODEX_PATH?.trim() || defaultCodexPath;
-  if (!NodeFS.existsSync(dogfoodCodexPath)) {
-    throw new Error(`native dogfood Codex binary is missing: ${dogfoodCodexPath}`);
-  }
-  if (runGit(dogfoodCodexRepository, ["status", "--porcelain"]).length > 0) {
-    throw new Error(
-      "native dogfood Codex repository must be clean so its binary identity is pinned",
-    );
-  }
-  const dogfoodCodexIdentity = {
-    repository: "edgefloor/orchestra-codex",
-    commit: runGit(dogfoodCodexRepository, ["rev-parse", "HEAD"]),
-    tree: runGit(dogfoodCodexRepository, ["rev-parse", "HEAD^{tree}"]),
-    binarySha256: sha256(await NodeFSP.readFile(dogfoodCodexPath)),
-  };
+  const { dogfoodCodexIdentity, orchestraCoreIdentity, productIdentity } =
+    await prepareNativeProductIdentity({
+      runtimeDirectory,
+      dogfoodCodexRepository,
+      dogfoodCodexPath,
+    });
   const dogfoodFixtures = buildNativeDogfoodFixtures(`http://127.0.0.1:${responsesPort}`);
   await Promise.all(
     [wrapperDirectory, homeDirectory, t3Home, codexHome, dogfoodRepository].map((directory) =>
@@ -214,6 +410,8 @@ async function launchUnderElectron() {
     ORCHESTRA_NATIVE_ACCEPTANCE_REPOSITORY: dogfoodRepository,
     ORCHESTRA_NATIVE_ACCEPTANCE_CODEX_PATH: dogfoodCodexPath,
     ORCHESTRA_NATIVE_ACCEPTANCE_CODEX_IDENTITY: JSON.stringify(dogfoodCodexIdentity),
+    ORCHESTRA_NATIVE_ACCEPTANCE_CORE_IDENTITY: JSON.stringify(orchestraCoreIdentity),
+    ORCHESTRA_NATIVE_ACCEPTANCE_PRODUCT_IDENTITY: JSON.stringify(productIdentity),
   };
   delete environment.ELECTRON_RUN_AS_NODE;
   delete environment.VITE_DEV_SERVER_URL;
@@ -329,6 +527,232 @@ async function fetchThreadSnapshot(baseUrl, token, targetThreadId) {
   return JSON.parse(body);
 }
 
+async function issueNativeShellWebSocketTicket(baseUrl, token) {
+  const response = await fetch(new URL("/api/auth/websocket-ticket", baseUrl), {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error(`websocket ticket failed (${response.status}): ${body.slice(0, 500)}`);
+  }
+  return JSON.parse(body).ticket;
+}
+
+async function runWithNativeShellRpcClient(baseUrl, token, useClient) {
+  const ticket = await issueNativeShellWebSocketTicket(baseUrl, token);
+  const webSocketUrl = new URL("/ws", baseUrl);
+  webSocketUrl.protocol = webSocketUrl.protocol === "https:" ? "wss:" : "ws:";
+  webSocketUrl.searchParams.set("wsTicket", ticket);
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const socketLayer = Socket.layerWebSocket(webSocketUrl.toString()).pipe(
+          Layer.provide(Socket.layerWebSocketConstructorGlobal),
+        );
+        const protocolLayer = Layer.effect(
+          RpcClient.Protocol,
+          RpcClient.makeProtocolSocket({
+            retryTransientErrors: false,
+            retryPolicy: Schedule.recurs(0),
+          }),
+        ).pipe(Layer.provide(Layer.mergeAll(socketLayer, RpcSerialization.layerJson)));
+        const protocolContext = yield* Layer.build(protocolLayer);
+        const client = yield* makeWsRpcProtocolClient.pipe(Effect.provide(protocolContext));
+        return yield* useClient(client);
+      }),
+    ),
+  );
+}
+
+async function awaitNativeShellSessionEvent({ baseUrl, token, threadId, afterSequence, status }) {
+  return runWithNativeShellRpcClient(baseUrl, token, (client) =>
+    client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+      threadId,
+      afterSequence,
+    }).pipe(
+      Stream.filter(
+        (item) =>
+          item.kind === "event" &&
+          item.event.type === "thread.session-set" &&
+          item.event.payload.session.status === status,
+      ),
+      Stream.runHead,
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.fail(new Error(`thread session stream ended before ${status}`)),
+          onSome: Effect.succeed,
+        }),
+      ),
+      Effect.timeout("45 seconds"),
+    ),
+  );
+}
+
+async function readNativeShellAutomationStatus({ baseUrl, token, threadId, runId }) {
+  return runWithNativeShellRpcClient(baseUrl, token, (client) =>
+    client[WS_METHODS.automationStatus]({ threadId, runId }),
+  );
+}
+
+async function observeSymphonyRoot(renderer, runId, context) {
+  return renderer.executeJavaScript(
+    `new Promise((resolve, reject) => {
+      const deadline = window.setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
+      }, 45000);
+      const inspect = () => {
+        const roots = [...document.querySelectorAll('[aria-label="Symphony automation workspace"] [aria-label="Automation root status"]')];
+        const matching = roots.filter((root) => [...root.querySelectorAll('code')]
+          .some((node) => node.textContent?.trim() === ${JSON.stringify(runId)}));
+        const root = matching[0];
+        if (!(root instanceof HTMLElement)) return null;
+        const text = root.innerText;
+        if (!text.toLowerCase().includes('skipped') || !text.includes('running')) return null;
+        return {
+          runId: ${JSON.stringify(runId)},
+          status: 'running',
+          instanceCount: matching.length,
+          totalRootCount: roots.length,
+          text: text.slice(0, 4000),
+          textTruncated: text.length > 4000,
+        };
+      };
+      const complete = () => {
+        const result = inspect();
+        if (!result) return;
+        window.clearTimeout(deadline);
+        observer.disconnect();
+        resolve(result);
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+      complete();
+    })`,
+    true,
+  );
+}
+
+async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, context) {
+  return renderer.executeJavaScript(
+    `new Promise((resolve, reject) => {
+      const deadline = window.setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
+      }, 45000);
+      const complete = () => {
+        const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
+        if (!(run instanceof HTMLElement)) return;
+        const runDisclosure = run.querySelector('button[aria-controls][aria-expanded="false"]');
+        if (runDisclosure instanceof HTMLButtonElement) {
+          runDisclosure.click();
+          return;
+        }
+        if (run.innerText.includes('Loading bounded native run tree…')) return;
+        if (run.innerText.includes('Loading step outputs and evidence references…')) return;
+        const evidenceButton = [...run.querySelectorAll('button[aria-expanded]:not([aria-controls])')]
+          .find((button) => button instanceof HTMLButtonElement);
+        if (!(evidenceButton instanceof HTMLButtonElement)) return;
+        if (evidenceButton.getAttribute('aria-expanded') === 'false') {
+          evidenceButton.click();
+          return;
+        }
+        const text = run.innerText;
+        if (text.includes('Loading authorized evidence…') || !text.includes('Plain-text preview')) return;
+        window.clearTimeout(deadline);
+        observer.disconnect();
+        resolve({
+          expanded: true,
+          contentState: 'text',
+          runText: text.slice(0, 4000),
+          runTextTruncated: text.length > 4000,
+        });
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
+      complete();
+    })`,
+    true,
+  );
+}
+
+async function observeActiveRightPanelSurface(renderer, expectedTitle, context) {
+  return renderer.executeJavaScript(
+    `new Promise((resolve, reject) => {
+      const deadline = window.setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
+      }, 45000);
+      const complete = () => {
+        const active = document.querySelector('[role="tab"][aria-selected="true"]');
+        if (!(active instanceof HTMLElement)) return;
+        const title = active.textContent?.trim() ?? '';
+        if (title !== ${JSON.stringify(expectedTitle)}) return;
+        window.clearTimeout(deadline);
+        observer.disconnect();
+        resolve({ title, panelVisible: document.querySelector('[role="tabpanel"]') !== null });
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
+      complete();
+    })`,
+    true,
+  );
+}
+
+async function addRightPanelSurface(
+  renderer,
+  label,
+  { emptyState = false, expectedTitle = label } = {},
+) {
+  await renderer.executeJavaScript(
+    `(() => {
+      const trigger = ${
+        emptyState
+          ? `(() => {
+        const heading = [...document.querySelectorAll('h3')]
+          .find((node) => node.textContent?.trim() === 'Open a surface');
+        const chooser = heading?.parentElement?.parentElement;
+        return chooser && [...chooser.querySelectorAll('button')]
+          .find((candidate) => [...candidate.querySelectorAll('span')]
+            .some((span) => span.textContent?.trim() === ${JSON.stringify(label)}));
+      })()`
+          : `document.querySelector('[aria-label="Add panel surface"]')`
+      };
+      if (!(trigger instanceof HTMLButtonElement) || trigger.disabled) {
+        throw new Error(${JSON.stringify(`${label} surface trigger missing`)});
+      }
+      trigger.click();
+    })()`,
+    true,
+  );
+  if (!emptyState) {
+    await renderer.executeJavaScript(
+      `new Promise((resolve, reject) => {
+        const deadline = window.setTimeout(() => {
+          observer.disconnect();
+          reject(new Error(${JSON.stringify(`${label} surface menu item missing`)}));
+        }, 45000);
+        const complete = () => {
+          const item = [...document.querySelectorAll('[role="menuitem"]')]
+            .find((candidate) => candidate.textContent?.trim() === ${JSON.stringify(label)});
+          if (!(item instanceof HTMLElement) || item.getAttribute('aria-disabled') === 'true') return;
+          window.clearTimeout(deadline);
+          observer.disconnect();
+          item.click();
+          resolve(true);
+        };
+        const observer = new MutationObserver(complete);
+        observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+        complete();
+      })`,
+      true,
+    );
+  }
+  return observeActiveRightPanelSurface(renderer, expectedTitle, `active ${label} surface`);
+}
+
 function boundedThreadSessionObservation(snapshot) {
   const session = snapshot?.thread?.session ?? null;
   return {
@@ -358,6 +782,8 @@ async function runElectronChild() {
   const dogfoodRepository = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_REPOSITORY;
   const dogfoodCodexPath = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CODEX_PATH;
   const dogfoodCodexIdentityJson = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CODEX_IDENTITY;
+  const orchestraCoreIdentityJson = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CORE_IDENTITY;
+  const productIdentityJson = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_PRODUCT_IDENTITY;
   if (
     !runtimeDirectory ||
     !backendPort ||
@@ -366,11 +792,15 @@ async function runElectronChild() {
     !responsesPort ||
     !dogfoodRepository ||
     !dogfoodCodexPath ||
-    !dogfoodCodexIdentityJson
+    !dogfoodCodexIdentityJson ||
+    !orchestraCoreIdentityJson ||
+    !productIdentityJson
   ) {
     throw new Error("native-shell child environment is incomplete");
   }
   const dogfoodCodexIdentity = JSON.parse(dogfoodCodexIdentityJson);
+  const orchestraCoreIdentity = JSON.parse(orchestraCoreIdentityJson);
+  const productIdentity = JSON.parse(productIdentityJson);
   app.setPath("userData", NodePath.join(runtimeDirectory, "electron-user-data"));
 
   const guestOrigin = `http://127.0.0.1:${guestPort}`;
@@ -396,6 +826,45 @@ async function runElectronChild() {
 
   let responsesRequestCount = 0;
   let responsesContractFailure = null;
+  const responsesCountWaiters = new Set();
+  const settleResponsesCountWaiters = () => {
+    for (const waiter of responsesCountWaiters) {
+      if (responsesContractFailure) {
+        responsesCountWaiters.delete(waiter);
+        clearTimeout(waiter.timeout);
+        waiter.reject(responsesContractFailure);
+      } else if (responsesRequestCount >= waiter.target) {
+        responsesCountWaiters.delete(waiter);
+        clearTimeout(waiter.timeout);
+        waiter.resolve(responsesRequestCount);
+      }
+    }
+  };
+  const awaitResponsesRequestCount = (target, context, timeoutMs = 60_000) =>
+    new Promise((resolve, reject) => {
+      if (responsesContractFailure) {
+        reject(responsesContractFailure);
+        return;
+      }
+      if (responsesRequestCount >= target) {
+        resolve(responsesRequestCount);
+        return;
+      }
+      const waiter = {
+        target,
+        resolve,
+        reject,
+        timeout: setTimeout(() => {
+          responsesCountWaiters.delete(waiter);
+          reject(
+            new Error(
+              `${context} did not reach ${target} Responses requests within ${timeoutMs}ms`,
+            ),
+          );
+        }, timeoutMs),
+      };
+      responsesCountWaiters.add(waiter);
+    });
   const responsesServer = NodeHttp.createServer((request, response) => {
     const url = new URL(request.url ?? "/", `http://127.0.0.1:${responsesPort}`);
     if (request.method === "GET" && url.pathname === "/v1/models") {
@@ -414,10 +883,12 @@ async function runElectronChild() {
           body: Buffer.concat(chunks),
         });
         responsesRequestCount += 1;
+        settleResponsesCountWaiters();
         response.writeHead(matched.statusCode, matched.headers);
         response.end(matched.body);
       } catch (error) {
         responsesContractFailure = error;
+        settleResponsesCountWaiters();
         response.writeHead(error instanceof NativeDogfoodContractError ? error.statusCode : 500, {
           "content-type": "application/json",
         });
@@ -646,14 +1117,7 @@ async function runElectronChild() {
       interactionMode: "default",
       createdAt: new Date().toISOString(),
     });
-    await waitFor(
-      () => {
-        if (responsesContractFailure) throw responsesContractFailure;
-        return responsesRequestCount >= 3;
-      },
-      "native dogfood waiting workflow",
-      60_000,
-    );
+    await awaitResponsesRequestCount(3, "native dogfood waiting workflow");
     const waitingWorkflow = await waitFor(
       () =>
         renderer
@@ -711,14 +1175,7 @@ async function runElectronChild() {
       interactionMode: "default",
       createdAt: new Date().toISOString(),
     });
-    await waitFor(
-      () => {
-        if (responsesContractFailure) throw responsesContractFailure;
-        return responsesRequestCount >= 5;
-      },
-      "native dogfood completed workflow",
-      60_000,
-    );
+    await awaitResponsesRequestCount(5, "native dogfood completed workflow");
     assertNativeDogfoodResponsesComplete(responsesRequestCount);
     const completedWorkflow = await waitFor(
       () =>
@@ -1001,25 +1458,10 @@ async function runElectronChild() {
     let symphonyInspected = null;
     if (inspectAvailable) {
       await clickButtonByText(symphonySelector, "Inspect", "Symphony root inspection");
-      symphonyInspected = await waitFor(
-        () =>
-          renderer.executeJavaScript(
-            `(() => {
-              const root = document.querySelector(${JSON.stringify(`${symphonySelector} [aria-label="Automation root status"]`)});
-              if (!(root instanceof HTMLElement)) return null;
-              const text = root.innerText;
-              const runId = [...root.querySelectorAll('code')]
-                .map((node) => node.textContent?.trim() ?? '')
-                .find((value) => value.startsWith('automation-')) ?? null;
-              return runId === ${JSON.stringify(symphonyStarted.runId)} &&
-                text.toLowerCase().includes('skipped')
-                ? { runId, text: text.slice(0, 4000), textTruncated: text.length > 4000 }
-                : null;
-            })()`,
-            true,
-          ),
+      symphonyInspected = await observeSymphonyRoot(
+        renderer,
+        symphonyStarted.runId,
         "same Symphony root after native inspection",
-        45_000,
       );
     }
     nativeDogfoodObservation.symphony = {
@@ -1027,7 +1469,9 @@ async function runElectronChild() {
       started: symphonyStarted,
       inspected: symphonyInspected,
       sameRootAfterInspect:
-        symphonyInspected === null || symphonyInspected.runId === symphonyStarted.runId,
+        symphonyInspected === null ||
+        (symphonyInspected.runId === symphonyStarted.runId &&
+          symphonyInspected.instanceCount === 1),
       issueChildFabricated: symphonyStarted.issueRowCount !== 0,
     };
     await renderer.executeJavaScript(
@@ -1069,34 +1513,28 @@ async function runElectronChild() {
       "same native Run after renderer reload",
       45_000,
     );
+    const reloadEvidence = await observeExpandedWorkflowEvidence(
+      renderer,
+      workflowRunSelector,
+      "expanded native Evidence after renderer reload",
+    );
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Symphony automation"]')?.click()`,
       true,
     );
-    const reloadSymphonyRoot = await waitFor(
-      () =>
-        renderer.executeJavaScript(
-          `(() => {
-            const root = document.querySelector('[aria-label="Symphony automation workspace"] [aria-label="Automation root status"]');
-            if (!(root instanceof HTMLElement)) return null;
-            const text = root.innerText;
-            const runId = [...root.querySelectorAll('code')]
-              .map((node) => node.textContent?.trim() ?? '')
-              .find((value) => value.startsWith('automation-')) ?? null;
-            return runId === ${JSON.stringify(symphonyStarted.runId)} && text.toLowerCase().includes('skipped')
-              ? { runId, text: text.slice(0, 4000), textTruncated: text.length > 4000 }
-              : null;
-          })()`,
-          true,
-        ),
+    const reloadSymphonyRoot = await observeSymphonyRoot(
+      renderer,
+      symphonyStarted.runId,
       "same Symphony root after renderer reload",
-      45_000,
     );
     nativeDogfoodObservation.reload = {
       workflow: reloadWorkflowView,
+      evidence: reloadEvidence,
       symphony: reloadSymphonyRoot,
       sameWorkflowRun: reloadWorkflowView.runLabels[0] === waitingRunLabel,
-      sameSymphonyRoot: reloadSymphonyRoot.runId === symphonyStarted.runId,
+      sameSymphonyRoot:
+        reloadSymphonyRoot.runId === symphonyStarted.runId &&
+        reloadSymphonyRoot.instanceCount === 1,
     };
 
     const providerStopCommand = {
@@ -1110,57 +1548,62 @@ async function runElectronChild() {
       bootstrap.token,
       providerStopCommand,
     );
-    const stoppedThreadSession = await waitFor(
-      async () => {
-        const snapshot = await fetchThreadSnapshot(
-          bootstrap.bootstrap.httpBaseUrl,
-          bootstrap.token,
-          threadId,
-        );
-        return snapshot?.thread?.session?.status === "stopped"
-          ? boundedThreadSessionObservation(snapshot)
-          : null;
-      },
-      "stopped provider session",
-      45_000,
+    if (!Number.isInteger(providerStopReceipt?.sequence)) {
+      throw new Error("provider stop did not return a typed receipt sequence");
+    }
+    const stoppedSessionEvent = await awaitNativeShellSessionEvent({
+      baseUrl: bootstrap.bootstrap.httpBaseUrl,
+      token: bootstrap.token,
+      threadId,
+      afterSequence: providerStopReceipt.sequence,
+      status: "stopped",
+    });
+    const stoppedThreadSnapshot = await fetchThreadSnapshot(
+      bootstrap.bootstrap.httpBaseUrl,
+      bootstrap.token,
+      threadId,
     );
+    const stoppedThreadSession = boundedThreadSessionObservation(stoppedThreadSnapshot);
+    if (stoppedThreadSession.session?.status !== "stopped") {
+      throw new Error("typed stopped event did not agree with the bounded thread snapshot");
+    }
     assertNativeDogfoodResponsesComplete(responsesRequestCount);
 
     await clickButtonByText(symphonySelector, "Inspect", "Symphony recovery after provider stop");
-    const readyThreadSession = await waitFor(
-      async () => {
-        const snapshot = await fetchThreadSnapshot(
-          bootstrap.bootstrap.httpBaseUrl,
-          bootstrap.token,
-          threadId,
-        );
-        return snapshot?.thread?.session?.status === "ready"
-          ? boundedThreadSessionObservation(snapshot)
-          : null;
-      },
-      "recovered provider session",
-      45_000,
+    const readySessionEvent = await awaitNativeShellSessionEvent({
+      baseUrl: bootstrap.bootstrap.httpBaseUrl,
+      token: bootstrap.token,
+      threadId,
+      afterSequence: stoppedSessionEvent.event.sequence,
+      status: "ready",
+    });
+    const readyThreadSnapshot = await fetchThreadSnapshot(
+      bootstrap.bootstrap.httpBaseUrl,
+      bootstrap.token,
+      threadId,
     );
-    const restartSymphonyRoot = await waitFor(
-      () =>
-        renderer.executeJavaScript(
-          `(() => {
-            const root = document.querySelector('[aria-label="Symphony automation workspace"] [aria-label="Automation root status"]');
-            if (!(root instanceof HTMLElement)) return null;
-            const text = root.innerText;
-            const runId = [...root.querySelectorAll('code')]
-              .map((node) => node.textContent?.trim() ?? '')
-              .find((value) => value.startsWith('automation-')) ?? null;
-            return runId === ${JSON.stringify(symphonyStarted.runId)} &&
-              text.toLowerCase().includes('skipped') &&
-              text.includes('running')
-              ? { runId, status: 'running', text: text.slice(0, 4000), textTruncated: text.length > 4000 }
-              : null;
-          })()`,
-          true,
-        ),
+    const readyThreadSession = boundedThreadSessionObservation(readyThreadSnapshot);
+    if (readyThreadSession.session?.status !== "ready") {
+      throw new Error("typed ready event did not agree with the bounded thread snapshot");
+    }
+    const typedSymphonyStatus = await readNativeShellAutomationStatus({
+      baseUrl: bootstrap.bootstrap.httpBaseUrl,
+      token: bootstrap.token,
+      threadId,
+      runId: symphonyStarted.runId,
+    });
+    if (
+      typedSymphonyStatus.run?.runId !== symphonyStarted.runId ||
+      typedSymphonyStatus.run.status !== "running"
+    ) {
+      throw new Error(
+        `typed Symphony recovery returned the wrong root: ${JSON.stringify(typedSymphonyStatus)}`,
+      );
+    }
+    const restartSymphonyRoot = await observeSymphonyRoot(
+      renderer,
+      symphonyStarted.runId,
       "same Symphony root after provider restart",
-      45_000,
     );
     const restartWorkflowView = await waitFor(
       () =>
@@ -1178,6 +1621,11 @@ async function runElectronChild() {
       "same native Run after provider restart",
       45_000,
     );
+    const restartEvidence = await observeExpandedWorkflowEvidence(
+      renderer,
+      workflowRunSelector,
+      "expanded native Evidence after provider restart",
+    );
     assertNativeDogfoodResponsesComplete(responsesRequestCount);
     nativeDogfoodObservation.restart = {
       stop: {
@@ -1187,22 +1635,169 @@ async function runElectronChild() {
           threadId: providerStopCommand.threadId,
         },
         receiptSequence: providerStopReceipt?.sequence ?? null,
+        sessionEventSequence: stoppedSessionEvent.event.sequence,
         thread: stoppedThreadSession,
         responsesRequestCount,
       },
       recovery: {
         trigger: "Symphony Inspect / automation.status",
+        sessionEventSequence: readySessionEvent.event.sequence,
         thread: readyThreadSession,
+        typedSymphonyStatus: {
+          runId: typedSymphonyStatus.run.runId,
+          status: typedSymphonyStatus.run.status,
+        },
         workflow: restartWorkflowView,
+        evidence: restartEvidence,
         symphony: restartSymphonyRoot,
         responsesRequestCount,
       },
       sameWorkflowRun: restartWorkflowView.runLabels[0] === `Workflow run ${waitingRunId}`,
-      sameSymphonyRoot: restartSymphonyRoot.runId === symphonyStarted.runId,
+      sameSymphonyRoot:
+        restartSymphonyRoot.runId === symphonyStarted.runId &&
+        restartSymphonyRoot.instanceCount === 1,
       sameSymphonyStatus: restartSymphonyRoot.status === "running",
     };
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Close Symphony workspace"]')?.click()`,
+      true,
+    );
+
+    const retainedDesktopCapabilities = {
+      workspace: await renderer.executeJavaScript(
+        `(() => {
+          const body = document.body.innerText;
+          const branchControl = [...document.querySelectorAll('button')]
+            .find((button) => button.textContent?.includes('Local checkout'));
+          return {
+            projectVisible: body.includes(${JSON.stringify(projectTitle)}),
+            taskVisible: body.includes(${JSON.stringify(threadTitle)}),
+            localCheckoutVisible: body.includes('Local checkout'),
+            branchControl: branchControl?.textContent?.trim() ?? null,
+            contextTabs: ['Workflow', 'Attention'].filter((label) =>
+              [...document.querySelectorAll('[role="tab"]')]
+                .some((tab) => tab.textContent?.trim() === label)),
+          };
+        })()`,
+        true,
+      ),
+      context: {
+        workflowRunId: waitingRunId,
+        attentionResolved:
+          nativeDogfoodObservation.attention.completed?.text.includes(
+            "No items need intervention",
+          ) === true,
+      },
+      modelPicker: null,
+      settings: null,
+      vcs: null,
+      surfaces: {},
+      mutations: { commit: "unobserved", push: "unobserved" },
+    };
+
+    retainedDesktopCapabilities.modelPicker = await renderer.executeJavaScript(
+      `new Promise((resolve, reject) => {
+        const trigger = document.querySelector('[data-chat-provider-model-picker="true"]');
+        if (!(trigger instanceof HTMLButtonElement) || trigger.disabled) {
+          reject(new Error('model picker trigger missing'));
+          return;
+        }
+        const deadline = window.setTimeout(() => {
+          observer.disconnect();
+          reject(new Error('model picker content did not render within 45000ms'));
+        }, 45000);
+        const complete = () => {
+          const content = document.querySelector('[data-model-picker-content]');
+          if (!(content instanceof HTMLElement)) return;
+          window.clearTimeout(deadline);
+          observer.disconnect();
+          const text = content.innerText;
+          resolve({ trigger: trigger.textContent?.trim() ?? '', text: text.slice(0, 2000) });
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        };
+        const observer = new MutationObserver(complete);
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        trigger.click();
+        complete();
+      })`,
+      true,
+    );
+
+    retainedDesktopCapabilities.settings = await renderer.executeJavaScript(
+      `new Promise((resolve, reject) => {
+        const button = [...document.querySelectorAll('button')]
+          .find((candidate) => candidate.textContent?.trim() === 'Settings');
+        if (!(button instanceof HTMLButtonElement) || button.disabled) {
+          reject(new Error('Settings navigation button missing'));
+          return;
+        }
+        const deadline = window.setTimeout(() => {
+          observer.disconnect();
+          reject(new Error('Settings route did not render within 45000ms'));
+        }, 45000);
+        const complete = () => {
+          if (!location.hash.includes('/settings') || !document.body.innerText.includes('General')) return;
+          window.clearTimeout(deadline);
+          observer.disconnect();
+          resolve({ hash: location.hash, generalVisible: true });
+        };
+        const observer = new MutationObserver(complete);
+        observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+        button.click();
+        complete();
+      })`,
+      true,
+    );
+    await renderer.executeJavaScript(
+      `new Promise((resolve, reject) => {
+        const deadline = window.setTimeout(() => {
+          observer.disconnect();
+          reject(new Error('task route did not recover after Settings within 45000ms'));
+        }, 45000);
+        const complete = () => {
+          if (!location.hash.includes(${JSON.stringify(threadId)}) || !document.body.innerText.includes(${JSON.stringify(threadTitle)})) return;
+          window.clearTimeout(deadline);
+          observer.disconnect();
+          resolve(true);
+        };
+        const observer = new MutationObserver(complete);
+        observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+        history.back();
+        complete();
+      })`,
+      true,
+    );
+
+    retainedDesktopCapabilities.vcs = await renderer.executeJavaScript(
+      `new Promise((resolve, reject) => {
+        const trigger = document.querySelector('[aria-label="Git action options"]');
+        if (!(trigger instanceof HTMLButtonElement) || trigger.disabled) {
+          reject(new Error('Git action options trigger missing'));
+          return;
+        }
+        const deadline = window.setTimeout(() => {
+          observer.disconnect();
+          reject(new Error('Git action menu did not render within 45000ms'));
+        }, 45000);
+        const complete = () => {
+          const items = [...document.querySelectorAll('[role="menuitem"]')]
+            .map((item) => ({
+              label: item.textContent?.trim() ?? '',
+              disabled: item.getAttribute('aria-disabled') === 'true',
+            }))
+            .filter(({ label }) => label.length > 0);
+          if (!items.some(({ label }) => label.includes('Commit')) ||
+              !items.some(({ label }) => label.includes('Push'))) return;
+          window.clearTimeout(deadline);
+          observer.disconnect();
+          resolve({ items });
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        };
+        const observer = new MutationObserver(complete);
+        observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+        trigger.click();
+        complete();
+      })`,
       true,
     );
 
@@ -1214,21 +1809,17 @@ async function runElectronChild() {
       () => renderer.executeJavaScript(`document.body.innerText.includes("Open a surface")`, true),
       "right panel empty state",
     );
-    await renderer.executeJavaScript(
-      `(() => {
-        const heading = [...document.querySelectorAll('h3')]
-          .find((node) => node.textContent?.trim() === 'Open a surface');
-        const chooser = heading?.parentElement?.parentElement;
-        const button = chooser && [...chooser.querySelectorAll('button')]
-          .find((candidate) => [...candidate.querySelectorAll('span')]
-            .some((span) => span.textContent?.trim() === 'Browser'));
-        if (!(button instanceof HTMLButtonElement) || button.disabled) {
-          throw new Error('right-panel Browser surface action missing');
-        }
-        button.click();
-      })()`,
-      true,
+    retainedDesktopCapabilities.surfaces.Files = await addRightPanelSurface(renderer, "Files", {
+      emptyState: true,
+    });
+    retainedDesktopCapabilities.surfaces["Terminal 1"] = await addRightPanelSurface(
+      renderer,
+      "Terminal",
+      {
+        expectedTitle: "Terminal 1",
+      },
     );
+    retainedDesktopCapabilities.surfaces.Browser = await addRightPanelSurface(renderer, "Browser");
     const webviewState = await waitFor(
       () =>
         renderer
@@ -1427,7 +2018,7 @@ async function runElectronChild() {
       ),
       nativeDogfoodResponsesExact: makeNativeShellAssertion(
         { requestCount: responsesRequestCount },
-        responsesRequestCount === 5,
+        isExactNativeDogfoodResponseCount(responsesRequestCount),
       ),
       currentCodexForkRecorded: makeNativeShellAssertion(
         dogfoodCodexIdentity,
@@ -1443,11 +2034,7 @@ async function runElectronChild() {
       ),
       nativeWorkflowLifecycleRendered: makeNativeShellAssertion(
         nativeDogfoodObservation.workflow,
-        nativeDogfoodObservation.workflow.sameRun === true &&
-          nativeDogfoodObservation.workflow.waiting?.runLabels.length === 1 &&
-          nativeDogfoodObservation.workflow.waiting.text.includes("Waiting") &&
-          nativeDogfoodObservation.workflow.completed?.runLabels.length === 1 &&
-          nativeDogfoodObservation.workflow.completed.text.includes("Completed"),
+        isNativeWorkflowLifecycleObservation(nativeDogfoodObservation.workflow),
       ),
       nativeAttentionResolved: makeNativeShellAssertion(
         nativeDogfoodObservation.attention,
@@ -1458,10 +2045,7 @@ async function runElectronChild() {
       ),
       nativeEvidenceLazyExpanded: makeNativeShellAssertion(
         nativeDogfoodObservation.evidence,
-        nativeDogfoodObservation.evidence?.before?.exposed === true &&
-          nativeDogfoodObservation.evidence.before.contentAbsentBeforeExpand === true &&
-          nativeDogfoodObservation.evidence.after?.expanded === true &&
-          nativeDogfoodObservation.evidence.after.contentState === "text",
+        isNativeEvidenceObservation(nativeDogfoodObservation.evidence),
       ),
       nativeSymphonySkippedIntake: makeNativeShellAssertion(
         nativeDogfoodObservation.symphony,
@@ -1480,7 +2064,9 @@ async function runElectronChild() {
         },
         nativeDogfoodObservation.symphony?.sameRootAfterInspect === true &&
           nativeDogfoodObservation.reload?.sameWorkflowRun === true &&
-          nativeDogfoodObservation.reload.sameSymphonyRoot === true,
+          nativeDogfoodObservation.reload.sameSymphonyRoot === true &&
+          nativeDogfoodObservation.reload.evidence?.expanded === true &&
+          nativeDogfoodObservation.reload.evidence.contentState === "text",
       ),
       nativeDogfoodProviderRestartRecovered: makeNativeShellAssertion(
         nativeDogfoodObservation.restart,
@@ -1488,6 +2074,11 @@ async function runElectronChild() {
           nativeDogfoodObservation.restart.stop.responsesRequestCount === 5 &&
           nativeDogfoodObservation.restart.recovery.thread.session?.status === "ready" &&
           nativeDogfoodObservation.restart.recovery.responsesRequestCount === 5 &&
+          nativeDogfoodObservation.restart.recovery.typedSymphonyStatus?.runId ===
+            nativeDogfoodObservation.restart.recovery.symphony.runId &&
+          nativeDogfoodObservation.restart.recovery.typedSymphonyStatus.status === "running" &&
+          nativeDogfoodObservation.restart.recovery.evidence?.expanded === true &&
+          nativeDogfoodObservation.restart.recovery.evidence.contentState === "text" &&
           nativeDogfoodObservation.restart.sameWorkflowRun === true &&
           nativeDogfoodObservation.restart.sameSymphonyRoot === true &&
           nativeDogfoodObservation.restart.sameSymphonyStatus === true,
@@ -1795,8 +2386,7 @@ async function runElectronChild() {
     );
     assertions.narrowDrawerOpened = makeNativeShellAssertion(
       narrowDrawerObservations,
-      narrowDrawerObservations.length === 2 &&
-        narrowDrawerObservations.every(({ opened }) => opened === true),
+      isNarrowDrawerOpenedObservation(narrowDrawerObservations),
     );
     assertions.narrowDrawerClosed = makeNativeShellAssertion(
       narrowDrawerObservations,
@@ -1821,6 +2411,37 @@ async function runElectronChild() {
             composerReachable === true && taskVisible === true,
         ),
     );
+    retainedDesktopCapabilities.surfaces.Diff = {
+      title: "Diff",
+      panelVisible:
+        narrowDrawerObservations.length === 2 &&
+        narrowDrawerObservations.every(({ activeSurface }) => activeSurface === "Diff"),
+    };
+    assertions.retainedDesktopCapabilitiesProbed = makeNativeShellAssertion(
+      retainedDesktopCapabilities,
+      retainedDesktopCapabilities.workspace.projectVisible === true &&
+        retainedDesktopCapabilities.workspace.taskVisible === true &&
+        retainedDesktopCapabilities.workspace.localCheckoutVisible === true &&
+        retainedDesktopCapabilities.workspace.contextTabs.includes("Workflow") &&
+        retainedDesktopCapabilities.workspace.contextTabs.includes("Attention") &&
+        retainedDesktopCapabilities.context.workflowRunId === waitingRunId &&
+        retainedDesktopCapabilities.context.attentionResolved === true &&
+        retainedDesktopCapabilities.modelPicker?.trigger.length > 0 &&
+        retainedDesktopCapabilities.modelPicker.text.length > 0 &&
+        retainedDesktopCapabilities.settings?.hash.includes("/settings") === true &&
+        retainedDesktopCapabilities.settings.generalVisible === true &&
+        retainedDesktopCapabilities.vcs?.items.some(({ label }) => label.includes("Commit")) ===
+          true &&
+        retainedDesktopCapabilities.vcs.items.some(({ label }) => label.includes("Push")) ===
+          true &&
+        ["Files", "Terminal 1", "Browser", "Diff"].every(
+          (title) =>
+            retainedDesktopCapabilities.surfaces[title]?.title === title &&
+            retainedDesktopCapabilities.surfaces[title]?.panelVisible === true,
+        ) &&
+        retainedDesktopCapabilities.mutations.commit === "unobserved" &&
+        retainedDesktopCapabilities.mutations.push === "unobserved",
+    );
     assertNativeShellAssertions({
       ...assertions,
       processCleanupVerified: makeNativeShellAssertion({ status: "parent-check-pending" }, true),
@@ -1836,6 +2457,8 @@ async function runElectronChild() {
         tree: runGit(repoRoot, ["rev-parse", "HEAD^{tree}"]),
       },
       codex: dogfoodCodexIdentity,
+      orchestraCore: orchestraCoreIdentity,
+      product: productIdentity,
       capture: {
         electronVersion: process.versions.electron,
         chromiumVersion: process.versions.chrome,
@@ -1876,10 +2499,10 @@ async function runElectronChild() {
         navigation,
         cleanup: { portsClosed: false, processGroupEmpty: false },
       },
-      humanReview: {
+      agentReview: {
         status: "pending",
         reviewedAt: new Date(0).toISOString(),
-        notes: "Pending direct visual inspection of both real Electron screenshots.",
+        notes: "Pending direct agent visual inspection of all four real Electron screenshots.",
       },
     };
     await NodeFSP.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
