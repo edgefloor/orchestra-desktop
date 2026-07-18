@@ -276,6 +276,25 @@ describe("native-shell acceptance capture contract", () => {
     expect(captureSource).not.toContain('aria-label="Evidence identity"');
   });
 
+  it("opens the retained Git menu accessibly and reads only its visible structured items", async () => {
+    const captureSource = await NodeFSP.readFile(
+      NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),
+      "utf8",
+    );
+    const probeStart = captureSource.indexOf("retainedDesktopCapabilities.vcs =");
+    const probeEnd = captureSource.indexOf(
+      "retainedDesktopCapabilities.surfaces.Files",
+      probeStart,
+    );
+    const probeSource = captureSource.slice(probeStart, probeEnd);
+    expect(probeStart).toBeGreaterThanOrEqual(0);
+    expect(probeEnd).toBeGreaterThan(probeStart);
+    expect(probeSource).toContain("key: 'ArrowDown'");
+    expect(probeSource).toContain("popup.getClientRects().length === 0");
+    expect(probeSource).toContain("popup.querySelectorAll('[data-slot=\"menu-item\"]')");
+    expect(probeSource).not.toContain("document.querySelectorAll('[role=\"menuitem\"]')");
+  });
+
   it("requires the exact all-true semantic assertion set", () => {
     expect(ORCHESTRA_NATIVE_SHELL_ASSERTIONS).toContain("nativeDogfoodProviderRestartRecovered");
     const assertions = Object.fromEntries(

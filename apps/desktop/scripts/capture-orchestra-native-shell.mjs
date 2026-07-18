@@ -1962,22 +1962,25 @@ async function runElectronChild() {
           reject(new Error('Git action menu did not render within 45000ms'));
         }, 45000);
         const complete = () => {
-          const items = [...document.querySelectorAll('[role="menuitem"]')]
+          const popup = document.querySelector('[data-slot="menu-popup"]');
+          if (!(popup instanceof HTMLElement) || popup.getClientRects().length === 0) return;
+          const items = [...popup.querySelectorAll('[data-slot="menu-item"]')]
             .map((item) => ({
               label: item.textContent?.trim() ?? '',
-              disabled: item.getAttribute('aria-disabled') === 'true',
+              disabled: item.matches('[data-disabled], [aria-disabled="true"]'),
             }))
             .filter(({ label }) => label.length > 0);
           if (!items.some(({ label }) => label.includes('Commit')) ||
               !items.some(({ label }) => label.includes('Push'))) return;
           window.clearTimeout(deadline);
           observer.disconnect();
-          resolve({ items });
+          resolve({ popupVisible: true, items });
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         };
         const observer = new MutationObserver(complete);
         observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
-        trigger.click();
+        trigger.focus();
+        trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
         complete();
       })`,
       true,
