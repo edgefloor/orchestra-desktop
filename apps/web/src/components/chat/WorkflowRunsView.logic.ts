@@ -28,6 +28,7 @@ function eventIsNewer(candidate: OrchestraReplayEvent, current: OrchestraReplayE
 export function deriveWorkspaceWorkflowRuns(
   workLogEntries: ReadonlyArray<WorkLogEntry>,
   limit = MAX_WORKSPACE_WORKFLOW_RUNS,
+  requestedRunId?: string,
 ): WorkspaceWorkflowRunProjection {
   const latestByRunId = new Map<string, WorkspaceWorkflowRun>();
 
@@ -49,9 +50,21 @@ export function deriveWorkspaceWorkflowRuns(
     return left.event.runId.localeCompare(right.event.runId);
   });
   const boundedLimit = Math.max(0, limit);
+  const items = all.slice(0, boundedLimit);
+  const requested = requestedRunId
+    ? all.find((item) => item.event.runId === requestedRunId)
+    : undefined;
+
+  if (
+    requested &&
+    boundedLimit > 0 &&
+    !items.some((item) => item.event.runId === requested.event.runId)
+  ) {
+    items[items.length - 1] = requested;
+  }
 
   return {
-    items: all.slice(0, boundedLimit),
-    omitted: Math.max(0, all.length - boundedLimit),
+    items,
+    omitted: Math.max(0, all.length - items.length),
   };
 }

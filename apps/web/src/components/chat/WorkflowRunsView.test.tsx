@@ -72,4 +72,18 @@ describe("WorkflowRunsView", () => {
     expect(markup).toContain("No Workflow Runs yet");
     expect(markup).toContain("Details remain unloaded until you expand a Run");
   });
+
+  it("reports a requested Run that is absent from native task history", () => {
+    const markup = renderToStaticMarkup(
+      <WorkflowRunsView
+        environmentId={EnvironmentId.make("local")}
+        threadId={ThreadId.make("parent-task")}
+        workLogEntries={[]}
+        requestedRunId="run-missing"
+      />,
+    );
+
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("Requested Run run-missing is unavailable");
+  });
 });

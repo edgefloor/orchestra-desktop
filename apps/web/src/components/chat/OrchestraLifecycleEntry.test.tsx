@@ -2,7 +2,11 @@ import { EnvironmentId, ThreadId, type OrchestraReplayEvent } from "@t3tools/con
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { OrchestraLifecycleEntry, readOrchestraReplayEvent } from "./OrchestraLifecycleEntry";
+import {
+  findRequestedEvidenceReference,
+  OrchestraLifecycleEntry,
+  readOrchestraReplayEvent,
+} from "./OrchestraLifecycleEntry";
 import lifecycleSource from "./OrchestraLifecycleEntry.tsx?raw";
 
 function event(): OrchestraReplayEvent {
@@ -72,6 +76,33 @@ describe("OrchestraLifecycleEntry", () => {
     expect(lifecycleSource).toContain("if (next) onOpenRun?.(event.runId)");
     expect(lifecycleSource).toContain(
       "if (willExpand) onOpenEvidence?.(event.runId, item.evidenceId)",
+    );
+  });
+
+  it("finds an exact Evidence reference only after a lazy step query exposes it", () => {
+    const reference = {
+      evidenceId: "evidence-2",
+      name: "Verification",
+      kind: "check" as const,
+      provenance: "runtime_check" as const,
+      stepId: "step-2",
+      bytes: 42,
+      sha256: "sha-2",
+      availability: "available" as const,
+    };
+
+    expect(findRequestedEvidenceReference({}, "evidence-2")).toBeNull();
+    expect(
+      findRequestedEvidenceReference({ "step-1": [], "step-2": [reference] }, "evidence-2"),
+    ).toEqual({ stepId: "step-2", item: reference });
+  });
+
+  it("restores requested disclosures without invoking user-open callbacks", () => {
+    expect(lifecycleSource).toContain("restoredRunRequestRef");
+    expect(lifecycleSource).toContain("restoredEvidenceRequestRef");
+    expect(lifecycleSource).toContain('void Promise.all([load("run"), load("steps")])');
+    expect(lifecycleSource).toContain(
+      'void load("evidence_content", undefined, requestedEvidenceId)',
     );
   });
 });

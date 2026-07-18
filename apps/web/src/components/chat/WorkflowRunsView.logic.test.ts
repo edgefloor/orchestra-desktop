@@ -55,13 +55,33 @@ describe("deriveWorkspaceWorkflowRuns", () => {
     const projection = deriveWorkspaceWorkflowRuns(
       [
         entry(event("run-1", 1), "2026-07-17T00:00:01.000Z"),
-        { id: "tool", createdAt: "2026-07-17T00:00:03.000Z", label: "Shell", tone: "tool" },
+        {
+          id: "tool",
+          createdAt: "2026-07-17T00:00:03.000Z",
+          label: "Shell",
+          tone: "tool",
+        },
         entry(event("run-2", 1), "2026-07-17T00:00:02.000Z"),
       ],
       1,
     );
 
     expect(projection.items.map((item) => item.event.runId)).toEqual(["run-2"]);
+    expect(projection.omitted).toBe(1);
+  });
+
+  it("retains an older requested Run inside the bounded projection", () => {
+    const projection = deriveWorkspaceWorkflowRuns(
+      [
+        entry(event("run-1", 1), "2026-07-17T00:00:01.000Z"),
+        entry(event("run-2", 1), "2026-07-17T00:00:02.000Z"),
+        entry(event("run-3", 1), "2026-07-17T00:00:03.000Z"),
+      ],
+      2,
+      "run-1",
+    );
+
+    expect(projection.items.map((item) => item.event.runId)).toEqual(["run-3", "run-1"]);
     expect(projection.omitted).toBe(1);
   });
 });

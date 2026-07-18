@@ -10,13 +10,18 @@ export const WorkflowRunsView = memo(function WorkflowRunsView(props: {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
   readonly workLogEntries: ReadonlyArray<WorkLogEntry>;
+  readonly requestedRunId?: string;
+  readonly requestedEvidenceId?: string;
   readonly onOpenRun?: (runId: string) => void;
   readonly onOpenEvidence?: (runId: string, evidenceId: string) => void;
 }) {
   const projection = useMemo(
-    () => deriveWorkspaceWorkflowRuns(props.workLogEntries),
-    [props.workLogEntries],
+    () => deriveWorkspaceWorkflowRuns(props.workLogEntries, undefined, props.requestedRunId),
+    [props.requestedRunId, props.workLogEntries],
   );
+  const requestedRunAvailable =
+    props.requestedRunId === undefined ||
+    projection.items.some(({ event }) => event.runId === props.requestedRunId);
 
   if (projection.items.length === 0) {
     return (
@@ -27,6 +32,11 @@ export const WorkflowRunsView = memo(function WorkflowRunsView(props: {
           Task-owned Runs appear here from the native lifecycle. Details remain unloaded until you
           expand a Run.
         </p>
+        {!requestedRunAvailable ? (
+          <p className="mt-2 text-xs text-destructive" role="alert">
+            Requested Run {props.requestedRunId} is unavailable in the native task history.
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -46,6 +56,14 @@ export const WorkflowRunsView = memo(function WorkflowRunsView(props: {
             environmentId={props.environmentId}
             threadId={props.threadId}
             event={event}
+            {...(event.runId === props.requestedRunId
+              ? {
+                  requestedRunId: props.requestedRunId,
+                  ...(props.requestedEvidenceId
+                    ? { requestedEvidenceId: props.requestedEvidenceId }
+                    : {}),
+                }
+              : {})}
             {...(props.onOpenRun ? { onOpenRun: props.onOpenRun } : {})}
             {...(props.onOpenEvidence ? { onOpenEvidence: props.onOpenEvidence } : {})}
           />
@@ -55,6 +73,11 @@ export const WorkflowRunsView = memo(function WorkflowRunsView(props: {
         <p className="px-1 text-[11px] text-muted-foreground">
           {projection.omitted} earlier {projection.omitted === 1 ? "Run remains" : "Runs remain"} in
           the native task history.
+        </p>
+      ) : null}
+      {!requestedRunAvailable ? (
+        <p className="px-1 text-[11px] text-destructive" role="alert">
+          Requested Run {props.requestedRunId} is unavailable in the native task history.
         </p>
       ) : null}
     </section>

@@ -1,4 +1,4 @@
-import { PlusIcon, XIcon } from "lucide-react";
+import { CircleSlash2Icon, PlusIcon, XIcon } from "lucide-react";
 import { memo, useRef, type KeyboardEvent } from "react";
 
 import { cn } from "~/lib/utils";
@@ -23,6 +23,7 @@ export interface WorkspaceTabDescriptor {
   readonly title: string;
   readonly active: boolean;
   readonly status?: WorkspaceTaskTabStatus;
+  readonly availability?: "available" | "temporarilyUnavailable";
   readonly onSelect: () => void;
   readonly onClose?: () => void;
 }
@@ -69,6 +70,7 @@ export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
       >
         {tabs.map((tab, index) => {
           const status = tab.status ? STATUS_PRESENTATION[tab.status] : null;
+          const temporarilyUnavailable = tab.availability === "temporarilyUnavailable";
           return (
             <div
               key={tab.key}
@@ -109,6 +111,22 @@ export const WorkspaceTaskTabs = memo(function WorkspaceTaskTabs({
                       <span className={cn("size-1.5 rounded-full", status.className)} />
                     </TooltipTrigger>
                     <TooltipPopup side="bottom">{status.label}</TooltipPopup>
+                  </Tooltip>
+                ) : null}
+                {temporarilyUnavailable ? (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span
+                          aria-label="Temporarily unavailable"
+                          role="img"
+                          className="inline-flex size-3 shrink-0 items-center justify-center text-muted-foreground"
+                        />
+                      }
+                    >
+                      <CircleSlash2Icon className="size-3" />
+                    </TooltipTrigger>
+                    <TooltipPopup side="bottom">Temporarily unavailable</TooltipPopup>
                   </Tooltip>
                 ) : null}
                 <span className="min-w-0 flex-1 truncate">{tab.title}</span>

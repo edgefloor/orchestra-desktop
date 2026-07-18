@@ -10,14 +10,17 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { ArrowLeftIcon, BotIcon, CircleAlertIcon, LoaderCircleIcon } from "lucide-react";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { deriveNativeSubagents, type NativeSubagentSummary } from "~/nativeSubagents";
 import { readNativeSubagent } from "~/state/nativeSubagents";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
-import { shouldApplyNativeSubagentResult } from "./NativeSubagentsPanel.logic";
+import {
+  deriveNativeSubagentRestoration,
+  shouldApplyNativeSubagentResult,
+} from "./NativeSubagentsPanel.logic";
 
 const STATUS_PRESENTATION: Record<
   NativeSubagentStatus,
@@ -143,9 +146,10 @@ export const NativeSubagentsPanel = memo(function NativeSubagentsPanel(props: {
   readonly environmentId: EnvironmentId;
   readonly parentThreadId: ThreadId;
   readonly activities: ReadonlyArray<OrchestrationThreadActivity>;
+  readonly requestedAgentThreadId?: string;
   readonly onOpenChild?: (agentThreadId: string) => void;
 }) {
-  const { environmentId, parentThreadId, activities, onOpenChild } = props;
+  const { environmentId, parentThreadId, activities, requestedAgentThreadId, onOpenChild } = props;
   const readDetail = useAtomCommand(readNativeSubagent, { reportFailure: false });
   const projection = useMemo(() => deriveNativeSubagents(activities), [activities]);
   const [selected, setSelected] = useState<NativeSubagentSummary | null>(null);
@@ -164,9 +168,11 @@ export const NativeSubagentsPanel = memo(function NativeSubagentsPanel(props: {
     setError(null);
   }, []);
 
-  const open = useCallback(
-    (agent: NativeSubagentSummary) => {
-      onOpenChild?.(agent.agentThreadId);
+  const load = useCallback(
+    (agent: NativeSubagentSummary, notifyOpen: boolean) => {
+      if (notifyOpen) {
+        onOpenChild?.(agent.agentThreadId);
+      }
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
       selectedRef.current = agent;
@@ -201,6 +207,26 @@ export const NativeSubagentsPanel = memo(function NativeSubagentsPanel(props: {
     [environmentId, onOpenChild, parentThreadId, readDetail],
   );
 
+  const open = useCallback(
+    (agent: NativeSubagentSummary) => {
+      load(agent, true);
+    },
+    [load],
+  );
+
+  useEffect(() => {
+    const restoration = deriveNativeSubagentRestoration({
+      requestedAgentThreadId,
+      selectedAgentThreadId: selectedRef.current?.agentThreadId ?? null,
+      agents: projection.agents,
+    });
+    if (restoration.kind === "close") {
+      close();
+    } else if (restoration.kind === "open") {
+      load(restoration.agent, false);
+    }
+  }, [close, load, projection.agents, requestedAgentThreadId]);
+
   return (
     <section aria-label="Native subagents" className="min-h-full" data-native-subagents="">
       {selected ? (
@@ -211,7 +237,7 @@ export const NativeSubagentsPanel = memo(function NativeSubagentsPanel(props: {
           loading={loading}
           error={error}
           onBack={close}
-          onRetry={() => open(selected)}
+          onRetry={() => load(selected, false)}
         />
       ) : (
         <div className="space-y-2">

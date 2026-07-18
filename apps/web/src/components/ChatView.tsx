@@ -1569,6 +1569,13 @@ function ChatViewContent(props: ChatViewProps) {
     }
     return [activeThread, ...projectTasks];
   }, [activeThread, activeThreadKey, serverThreadShells]);
+  const activeWorkspaceEntry = useMemo(
+    () =>
+      workspaceEntries.find(
+        (entry) => workspaceSurfaceKey(entry.surface) === activeWorkspaceSurfaceKey,
+      ) ?? null,
+    [activeWorkspaceSurfaceKey, workspaceEntries],
+  );
   useEffect(() => {
     if (!activeTaskSurface) return;
     if (activeRightPanelWorkspaceSurface) {
@@ -1578,44 +1585,42 @@ function ChatViewContent(props: ChatViewProps) {
       setAutomationWorkspaceThreadId(null);
       return;
     }
-    const activeEntry = workspaceEntries.find(
-      (entry) => workspaceSurfaceKey(entry.surface) === activeWorkspaceSurfaceKey,
-    );
     if (
-      activeEntry?.surface.kind === "attention" &&
-      activeEntry.surface.environmentId === activeTaskSurface.environmentId &&
-      activeEntry.surface.projectId === activeTaskSurface.projectId &&
-      activeEntry.surface.threadId === activeTaskSurface.threadId
+      activeWorkspaceEntry?.surface.kind === "attention" &&
+      activeWorkspaceEntry.surface.environmentId === activeTaskSurface.environmentId &&
+      activeWorkspaceEntry.surface.projectId === activeTaskSurface.projectId &&
+      activeWorkspaceEntry.surface.threadId === activeTaskSurface.threadId
     ) {
       setWorkspaceContextRailView("attention");
       if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
       return;
     }
     if (
-      activeEntry?.surface.kind === "child" &&
-      activeEntry.surface.environmentId === activeTaskSurface.environmentId &&
-      activeEntry.surface.projectId === activeTaskSurface.projectId &&
-      activeEntry.surface.parentThreadId === activeTaskSurface.threadId
+      activeWorkspaceEntry?.surface.kind === "child" &&
+      activeWorkspaceEntry.surface.environmentId === activeTaskSurface.environmentId &&
+      activeWorkspaceEntry.surface.projectId === activeTaskSurface.projectId &&
+      activeWorkspaceEntry.surface.parentThreadId === activeTaskSurface.threadId
     ) {
       setWorkspaceContextRailView("subagents");
       if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
       return;
     }
     if (
-      (activeEntry?.surface.kind === "workflowRun" || activeEntry?.surface.kind === "evidence") &&
-      activeEntry.surface.environmentId === activeTaskSurface.environmentId &&
-      activeEntry.surface.projectId === activeTaskSurface.projectId &&
-      activeEntry.surface.threadId === activeTaskSurface.threadId
+      (activeWorkspaceEntry?.surface.kind === "workflowRun" ||
+        activeWorkspaceEntry?.surface.kind === "evidence") &&
+      activeWorkspaceEntry.surface.environmentId === activeTaskSurface.environmentId &&
+      activeWorkspaceEntry.surface.projectId === activeTaskSurface.projectId &&
+      activeWorkspaceEntry.surface.threadId === activeTaskSurface.threadId
     ) {
       setWorkspaceContextRailView("workflow");
       if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
       return;
     }
     if (
-      activeEntry?.surface.kind === "symphony" &&
-      activeEntry.surface.environmentId === activeTaskSurface.environmentId &&
-      activeEntry.surface.projectId === activeTaskSurface.projectId &&
-      activeEntry.surface.threadId === activeTaskSurface.threadId
+      activeWorkspaceEntry?.surface.kind === "symphony" &&
+      activeWorkspaceEntry.surface.environmentId === activeTaskSurface.environmentId &&
+      activeWorkspaceEntry.surface.projectId === activeTaskSurface.projectId &&
+      activeWorkspaceEntry.surface.threadId === activeTaskSurface.threadId
     ) {
       setWorkspaceContextRailView(null);
       setWorkspaceContextSheetOpen(false);
@@ -1623,10 +1628,10 @@ function ChatViewContent(props: ChatViewProps) {
       return;
     }
     if (
-      activeEntry?.surface.kind === "issue" &&
-      activeEntry.surface.environmentId === activeTaskSurface.environmentId &&
-      activeEntry.surface.projectId === activeTaskSurface.projectId &&
-      activeEntry.surface.issueTaskThreadId === activeTaskSurface.threadId
+      activeWorkspaceEntry?.surface.kind === "issue" &&
+      activeWorkspaceEntry.surface.environmentId === activeTaskSurface.environmentId &&
+      activeWorkspaceEntry.surface.projectId === activeTaskSurface.projectId &&
+      activeWorkspaceEntry.surface.issueTaskThreadId === activeTaskSurface.threadId
     ) {
       setWorkspaceContextRailView(null);
       setWorkspaceContextSheetOpen(false);
@@ -1636,10 +1641,9 @@ function ChatViewContent(props: ChatViewProps) {
     useWorkspaceSurfaceStore.getState().openSurface(activeTaskSurface);
   }, [
     activeTaskSurface,
-    activeWorkspaceSurfaceKey,
+    activeWorkspaceEntry,
     activeRightPanelWorkspaceSurface,
     shouldUseWorkspaceContextSheet,
-    workspaceEntries,
   ]);
   useEffect(() => {
     if (!activeThread) return;
@@ -2050,6 +2054,7 @@ function ChatViewContent(props: ChatViewProps) {
                   key,
                   title: `Child ${childSurface.agentThreadId.slice(0, 8)}`,
                   active: key === activeWorkspaceSurfaceKey,
+                  availability: entry.availability,
                   onSelect: () => activateWorkspaceSurface(key),
                   onClose: () => closeWorkspaceSurface(key),
                 },
@@ -2062,6 +2067,7 @@ function ChatViewContent(props: ChatViewProps) {
                   key,
                   title: `Run ${runSurface.runId.slice(0, 8)}`,
                   active: key === activeWorkspaceSurfaceKey,
+                  availability: entry.availability,
                   onSelect: () => activateWorkspaceSurface(key),
                   onClose: () => closeWorkspaceSurface(key),
                 },
@@ -2074,6 +2080,7 @@ function ChatViewContent(props: ChatViewProps) {
                   key,
                   title: `Evidence ${evidenceSurface.evidenceId.slice(0, 8)}`,
                   active: key === activeWorkspaceSurfaceKey,
+                  availability: entry.availability,
                   onSelect: () => activateWorkspaceSurface(key),
                   onClose: () => closeWorkspaceSurface(key),
                 },
@@ -2101,6 +2108,7 @@ function ChatViewContent(props: ChatViewProps) {
                   key,
                   title: `Issue ${issueSurface.issueId}`,
                   active: key === activeWorkspaceSurfaceKey,
+                  availability: entry.availability,
                   onSelect: () => activateWorkspaceSurface(key),
                   onClose: () => closeWorkspaceSurface(key),
                 },
@@ -6125,6 +6133,10 @@ function ChatViewContent(props: ChatViewProps) {
                   environmentId={activeThread.environmentId}
                   parentThreadId={activeThread.id}
                   activities={activeThread.activities}
+                  {...(activeWorkspaceEntry?.surface.kind === "child" &&
+                  activeWorkspaceEntry.surface.parentThreadId === activeThread.id
+                    ? { requestedAgentThreadId: activeWorkspaceEntry.surface.agentThreadId }
+                    : {})}
                   onOpenChild={openChildWorkspace}
                 />
               }
@@ -6133,6 +6145,16 @@ function ChatViewContent(props: ChatViewProps) {
                   environmentId={activeThread.environmentId}
                   threadId={activeThread.id}
                   workLogEntries={workLogEntries}
+                  {...((activeWorkspaceEntry?.surface.kind === "workflowRun" ||
+                    activeWorkspaceEntry?.surface.kind === "evidence") &&
+                  activeWorkspaceEntry.surface.threadId === activeThread.id
+                    ? {
+                        requestedRunId: activeWorkspaceEntry.surface.runId,
+                        ...(activeWorkspaceEntry.surface.kind === "evidence"
+                          ? { requestedEvidenceId: activeWorkspaceEntry.surface.evidenceId }
+                          : {}),
+                      }
+                    : {})}
                   onOpenRun={openWorkflowRunSurface}
                   onOpenEvidence={openWorkflowEvidenceSurface}
                 />
@@ -6250,6 +6272,10 @@ function ChatViewContent(props: ChatViewProps) {
                 environmentId={activeThread.environmentId}
                 parentThreadId={activeThread.id}
                 activities={activeThread.activities}
+                {...(activeWorkspaceEntry?.surface.kind === "child" &&
+                activeWorkspaceEntry.surface.parentThreadId === activeThread.id
+                  ? { requestedAgentThreadId: activeWorkspaceEntry.surface.agentThreadId }
+                  : {})}
                 onOpenChild={openChildWorkspace}
               />
             }
@@ -6258,6 +6284,16 @@ function ChatViewContent(props: ChatViewProps) {
                 environmentId={activeThread.environmentId}
                 threadId={activeThread.id}
                 workLogEntries={workLogEntries}
+                {...((activeWorkspaceEntry?.surface.kind === "workflowRun" ||
+                  activeWorkspaceEntry?.surface.kind === "evidence") &&
+                activeWorkspaceEntry.surface.threadId === activeThread.id
+                  ? {
+                      requestedRunId: activeWorkspaceEntry.surface.runId,
+                      ...(activeWorkspaceEntry.surface.kind === "evidence"
+                        ? { requestedEvidenceId: activeWorkspaceEntry.surface.evidenceId }
+                        : {}),
+                    }
+                  : {})}
                 onOpenRun={openWorkflowRunSurface}
                 onOpenEvidence={openWorkflowEvidenceSurface}
               />

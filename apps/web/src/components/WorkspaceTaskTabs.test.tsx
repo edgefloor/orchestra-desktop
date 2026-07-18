@@ -66,4 +66,26 @@ describe("WorkspaceTaskTabs", () => {
     expect(markup).toContain("Overview");
     expect(markup).toContain("Native task");
   });
+
+  it("names temporarily unavailable contextual tabs without disabling recovery selection", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceTaskTabs
+        tabs={[
+          {
+            key: "evidence",
+            title: "Evidence proof-1",
+            active: true,
+            availability: "temporarilyUnavailable",
+            onSelect: vi.fn(),
+            onClose: vi.fn(),
+          },
+        ]}
+        onNewTask={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="Temporarily unavailable" role="img"');
+    expect(markup).not.toContain('aria-disabled="true"');
+    expect(markup).toContain('aria-label="Close Evidence proof-1"');
+  });
 });

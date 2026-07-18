@@ -25,7 +25,7 @@ import {
   HistoryIcon,
   LoaderCircleIcon,
 } from "lucide-react";
-import { memo, useCallback, useId, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { queryOrchestra } from "~/state/orchestra";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -57,7 +57,10 @@ const STATUS_PRESENTATION: Record<
   failed: { label: "Failed", className: "bg-destructive" },
   paused: { label: "Paused", className: "bg-warning" },
   queued: { label: "Queued", className: "bg-info" },
-  recovering: { label: "Recovering", className: "animate-status-pulse bg-info" },
+  recovering: {
+    label: "Recovering",
+    className: "animate-status-pulse bg-info",
+  },
   running: { label: "Running", className: "animate-status-pulse bg-success" },
   unavailable: { label: "Unavailable", className: "bg-muted-foreground" },
   waiting: { label: "Waiting", className: "bg-warning" },
@@ -65,6 +68,20 @@ const STATUS_PRESENTATION: Record<
 
 type QuerySelector = OrchestraQueryInput["selector"];
 type QueryContinuation = string | OrchestraHistoryCursor;
+
+export function findRequestedEvidenceReference(
+  evidenceByStep: Readonly<Record<string, ReadonlyArray<OrchestraEvidenceReference>>>,
+  requestedEvidenceId: string,
+): {
+  readonly stepId: string;
+  readonly item: OrchestraEvidenceReference;
+} | null {
+  for (const [stepId, items] of Object.entries(evidenceByStep)) {
+    const item = items.find((candidate) => candidate.evidenceId === requestedEvidenceId);
+    if (item) return { stepId, item };
+  }
+  return null;
+}
 
 export function readOrchestraReplayEvent(value: unknown): OrchestraReplayEvent | null {
   return isReplayEvent(value) ? value : null;
@@ -100,10 +117,20 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
   readonly event: OrchestraReplayEvent;
+  readonly requestedRunId?: string;
+  readonly requestedEvidenceId?: string;
   readonly onOpenRun?: (runId: string) => void;
   readonly onOpenEvidence?: (runId: string, evidenceId: string) => void;
 }) {
-  const { environmentId, threadId, event, onOpenRun, onOpenEvidence } = props;
+  const {
+    environmentId,
+    threadId,
+    event,
+    requestedRunId,
+    requestedEvidenceId,
+    onOpenRun,
+    onOpenEvidence,
+  } = props;
   const query = useAtomCommand(queryOrchestra, { reportFailure: false });
   const compact = useMemo(() => compactWorkflowStepSummary(event), [event]);
   const disclosureId = useId();
@@ -128,6 +155,8 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   );
   const [loading, setLoading] = useState<ReadonlySet<string>>(() => new Set());
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
+  const restoredRunRequestRef = useRef<string | null>(null);
+  const restoredEvidenceRequestRef = useRef<string | null>(null);
 
   const load = useCallback(
     async (
@@ -265,6 +294,21 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
     }
   }, [event.runId, expanded, load, onOpenRun, run, steps]);
 
+  useEffect(() => {
+    if (requestedRunId !== event.runId) {
+      restoredRunRequestRef.current = null;
+      return;
+    }
+
+    const restorationKey = `${requestedRunId}:${requestedEvidenceId ?? ""}`;
+    if (restoredRunRequestRef.current === restorationKey) return;
+    restoredRunRequestRef.current = restorationKey;
+    setExpanded(true);
+    if (run === null && steps === null) {
+      void Promise.all([load("run"), load("steps")]);
+    }
+  }, [event.runId, load, requestedEvidenceId, requestedRunId, run, steps]);
+
   const toggleStep = useCallback(
     (stepId: string) => {
       const nextExpanded = !expandedSteps.has(stepId);
@@ -303,6 +347,25 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
     },
     [event.runId, evidenceContent, expandedEvidence, load, onOpenEvidence],
   );
+
+  useEffect(() => {
+    if (requestedRunId !== event.runId || !requestedEvidenceId) {
+      restoredEvidenceRequestRef.current = null;
+      return;
+    }
+
+    const match = findRequestedEvidenceReference(evidence, requestedEvidenceId);
+    if (!match) return;
+    const restorationKey = `${event.runId}:${requestedEvidenceId}`;
+    if (restoredEvidenceRequestRef.current === restorationKey) return;
+    restoredEvidenceRequestRef.current = restorationKey;
+    setExpanded(true);
+    setExpandedSteps((current) => new Set(current).add(match.stepId));
+    setExpandedEvidence((current) => new Set(current).add(requestedEvidenceId));
+    if (evidenceContent[requestedEvidenceId] === undefined) {
+      void load("evidence_content", undefined, requestedEvidenceId);
+    }
+  }, [event.runId, evidence, evidenceContent, load, requestedEvidenceId, requestedRunId]);
 
   const nativeState = workflowRunDisplayState(event.projection.status, event.kind);
   const rootUnavailable = Boolean(errors["run:run"] || errors["steps:run"]);
