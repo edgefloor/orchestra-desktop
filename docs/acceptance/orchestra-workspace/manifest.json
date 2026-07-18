@@ -4,8 +4,8 @@
   "role": "product-acceptance-evidence",
   "desktop": {
     "repository": "edgefloor/orchestra-desktop",
-    "commit": "087575383be09e09810f3b03d1a8692bc7e9ee89",
-    "tree": "1122b03d52afde5fbc7adf373dc59e3cecb00be0"
+    "commit": "ca45ceb80ea4932789d31854b5416727063c6636",
+    "tree": "94fa72087aa990e28ed2367ffb81c0ed4e9c46fe"
   },
   "capture": {
     "electronVersion": "41.5.0",
@@ -122,7 +122,55 @@
       "deviceScaleFactor": 1,
       "theme": "dark",
       "state": "symphony",
-      "sha256": "272db32ccb2eed8577b767b08dada0a2ebbc70603347b13ca52681b5942297a6",
+      "sha256": "18b1af096bf0729ecb2c8cfa6f960031cf78bb95a19912c36267b2983b23acbe",
+      "assertions": {
+        "activeTaskVisible": true,
+        "composerVisible": true,
+        "contextTabsReachable": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "symphonyActionsWired": true,
+        "symphonyHeightBounded": true,
+        "symphonyKeyboardNavigation": true,
+        "symphonyScrollsInternally": true,
+        "symphonySelectionReconciles": true,
+        "symphonyTabsInteractive": true,
+        "symphonyWorkspaceVisible": true,
+        "taskTabsReachable": true,
+        "wideLayoutActive": true
+      }
+    },
+    {
+      "scenario": "symphony-activity-1440x900-dark",
+      "file": "docs/acceptance/orchestra-workspace/symphony-activity-1440x900-dark.png",
+      "width": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "state": "symphony-activity",
+      "sha256": "300e5cda62ed2573a94e486ccfad7360d6dc45330e574a770238108bdf6e5a4e",
+      "assertions": {
+        "activeTaskVisible": true,
+        "composerVisible": true,
+        "contextTabsReachable": true,
+        "noDocumentHorizontalOverflow": true,
+        "rootWidthMatchesViewport": true,
+        "symphonyHeightBounded": true,
+        "symphonyScrollsInternally": true,
+        "symphonyWorkspaceVisible": true,
+        "taskTabsReachable": true,
+        "wideLayoutActive": true
+      }
+    },
+    {
+      "scenario": "symphony-events-1440x900-dark",
+      "file": "docs/acceptance/orchestra-workspace/symphony-events-1440x900-dark.png",
+      "width": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "theme": "dark",
+      "state": "symphony-events",
+      "sha256": "b93c0c92284f7d616669198209a32786c20939a79ab480cebe415a5938c458a5",
       "assertions": {
         "activeTaskVisible": true,
         "composerVisible": true,
