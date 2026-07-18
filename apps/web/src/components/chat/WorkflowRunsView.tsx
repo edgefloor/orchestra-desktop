@@ -10,6 +10,8 @@ export const WorkflowRunsView = memo(function WorkflowRunsView(props: {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
   readonly workLogEntries: ReadonlyArray<WorkLogEntry>;
+  readonly onOpenRun?: (runId: string) => void;
+  readonly onOpenEvidence?: (runId: string, evidenceId: string) => void;
 }) {
   const projection = useMemo(
     () => deriveWorkspaceWorkflowRuns(props.workLogEntries),
@@ -44,6 +46,8 @@ export const WorkflowRunsView = memo(function WorkflowRunsView(props: {
             environmentId={props.environmentId}
             threadId={props.threadId}
             event={event}
+            {...(props.onOpenRun ? { onOpenRun: props.onOpenRun } : {})}
+            {...(props.onOpenEvidence ? { onOpenEvidence: props.onOpenEvidence } : {})}
           />
         </div>
       ))}

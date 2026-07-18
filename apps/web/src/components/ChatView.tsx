@@ -12,7 +12,7 @@ import {
   type ServerProvider,
   type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
-  type ThreadId,
+  ThreadId,
   type TurnId,
   type KeybindingCommand,
   OrchestrationThreadActivity,
@@ -225,6 +225,10 @@ import {
   type WorkspaceSurfaceKey,
 } from "../workspaceSurface";
 import { useWorkspaceSurfaceStore } from "../workspaceSurfaceStore";
+import {
+  rightPanelActivationForWorkspaceSurface,
+  workspaceSurfaceForRightPanelSurface,
+} from "../workspaceRightPanelSurface";
 import { deriveNativeSubagents } from "../nativeSubagents";
 import { WorkspaceStatusAnnouncer } from "./WorkspaceStatusAnnouncer";
 import { buildWorkspaceStatusSnapshot } from "./WorkspaceStatusAnnouncer.logic";
@@ -1317,6 +1321,9 @@ function ChatViewContent(props: ChatViewProps) {
       });
       return;
     }
+    useRightPanelStore
+      .getState()
+      .close(scopeThreadRef(activeThread.environmentId, activeThread.id));
     useWorkspaceSurfaceStore.getState().openSurface(automationWorkspaceSurface);
     setAutomationWorkspaceThreadId(activeThreadId);
   }, [activeThread, activeThreadId, automationWorkspaceOpen, automationWorkspaceSurface]);
@@ -1343,9 +1350,14 @@ function ChatViewContent(props: ChatViewProps) {
       setWorkspaceContextSheetOpen(false);
       setWorkspaceContextRailView(null);
     }
+    if (activeThread) {
+      useRightPanelStore
+        .getState()
+        .close(scopeThreadRef(activeThread.environmentId, activeThread.id));
+    }
     useWorkspaceSurfaceStore.getState().openSurface(automationWorkspaceSurface);
     setAutomationWorkspaceThreadId(activeThreadId);
-  }, [activeThreadId, automationWorkspaceSurface, shouldUseWorkspaceContextSheet]);
+  }, [activeThread, activeThreadId, automationWorkspaceSurface, shouldUseWorkspaceContextSheet]);
   const openAutomationIssueTask = useCallback(
     (input: { threadId: ThreadId; automationRunId: string; issueId: string }) => {
       if (!activeThread) return;
@@ -1361,6 +1373,7 @@ function ChatViewContent(props: ChatViewProps) {
       });
       setAutomationWorkspaceThreadId(null);
       const issueTaskRef = scopeThreadRef(activeThread.environmentId, input.threadId);
+      useRightPanelStore.getState().close(issueTaskRef);
       void navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(issueTaskRef),
@@ -1525,6 +1538,20 @@ function ChatViewContent(props: ChatViewProps) {
         : null,
     [activeThread],
   );
+  const activeRightPanelWorkspaceSurface = useMemo(
+    () =>
+      activeThread && rightPanelOpen && activeRightPanelSurface
+        ? workspaceSurfaceForRightPanelSurface(
+            {
+              environmentId: activeThread.environmentId,
+              projectId: activeThread.projectId,
+              threadId: activeThread.id,
+            },
+            activeRightPanelSurface,
+          )
+        : null,
+    [activeRightPanelSurface, activeThread, rightPanelOpen],
+  );
   const workspaceTaskSources = useMemo<WorkspaceTaskTabSource[]>(() => {
     if (!activeThread) return [];
     const projectTasks = serverThreadShells.filter(
@@ -1544,6 +1571,13 @@ function ChatViewContent(props: ChatViewProps) {
   }, [activeThread, activeThreadKey, serverThreadShells]);
   useEffect(() => {
     if (!activeTaskSurface) return;
+    if (activeRightPanelWorkspaceSurface) {
+      useWorkspaceSurfaceStore.getState().openSurface(activeRightPanelWorkspaceSurface);
+      setWorkspaceContextRailView(null);
+      setWorkspaceContextSheetOpen(false);
+      setAutomationWorkspaceThreadId(null);
+      return;
+    }
     const activeEntry = workspaceEntries.find(
       (entry) => workspaceSurfaceKey(entry.surface) === activeWorkspaceSurfaceKey,
     );
@@ -1554,6 +1588,26 @@ function ChatViewContent(props: ChatViewProps) {
       activeEntry.surface.threadId === activeTaskSurface.threadId
     ) {
       setWorkspaceContextRailView("attention");
+      if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
+      return;
+    }
+    if (
+      activeEntry?.surface.kind === "child" &&
+      activeEntry.surface.environmentId === activeTaskSurface.environmentId &&
+      activeEntry.surface.projectId === activeTaskSurface.projectId &&
+      activeEntry.surface.parentThreadId === activeTaskSurface.threadId
+    ) {
+      setWorkspaceContextRailView("subagents");
+      if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
+      return;
+    }
+    if (
+      (activeEntry?.surface.kind === "workflowRun" || activeEntry?.surface.kind === "evidence") &&
+      activeEntry.surface.environmentId === activeTaskSurface.environmentId &&
+      activeEntry.surface.projectId === activeTaskSurface.projectId &&
+      activeEntry.surface.threadId === activeTaskSurface.threadId
+    ) {
+      setWorkspaceContextRailView("workflow");
       if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
       return;
     }
@@ -1583,6 +1637,7 @@ function ChatViewContent(props: ChatViewProps) {
   }, [
     activeTaskSurface,
     activeWorkspaceSurfaceKey,
+    activeRightPanelWorkspaceSurface,
     shouldUseWorkspaceContextSheet,
     workspaceEntries,
   ]);
@@ -1598,6 +1653,14 @@ function ChatViewContent(props: ChatViewProps) {
         )
         .map((thread) => thread.id),
     );
+    const projectedChildIds = new Set(
+      deriveNativeSubagents(activeThread.activities).agents.map((agent) => agent.agentThreadId),
+    );
+    const projectedRunIds = new Set(
+      deriveWorkspaceWorkflowRuns(deriveWorkLogEntries(activeThread.activities)).items.map(
+        ({ event }) => event.runId,
+      ),
+    );
     useWorkspaceSurfaceStore.getState().reconcileSurfaces(
       Object.fromEntries(
         workspaceEntries.flatMap((entry) => {
@@ -1606,22 +1669,68 @@ function ChatViewContent(props: ChatViewProps) {
             entry.surface.projectId !== activeThread.projectId ||
             (entry.surface.kind !== "task" &&
               entry.surface.kind !== "attention" &&
+              entry.surface.kind !== "child" &&
+              entry.surface.kind !== "workflowRun" &&
+              entry.surface.kind !== "evidence" &&
               entry.surface.kind !== "symphony" &&
-              entry.surface.kind !== "issue")
+              entry.surface.kind !== "issue" &&
+              entry.surface.kind !== "preview" &&
+              entry.surface.kind !== "files" &&
+              entry.surface.kind !== "diff" &&
+              entry.surface.kind !== "terminal")
           ) {
             return [];
           }
-          const retained =
-            entry.surface.kind === "issue"
-              ? validTaskIds.has(entry.surface.threadId) &&
-                validTaskIds.has(entry.surface.issueTaskThreadId)
-              : validTaskIds.has(entry.surface.threadId);
+          if (
+            (entry.surface.kind === "preview" ||
+              entry.surface.kind === "files" ||
+              entry.surface.kind === "diff" ||
+              entry.surface.kind === "terminal") &&
+            entry.surface.threadId !== activeThread.id
+          ) {
+            return [];
+          }
+          const retained = (() => {
+            switch (entry.surface.kind) {
+              case "child":
+                return (
+                  validTaskIds.has(entry.surface.parentThreadId) &&
+                  projectedChildIds.has(entry.surface.agentThreadId)
+                );
+              case "workflowRun":
+              case "evidence":
+                return (
+                  validTaskIds.has(entry.surface.threadId) &&
+                  projectedRunIds.has(entry.surface.runId)
+                );
+              case "issue":
+                return (
+                  validTaskIds.has(entry.surface.threadId) &&
+                  validTaskIds.has(entry.surface.issueTaskThreadId)
+                );
+              case "preview":
+              case "files":
+              case "diff":
+              case "terminal":
+                return (
+                  rightPanelActivationForWorkspaceSurface(
+                    entry.surface,
+                    rightPanelState.surfaces,
+                  ) !== null
+                );
+              default:
+                return validTaskIds.has(entry.surface.threadId);
+            }
+          })();
           return [
             [
               workspaceSurfaceKey(entry.surface),
               retained
                 ? "available"
-                : entry.surface.kind === "issue"
+                : entry.surface.kind === "issue" ||
+                    entry.surface.kind === "child" ||
+                    entry.surface.kind === "workflowRun" ||
+                    entry.surface.kind === "evidence"
                   ? "temporarilyUnavailable"
                   : "removed",
             ],
@@ -1629,10 +1738,11 @@ function ChatViewContent(props: ChatViewProps) {
         }),
       ),
     );
-  }, [activeThread, serverThreadShells, workspaceEntries]);
+  }, [activeThread, rightPanelState.surfaces, serverThreadShells, workspaceEntries]);
   const handleSelectWorkspaceTask = useCallback(
     (task: WorkspaceTaskTabSource) => {
       if (!activeThread) return;
+      useRightPanelStore.getState().close(scopeThreadRef(task.environmentId, task.id));
       useWorkspaceSurfaceStore.getState().openSurface({
         schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
         kind: "task",
@@ -1657,6 +1767,7 @@ function ChatViewContent(props: ChatViewProps) {
   }, [activeProjectRef, startNewWorkspaceTask]);
   const handleSelectProjectOverview = useCallback(() => {
     if (!activeProjectRef) return;
+    if (activeThreadRef) useRightPanelStore.getState().close(activeThreadRef);
     useWorkspaceSurfaceStore.getState().openSurface({
       schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
       kind: "project",
@@ -1667,9 +1778,10 @@ function ChatViewContent(props: ChatViewProps) {
       to: "/project/$environmentId/$projectId",
       params: buildProjectRouteParams(activeProjectRef),
     });
-  }, [activeProjectRef, navigate]);
+  }, [activeProjectRef, activeThreadRef, navigate]);
   const selectWorkspaceContextView = useCallback(
     (view: WorkspaceContextRailView) => {
+      if (activeThreadRef) useRightPanelStore.getState().close(activeThreadRef);
       if (view === "attention" && activeThread) {
         useWorkspaceSurfaceStore.getState().openSurface({
           schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
@@ -1684,11 +1796,60 @@ function ChatViewContent(props: ChatViewProps) {
       setWorkspaceContextRailView(view);
       if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
     },
-    [activeTaskSurface, activeThread, shouldUseWorkspaceContextSheet],
+    [activeTaskSurface, activeThread, activeThreadRef, shouldUseWorkspaceContextSheet],
   );
   const openWorkflowWorkspace = useCallback(
     () => selectWorkspaceContextView("workflow"),
     [selectWorkspaceContextView],
+  );
+  const openChildWorkspace = useCallback(
+    (agentThreadId: string) => {
+      if (!activeThread) return;
+      useWorkspaceSurfaceStore.getState().openSurface({
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+        kind: "child",
+        environmentId: activeThread.environmentId,
+        projectId: activeThread.projectId,
+        parentThreadId: activeThread.id,
+        agentThreadId: ThreadId.make(agentThreadId),
+      });
+      setWorkspaceContextRailView("subagents");
+      if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
+    },
+    [activeThread, shouldUseWorkspaceContextSheet],
+  );
+  const openWorkflowRunSurface = useCallback(
+    (runId: string) => {
+      if (!activeThread) return;
+      useWorkspaceSurfaceStore.getState().openSurface({
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+        kind: "workflowRun",
+        environmentId: activeThread.environmentId,
+        projectId: activeThread.projectId,
+        threadId: activeThread.id,
+        runId,
+      });
+      setWorkspaceContextRailView("workflow");
+      if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
+    },
+    [activeThread, shouldUseWorkspaceContextSheet],
+  );
+  const openWorkflowEvidenceSurface = useCallback(
+    (runId: string, evidenceId: string) => {
+      if (!activeThread) return;
+      useWorkspaceSurfaceStore.getState().openSurface({
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+        kind: "evidence",
+        environmentId: activeThread.environmentId,
+        projectId: activeThread.projectId,
+        threadId: activeThread.id,
+        runId,
+        evidenceId,
+      });
+      setWorkspaceContextRailView("workflow");
+      if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
+    },
+    [activeThread, shouldUseWorkspaceContextSheet],
   );
   const activateWorkspaceSurface = useCallback(
     (key: WorkspaceSurfaceKey) => {
@@ -1717,14 +1878,46 @@ function ChatViewContent(props: ChatViewProps) {
         case "attention":
           if (surface.threadId === activeThread?.id) selectWorkspaceContextView("attention");
           return;
+        case "child": {
+          setAutomationWorkspaceThreadId(null);
+          const parentTaskRef = scopeThreadRef(surface.environmentId, surface.parentThreadId);
+          useRightPanelStore.getState().close(parentTaskRef);
+          if (surface.parentThreadId === activeThread?.id) {
+            setWorkspaceContextRailView("subagents");
+            if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
+            return;
+          }
+          void navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(parentTaskRef),
+          });
+          return;
+        }
+        case "workflowRun":
+        case "evidence": {
+          setAutomationWorkspaceThreadId(null);
+          const ownerTaskRef = scopeThreadRef(surface.environmentId, surface.threadId);
+          useRightPanelStore.getState().close(ownerTaskRef);
+          if (surface.threadId === activeThread?.id) {
+            setWorkspaceContextRailView("workflow");
+            if (shouldUseWorkspaceContextSheet) setWorkspaceContextSheetOpen(true);
+            return;
+          }
+          void navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(ownerTaskRef),
+          });
+          return;
+        }
         case "symphony": {
+          const taskRef = scopeThreadRef(surface.environmentId, surface.threadId);
+          useRightPanelStore.getState().close(taskRef);
           setWorkspaceContextRailView(null);
           setWorkspaceContextSheetOpen(false);
           if (surface.threadId === activeThread?.id) {
             setAutomationWorkspaceThreadId(surface.threadId);
             return;
           }
-          const taskRef = scopeThreadRef(surface.environmentId, surface.threadId);
           void navigate({
             to: "/$environmentId/$threadId",
             params: buildThreadRouteParams(taskRef),
@@ -1732,14 +1925,43 @@ function ChatViewContent(props: ChatViewProps) {
           return;
         }
         case "issue": {
+          const issueTaskRef = scopeThreadRef(surface.environmentId, surface.issueTaskThreadId);
+          useRightPanelStore.getState().close(issueTaskRef);
           setWorkspaceContextRailView(null);
           setWorkspaceContextSheetOpen(false);
           setAutomationWorkspaceThreadId(null);
           if (surface.issueTaskThreadId === activeThread?.id) return;
-          const issueTaskRef = scopeThreadRef(surface.environmentId, surface.issueTaskThreadId);
           void navigate({
             to: "/$environmentId/$threadId",
             params: buildThreadRouteParams(issueTaskRef),
+          });
+          return;
+        }
+        case "preview":
+        case "files":
+        case "diff":
+        case "terminal": {
+          const targetRef = scopeThreadRef(surface.environmentId, surface.threadId);
+          const targetPanelState = selectThreadRightPanelState(
+            useRightPanelStore.getState().byThreadKey,
+            targetRef,
+          );
+          const activation = rightPanelActivationForWorkspaceSurface(
+            surface,
+            targetPanelState.surfaces,
+          );
+          if (!activation) return;
+          setWorkspaceContextRailView(null);
+          setWorkspaceContextSheetOpen(false);
+          setAutomationWorkspaceThreadId(null);
+          useRightPanelStore.getState().activateSurface(targetRef, activation.surfaceId);
+          if (surface.kind === "terminal") {
+            setTerminalFocusRequestId((value) => value + 1);
+          }
+          if (surface.threadId === activeThread?.id) return;
+          void navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(targetRef),
           });
           return;
         }
@@ -1752,6 +1974,7 @@ function ChatViewContent(props: ChatViewProps) {
       handleSelectWorkspaceTask,
       navigate,
       selectWorkspaceContextView,
+      shouldUseWorkspaceContextSheet,
       workspaceTaskSources,
     ],
   );
@@ -1820,6 +2043,42 @@ function ChatViewContent(props: ChatViewProps) {
                 },
               ];
             }
+            if (entry.surface.kind === "child") {
+              const childSurface = entry.surface;
+              return [
+                {
+                  key,
+                  title: `Child ${childSurface.agentThreadId.slice(0, 8)}`,
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
+            if (entry.surface.kind === "workflowRun") {
+              const runSurface = entry.surface;
+              return [
+                {
+                  key,
+                  title: `Run ${runSurface.runId.slice(0, 8)}`,
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
+            if (entry.surface.kind === "evidence") {
+              const evidenceSurface = entry.surface;
+              return [
+                {
+                  key,
+                  title: `Evidence ${evidenceSurface.evidenceId.slice(0, 8)}`,
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
             if (entry.surface.kind === "symphony") {
               const symphonySurface = entry.surface;
               const owner = workspaceTaskSources.find(
@@ -1841,6 +2100,53 @@ function ChatViewContent(props: ChatViewProps) {
                 {
                   key,
                   title: `Issue ${issueSurface.issueId}`,
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
+            if (entry.surface.kind === "preview") {
+              const previewSurface = entry.surface;
+              return [
+                {
+                  key,
+                  title: `Preview ${previewSurface.previewId.slice(0, 8)}`,
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
+            if (entry.surface.kind === "files") {
+              const filesSurface = entry.surface;
+              return [
+                {
+                  key,
+                  title: filesSurface.relativePath ?? "Files",
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
+            if (entry.surface.kind === "diff") {
+              return [
+                {
+                  key,
+                  title: "Diff",
+                  active: key === activeWorkspaceSurfaceKey,
+                  onSelect: () => activateWorkspaceSurface(key),
+                  onClose: () => closeWorkspaceSurface(key),
+                },
+              ];
+            }
+            if (entry.surface.kind === "terminal") {
+              const terminalSurface = entry.surface;
+              return [
+                {
+                  key,
+                  title: `Terminal ${terminalSurface.terminalId}`,
                   active: key === activeWorkspaceSurfaceKey,
                   onSelect: () => activateWorkspaceSurface(key),
                   onClose: () => closeWorkspaceSurface(key),
@@ -5819,6 +6125,7 @@ function ChatViewContent(props: ChatViewProps) {
                   environmentId={activeThread.environmentId}
                   parentThreadId={activeThread.id}
                   activities={activeThread.activities}
+                  onOpenChild={openChildWorkspace}
                 />
               }
               workflow={
@@ -5826,6 +6133,8 @@ function ChatViewContent(props: ChatViewProps) {
                   environmentId={activeThread.environmentId}
                   threadId={activeThread.id}
                   workLogEntries={workLogEntries}
+                  onOpenRun={openWorkflowRunSurface}
+                  onOpenEvidence={openWorkflowEvidenceSurface}
                 />
               }
               attention={
@@ -5941,6 +6250,7 @@ function ChatViewContent(props: ChatViewProps) {
                 environmentId={activeThread.environmentId}
                 parentThreadId={activeThread.id}
                 activities={activeThread.activities}
+                onOpenChild={openChildWorkspace}
               />
             }
             workflow={
@@ -5948,6 +6258,8 @@ function ChatViewContent(props: ChatViewProps) {
                 environmentId={activeThread.environmentId}
                 threadId={activeThread.id}
                 workLogEntries={workLogEntries}
+                onOpenRun={openWorkflowRunSurface}
+                onOpenEvidence={openWorkflowEvidenceSurface}
               />
             }
             attention={

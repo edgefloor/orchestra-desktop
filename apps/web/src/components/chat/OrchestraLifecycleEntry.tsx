@@ -100,8 +100,10 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
   readonly event: OrchestraReplayEvent;
+  readonly onOpenRun?: (runId: string) => void;
+  readonly onOpenEvidence?: (runId: string, evidenceId: string) => void;
 }) {
-  const { environmentId, threadId, event } = props;
+  const { environmentId, threadId, event, onOpenRun, onOpenEvidence } = props;
   const query = useAtomCommand(queryOrchestra, { reportFailure: false });
   const compact = useMemo(() => compactWorkflowStepSummary(event), [event]);
   const disclosureId = useId();
@@ -257,10 +259,11 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
   const toggleRoot = useCallback(() => {
     const next = !expanded;
     setExpanded(next);
+    if (next) onOpenRun?.(event.runId);
     if (next && run === null && steps === null) {
       void Promise.all([load("run"), load("steps")]);
     }
-  }, [expanded, load, run, steps]);
+  }, [event.runId, expanded, load, onOpenRun, run, steps]);
 
   const toggleStep = useCallback(
     (stepId: string) => {
@@ -293,11 +296,12 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
         else next.delete(item.evidenceId);
         return next;
       });
+      if (willExpand) onOpenEvidence?.(event.runId, item.evidenceId);
       if (willExpand && evidenceContent[item.evidenceId] === undefined) {
         void load("evidence_content", undefined, item.evidenceId);
       }
     },
-    [evidenceContent, expandedEvidence, load],
+    [event.runId, evidenceContent, expandedEvidence, load, onOpenEvidence],
   );
 
   const nativeState = workflowRunDisplayState(event.projection.status, event.kind);

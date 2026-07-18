@@ -7,7 +7,7 @@ import {
   type OrchestrationThreadActivity,
 } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { NativeSubagentSummary } from "~/nativeSubagents";
 import { NativeSubagentDetailPanel, NativeSubagentsPanel } from "./NativeSubagentsPanel";
@@ -53,16 +53,19 @@ describe("NativeSubagentsPanel", () => {
   });
 
   it("renders stable native child identity and lifecycle state", () => {
+    const onOpenChild = vi.fn();
     const markup = renderToStaticMarkup(
       <NativeSubagentsPanel
         environmentId={environmentId}
         parentThreadId={parentThreadId}
         activities={[subagentActivity()]}
+        onOpenChild={onOpenChild}
       />,
     );
 
     expect(markup).toContain("reviewer");
     expect(markup).toContain("Running");
+    expect(onOpenChild).not.toHaveBeenCalled();
   });
 
   it("renders inline native lineage, bounded detail, and explicit truncation", () => {

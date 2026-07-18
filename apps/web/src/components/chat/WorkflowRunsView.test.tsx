@@ -1,6 +1,6 @@
 import { EnvironmentId, ThreadId, type OrchestraReplayEvent } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { WorkLogEntry } from "../../session-logic";
 import { WorkflowRunsView } from "./WorkflowRunsView";
@@ -39,11 +39,15 @@ function entry(value: OrchestraReplayEvent): WorkLogEntry {
 
 describe("WorkflowRunsView", () => {
   it("renders a bounded native Run summary without eager detail", () => {
+    const onOpenRun = vi.fn();
+    const onOpenEvidence = vi.fn();
     const markup = renderToStaticMarkup(
       <WorkflowRunsView
         environmentId={EnvironmentId.make("local")}
         threadId={ThreadId.make("parent-task")}
         workLogEntries={[entry(event("run-1", 1)), entry(event("run-1", 2))]}
+        onOpenRun={onOpenRun}
+        onOpenEvidence={onOpenEvidence}
       />,
     );
 
@@ -52,6 +56,8 @@ describe("WorkflowRunsView", () => {
     expect(markup).toContain("Revision 2");
     expect(markup).not.toContain("Revision 1");
     expect(markup).not.toContain("Recovery and decision history");
+    expect(onOpenRun).not.toHaveBeenCalled();
+    expect(onOpenEvidence).not.toHaveBeenCalled();
   });
 
   it("renders a truthful empty state", () => {

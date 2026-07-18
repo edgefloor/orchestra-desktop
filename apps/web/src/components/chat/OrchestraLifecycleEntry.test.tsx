@@ -67,4 +67,11 @@ describe("OrchestraLifecycleEntry", () => {
     expect(lifecycleSource).toContain("pointer-coarse:min-h-11");
     expect(lifecycleSource).toContain('role="alert"');
   });
+
+  it("emits workspace descriptors only while opening run and evidence disclosures", () => {
+    expect(lifecycleSource).toContain("if (next) onOpenRun?.(event.runId)");
+    expect(lifecycleSource).toContain(
+      "if (willExpand) onOpenEvidence?.(event.runId, item.evidenceId)",
+    );
+  });
 });

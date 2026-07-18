@@ -143,8 +143,9 @@ export const NativeSubagentsPanel = memo(function NativeSubagentsPanel(props: {
   readonly environmentId: EnvironmentId;
   readonly parentThreadId: ThreadId;
   readonly activities: ReadonlyArray<OrchestrationThreadActivity>;
+  readonly onOpenChild?: (agentThreadId: string) => void;
 }) {
-  const { environmentId, parentThreadId, activities } = props;
+  const { environmentId, parentThreadId, activities, onOpenChild } = props;
   const readDetail = useAtomCommand(readNativeSubagent, { reportFailure: false });
   const projection = useMemo(() => deriveNativeSubagents(activities), [activities]);
   const [selected, setSelected] = useState<NativeSubagentSummary | null>(null);
@@ -165,6 +166,7 @@ export const NativeSubagentsPanel = memo(function NativeSubagentsPanel(props: {
 
   const open = useCallback(
     (agent: NativeSubagentSummary) => {
+      onOpenChild?.(agent.agentThreadId);
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
       selectedRef.current = agent;
@@ -196,7 +198,7 @@ export const NativeSubagentsPanel = memo(function NativeSubagentsPanel(props: {
         }
       });
     },
-    [environmentId, parentThreadId, readDetail],
+    [environmentId, onOpenChild, parentThreadId, readDetail],
   );
 
   return (
