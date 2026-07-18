@@ -9,6 +9,7 @@ import {
   buildThreadTurnInterruptInput,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
+  deriveValidWorkspaceTaskIds,
   getStartedThreadModelChangeBlockReason,
   hasServerAcknowledgedLocalDispatch,
   reconcileMountedTerminalThreadIds,
@@ -91,6 +92,43 @@ describe("buildThreadTurnInterruptInput", () => {
     expect(buildThreadTurnInterruptInput(makeThread({ session: readySession }))).toEqual({
       threadId,
     });
+  });
+});
+
+describe("deriveValidWorkspaceTaskIds", () => {
+  it("retains an active draft before it appears in server thread shells", () => {
+    const activeDraft = makeThread({ id: ThreadId.make("draft-thread") });
+    const sibling = makeThread({ id: ThreadId.make("server-thread") });
+
+    expect([
+      ...deriveValidWorkspaceTaskIds({
+        activeThread: activeDraft,
+        activeDraftThreadId: activeDraft.id,
+        serverThreadShells: [
+          sibling,
+          makeThread({ id: ThreadId.make("archived-thread"), archivedAt: now }),
+          makeThread({
+            id: ThreadId.make("other-project-thread"),
+            projectId: ProjectId.make("project-2"),
+          }),
+        ],
+      }),
+    ]).toEqual([activeDraft.id, sibling.id]);
+  });
+
+  it("does not exempt an active archived server task from cleanup", () => {
+    const activeArchived = makeThread({
+      id: ThreadId.make("archived-thread"),
+      archivedAt: now,
+    });
+
+    expect(
+      deriveValidWorkspaceTaskIds({
+        activeThread: activeArchived,
+        activeDraftThreadId: null,
+        serverThreadShells: [activeArchived],
+      }),
+    ).toEqual(new Set());
   });
 });
 

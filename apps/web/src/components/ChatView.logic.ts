@@ -9,7 +9,7 @@ import {
   type ThreadId,
   type TurnId,
 } from "@t3tools/contracts";
-import { type ChatMessage, type SessionPhase, type Thread } from "../types";
+import { type ChatMessage, type SessionPhase, type Thread, type ThreadShell } from "../types";
 import { type ComposerImageAttachment, type DraftThreadState } from "../composerDraftStore";
 import * as Schema from "effect/Schema";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -26,6 +26,26 @@ export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
 export const MAX_HIDDEN_MOUNTED_PREVIEW_THREADS = 3;
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
+
+export function deriveValidWorkspaceTaskIds(input: {
+  activeThread: Pick<Thread, "environmentId" | "id" | "projectId">;
+  activeDraftThreadId: ThreadId | null;
+  serverThreadShells: ReadonlyArray<
+    Pick<ThreadShell, "archivedAt" | "environmentId" | "id" | "projectId">
+  >;
+}): Set<ThreadId> {
+  return new Set([
+    ...(input.activeDraftThreadId === null ? [] : [input.activeDraftThreadId]),
+    ...input.serverThreadShells
+      .filter(
+        (thread) =>
+          thread.environmentId === input.activeThread.environmentId &&
+          thread.projectId === input.activeThread.projectId &&
+          thread.archivedAt === null,
+      )
+      .map((thread) => thread.id),
+  ]);
+}
 
 export function buildLocalDraftThread(
   threadId: ThreadId,

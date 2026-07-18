@@ -252,6 +252,7 @@ import {
   collectUserMessageBlobPreviewUrls,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
+  deriveValidWorkspaceTaskIds,
   hasServerAcknowledgedLocalDispatch,
   getStartedThreadModelChangeBlockReason,
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
@@ -1647,16 +1648,11 @@ function ChatViewContent(props: ChatViewProps) {
   ]);
   useEffect(() => {
     if (!activeThread) return;
-    const validTaskIds = new Set(
-      serverThreadShells
-        .filter(
-          (thread) =>
-            thread.environmentId === activeThread.environmentId &&
-            thread.projectId === activeThread.projectId &&
-            thread.archivedAt === null,
-        )
-        .map((thread) => thread.id),
-    );
+    const validTaskIds = deriveValidWorkspaceTaskIds({
+      activeThread,
+      activeDraftThreadId: isServerThread ? null : activeThread.id,
+      serverThreadShells,
+    });
     const projectedChildIds = new Set(
       deriveNativeSubagents(activeThread.activities).agents.map((agent) => agent.agentThreadId),
     );
@@ -1742,7 +1738,13 @@ function ChatViewContent(props: ChatViewProps) {
         }),
       ),
     );
-  }, [activeThread, rightPanelState.surfaces, serverThreadShells, workspaceEntries]);
+  }, [
+    activeThread,
+    isServerThread,
+    rightPanelState.surfaces,
+    serverThreadShells,
+    workspaceEntries,
+  ]);
   const handleSelectWorkspaceTask = useCallback(
     (task: WorkspaceTaskTabSource) => {
       if (!activeThread) return;
