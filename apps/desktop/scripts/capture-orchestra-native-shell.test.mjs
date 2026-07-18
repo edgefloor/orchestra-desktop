@@ -374,6 +374,22 @@ describe("native-shell acceptance capture contract", () => {
     );
     const addSurfaceSource = captureSource.slice(addSurfaceStart, addSurfaceEnd);
     expect(addSurfaceSource).toMatch(/trigger\.click\(\);\s*\}\)\(\)/);
+    const observeSurfaceStart = captureSource.indexOf(
+      "async function observeActiveRightPanelSurface",
+    );
+    const observeSurfaceEnd = captureSource.indexOf(
+      "async function interactWithVisibleMenu",
+      observeSurfaceStart,
+    );
+    const observeSurfaceSource = captureSource.slice(observeSurfaceStart, observeSurfaceEnd);
+    expect(observeSurfaceSource).toContain(
+      '[data-right-panel-tab-list] [role="tab"][aria-selected="true"]',
+    );
+    expect(observeSurfaceSource).toContain("active.getAttribute('aria-controls')");
+    expect(observeSurfaceSource).toContain("document.getElementById(panelId)");
+    expect(observeSurfaceSource).not.toContain(
+      'document.querySelector(\'[role="tab"][aria-selected="true"]\')',
+    );
     expect(captureSource).not.toContain("native-shell-retained-stage");
   });
 

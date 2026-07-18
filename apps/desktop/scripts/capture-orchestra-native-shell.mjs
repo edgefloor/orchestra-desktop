@@ -1009,7 +1009,7 @@ async function observeActiveRightPanelSurface(renderer, expectedTitle, context) 
       const titleExpectation = ${JSON.stringify(titleExpectation)};
       const deadline = window.setTimeout(() => {
         observer.disconnect();
-        const tabs = [...document.querySelectorAll('[role="tab"]')]
+        const tabs = [...document.querySelectorAll('[data-right-panel-tab-list] [role="tab"]')]
           .slice(0, 12)
           .map((tab) => ({
             title: (tab.textContent?.trim() ?? '').slice(0, 120),
@@ -1021,16 +1021,21 @@ async function observeActiveRightPanelSurface(renderer, expectedTitle, context) 
         ));
       }, 45000);
       const complete = () => {
-        const active = document.querySelector('[role="tab"][aria-selected="true"]');
+        const active = document.querySelector(
+          '[data-right-panel-tab-list] [role="tab"][aria-selected="true"]'
+        );
         if (!(active instanceof HTMLElement)) return;
         const title = active.textContent?.trim() ?? '';
         const titleMatches = typeof titleExpectation.exact === 'string'
           ? title === titleExpectation.exact
           : new RegExp(titleExpectation.pattern).test(title);
         if (!titleMatches) return;
+        const panelId = active.getAttribute('aria-controls');
+        const panel = panelId ? document.getElementById(panelId) : null;
+        if (!(panel instanceof HTMLElement) || panel.getClientRects().length === 0) return;
         window.clearTimeout(deadline);
         observer.disconnect();
-        resolve({ title, panelVisible: document.querySelector('[role="tabpanel"]') !== null });
+        resolve({ title, panelVisible: true });
       };
       const observer = new MutationObserver(complete);
       observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
