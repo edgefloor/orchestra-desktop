@@ -11,6 +11,9 @@ const publicConfigDefine = {
 };
 
 export default defineConfig({
+  resolve: {
+    tsconfigPaths: true,
+  },
   run: {
     tasks: {
       build: {
