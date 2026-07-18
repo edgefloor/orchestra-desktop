@@ -44,6 +44,7 @@ import {
   terminateAndVerifyNativeShellResources,
 } from "../../../scripts/lib/orchestra-native-shell-contract.mjs";
 import {
+  isPinnedGitSubtreeIdentity,
   readPngDimensions,
   runGit,
   sha256,
@@ -174,10 +175,12 @@ async function prepareNativeProductIdentity({
   if (
     !orchestraCoreCommit ||
     !orchestraCoreTree ||
-    runGit(orchestraRepository, ["rev-parse", "--verify", `${orchestraCoreCommit}^{commit}`]) !==
-      orchestraCoreCommit ||
-    runGit(orchestraRepository, ["rev-parse", `${orchestraCoreCommit}^{tree}`]) !==
-      orchestraCoreTree
+    !isPinnedGitSubtreeIdentity(
+      orchestraRepository,
+      orchestraCoreCommit,
+      "crates/orchestra-core",
+      orchestraCoreTree,
+    )
   ) {
     throw new Error("Product-pinned Orchestra core identity does not resolve in the core fork");
   }

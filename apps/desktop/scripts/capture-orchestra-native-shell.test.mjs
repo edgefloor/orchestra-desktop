@@ -28,9 +28,49 @@ import {
   shouldRunNativeShellElectronChild,
   terminateAndVerifyNativeShellResources,
 } from "../../../scripts/lib/orchestra-native-shell-contract.mjs";
-import { sha256 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
+import {
+  isPinnedGitSubtreeIdentity,
+  runGit,
+  sha256,
+} from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 
 describe("native-shell acceptance capture contract", () => {
+  it("resolves Product pins against the canonical crate subtree", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "native-shell-pins-"));
+    try {
+      NodeChildProcess.execFileSync("git", ["init", "--quiet"], { cwd: root });
+      NodeChildProcess.execFileSync("git", ["config", "user.email", "native-shell@example.test"], {
+        cwd: root,
+      });
+      NodeChildProcess.execFileSync("git", ["config", "user.name", "Native Shell Test"], {
+        cwd: root,
+      });
+      await NodeFSP.mkdir(NodePath.join(root, "crates", "orchestra-core"), { recursive: true });
+      await NodeFSP.writeFile(NodePath.join(root, "README.md"), "repository root\n");
+      await NodeFSP.writeFile(
+        NodePath.join(root, "crates", "orchestra-core", "Cargo.toml"),
+        '[package]\nname = "orchestra-core"\nversion = "0.0.0"\n',
+      );
+      NodeChildProcess.execFileSync("git", ["add", "."], { cwd: root });
+      NodeChildProcess.execFileSync("git", ["commit", "--quiet", "-m", "fixture"], { cwd: root });
+
+      const revision = runGit(root, ["rev-parse", "HEAD"]);
+      const rootTree = runGit(root, ["rev-parse", "HEAD^{tree}"]);
+      const subtreeTree = runGit(root, ["rev-parse", "HEAD:crates/orchestra-core"]);
+
+      expect(rootTree).not.toBe(subtreeTree);
+      expect(isPinnedGitSubtreeIdentity(root, revision, "crates/orchestra-core", subtreeTree)).toBe(
+        true,
+      );
+      expect(isPinnedGitSubtreeIdentity(root, revision, "crates/orchestra-core", rootTree)).toBe(
+        false,
+      );
+      expect(isPinnedGitSubtreeIdentity(root, revision, "missing", subtreeTree)).toBe(false);
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("builds deterministic history-distinct loopback guest pages", () => {
     const first = buildNativeGuestFixture("http://127.0.0.1:4173");
     const second = buildNativeGuestFixture("http://127.0.0.1:4173");

@@ -9,6 +9,17 @@ export function runGit(rootDir, args) {
   }).trim();
 }
 
+export function isPinnedGitSubtreeIdentity(rootDir, revision, subtreePath, expectedTree) {
+  try {
+    return (
+      runGit(rootDir, ["rev-parse", "--verify", `${revision}^{commit}`]) === revision &&
+      runGit(rootDir, ["rev-parse", `${revision}:${subtreePath}`]) === expectedTree
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function sha256(bytes) {
   return NodeCrypto.createHash("sha256").update(bytes).digest("hex");
 }
