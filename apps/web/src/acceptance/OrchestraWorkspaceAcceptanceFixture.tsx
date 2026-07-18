@@ -1,8 +1,8 @@
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ThreadId, type AutomationRunResult } from "@t3tools/contracts";
 import { BotIcon, CheckCircle2Icon, FolderGit2Icon, GitBranchIcon, SearchIcon } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 
-import { AutomationWorkspace } from "../components/chat/AutomationProfileDialog";
+import { AutomationRunWorkspace } from "../components/chat/AutomationRunWorkspace";
 import { ChatComposerFrame } from "../components/chat/ChatComposerFrame";
 import { TaskAttentionView } from "../components/chat/TaskAttentionView";
 import { RightPanelSheet } from "../components/RightPanelSheet";
@@ -17,16 +17,114 @@ import {
   SidebarProvider,
 } from "../components/ui/sidebar";
 
-type AcceptanceState = "workspace" | "attention-sheet" | "symphony";
+type AcceptanceState =
+  | "workspace"
+  | "attention-sheet"
+  | "symphony"
+  | "symphony-activity"
+  | "symphony-events";
 
 declare global {
   interface Window {
     __ORCHESTRA_ACCEPTANCE__?: Readonly<Record<string, boolean>>;
+    __ORCHESTRA_ACCEPTANCE_ACTIONS__?: Readonly<Record<string, string>>;
   }
 }
 
 const environmentId = EnvironmentId.make("acceptance-local");
 const threadId = ThreadId.make("acceptance-task");
+const acceptanceAutomationRun: AutomationRunResult = {
+  run: {
+    schemaVersion: 1,
+    runId: "automation-acceptance",
+    ownerThreadId: threadId,
+    sourceRevision: "836962e4",
+    profileDigest: "profile-acceptance",
+    profileRevision: 3,
+    profileRevisionStatus: "active",
+    profileDiagnostics: [],
+    trackerProjectSlug: "orchestra-core",
+    leaseEpoch: 2,
+    revision: 19,
+    status: "running",
+    reconciliation: "complete",
+    coordination: {
+      cycle: 7,
+      scanRevision: 12,
+      inputCursor: "linear-11",
+      outputCursor: "linear-12",
+      intakeStatus: "ready",
+      pageDigest: "page-12",
+      startedAtMs: 1_789_000_000_000,
+      completedAtMs: 1_789_000_000_500,
+      nextAction: { text: "Poll Linear again when the native schedule is due.", truncated: false },
+      dispatchIntent: {
+        intentId: "intent-orc-70",
+        claimId: "claim-orc-70",
+        issueId: "issue-orc-70",
+        kind: "new_claim",
+        status: "completed",
+        attempt: 1,
+        profileDigest: "profile-acceptance",
+        createdAtMs: 1_789_000_000_100,
+        readyAtMs: 1_789_000_000_200,
+      },
+    },
+    queueCounts: {
+      queued: 1,
+      running: 1,
+      blocked: 0,
+      waitingGate: 0,
+      handoff: 0,
+      terminal: 3,
+    },
+    claimsTotal: 1,
+    claims: [
+      {
+        claimId: "claim-orc-70",
+        issueId: "issue-orc-70",
+        issueIdentifier: "ORC-70",
+        issueTitle: { text: "Complete the Symphony workspace", truncated: false },
+        trackerState: "In Progress",
+        priority: 1,
+        attempt: 1,
+        workflowInvocations: 2,
+        turnsInWindow: 6,
+        continuationCount: 1,
+        retryAttempt: 0,
+        lastProgressAtMs: 1_789_000_001_000,
+        profileDigest: "profile-acceptance",
+        profileRevision: 3,
+        status: "running",
+        worktree: "/workspace/orchestra/.worktrees/orc-70",
+        sourceRevision: "836962e4",
+        issueTask: { threadId: "issue-task-orc-70", taskPath: "/root/automation_orc_70" },
+        workflowRunId: "workflow-orc-70",
+        workflowStatus: "running",
+        effects: [],
+        hookReceipts: [],
+        cleanup: { status: "retained", attempts: 0 },
+        nextAction: {
+          text: "Verify the desktop workspace and publish evidence.",
+          truncated: false,
+        },
+      },
+    ],
+    queuePreview: [
+      {
+        issueId: "issue-orc-71",
+        issueIdentifier: "ORC-71",
+        issueTitle: { text: "Exercise durable recovery", truncated: false },
+        state: "Todo",
+        priority: 2,
+        category: "queued",
+        nextAction: { text: "Await the next bounded dispatch slot.", truncated: false },
+      },
+    ],
+    queuePreviewTruncated: false,
+    nextAction: { text: "Automation remains resident in the owner task.", truncated: false },
+  },
+};
 
 function StaticSidebar() {
   return (
@@ -193,7 +291,7 @@ function semanticAssertions(state: AcceptanceState): Readonly<Record<string, boo
         document.querySelector('[data-workspace-context-variant="sheet"]') !== null,
     });
   }
-  if (state === "symphony") {
+  if (state.startsWith("symphony")) {
     const maximumHeight = Math.min(window.innerHeight * 0.58, 44 * 16);
     Object.assign(assertions, {
       symphonyHeightBounded: Boolean(
@@ -213,7 +311,10 @@ export function OrchestraWorkspaceAcceptanceFixture({
 }: {
   readonly state: AcceptanceState;
 }) {
+  const symphonyView =
+    state === "symphony-activity" ? "activity" : state === "symphony-events" ? "events" : "issues";
   useEffect(() => {
+    window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {};
     let cancelled = false;
     void document.fonts.ready.then(() => {
       requestAnimationFrame(() =>
@@ -239,7 +340,7 @@ export function OrchestraWorkspaceAcceptanceFixture({
             {
               key: "task",
               title: "Complete desktop workspace",
-              active: state !== "symphony",
+              active: !state.startsWith("symphony"),
               status: "running",
               onSelect: () => undefined,
               onClose: () => undefined,
@@ -247,7 +348,7 @@ export function OrchestraWorkspaceAcceptanceFixture({
             {
               key: "symphony",
               title: "Symphony · Complete desktop workspace",
-              active: state === "symphony",
+              active: state.startsWith("symphony"),
               onSelect: () => undefined,
               onClose: () => undefined,
             },
@@ -260,14 +361,47 @@ export function OrchestraWorkspaceAcceptanceFixture({
           activeView={state === "attention-sheet" ? "attention" : null}
           onSelectView={() => undefined}
         />
-        {state === "symphony" ? (
-          <AutomationWorkspace
-            environmentId={environmentId}
-            threadId={threadId}
-            threadTitle="Complete desktop workspace"
-            onClose={() => undefined}
-            onOpenIssueTask={() => undefined}
-          />
+        {state.startsWith("symphony") ? (
+          <section
+            aria-label="Symphony automation workspace"
+            className="flex h-[min(58vh,44rem)] max-h-[min(58vh,44rem)] shrink-0 flex-col border-b border-border bg-card/55"
+            data-automation-workspace=""
+          >
+            <header className="border-b border-border px-6 py-3">
+              <div className="text-sm font-semibold">Symphony automation</div>
+              <p className="text-xs text-muted-foreground">
+                Task-scoped native automation for Complete desktop workspace.
+              </p>
+            </header>
+            <div
+              className="min-h-0 flex-1 overflow-y-auto px-6 py-4"
+              data-automation-workspace-scroll=""
+            >
+              <AutomationRunWorkspace
+                initialView={symphonyView}
+                onCancelClaim={(claimId) => {
+                  window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                    ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                    cancelledClaimId: claimId,
+                  };
+                }}
+                onInspectQueue={() => undefined}
+                onOpenIssueTask={(input) => {
+                  window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                    ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                    openedIssueId: input.issueId,
+                  };
+                }}
+                onSteerClaim={() => undefined}
+                onSteeringInputChange={() => undefined}
+                pending={false}
+                queueResult={null}
+                queueOffset={0}
+                runResult={acceptanceAutomationRun}
+                steeringInputs={{}}
+              />
+            </div>
+          </section>
         ) : null}
         <div className="flex min-h-0 flex-1">
           <main className="flex min-w-0 flex-1 flex-col">

@@ -1,6 +1,5 @@
 import type {
   AutomationLinearReadResult,
-  AutomationQueueReadResult,
   AutomationRun,
   AutomationRunResult,
   AutomationStartInput,
@@ -200,20 +199,6 @@ export function automationLinearRows(result: AutomationLinearReadResult) {
     labels: issue.labels,
     blockedByCount: issue.blockedBy.length,
   }));
-}
-
-export function automationQueueItemKey(item: AutomationQueueReadResult["items"][number]): string {
-  return `${item.issueId}:${item.claimId ?? item.category}`;
-}
-
-export function mergeAutomationQueuePage(
-  current: AutomationQueueReadResult | null,
-  incoming: AutomationQueueReadResult,
-): AutomationQueueReadResult {
-  if (!current || current.category !== incoming.category) return incoming;
-  const items = new Map(current.items.map((item) => [automationQueueItemKey(item), item]));
-  for (const item of incoming.items) items.set(automationQueueItemKey(item), item);
-  return { ...incoming, items: [...items.values()] };
 }
 
 export function automationLinearAvailability(result: AutomationLinearReadResult) {

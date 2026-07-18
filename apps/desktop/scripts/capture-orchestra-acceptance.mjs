@@ -87,6 +87,38 @@ const scenarios = [
       "symphonyHeightBounded",
       "symphonyScrollsInternally",
       "symphonyWorkspaceVisible",
+      "symphonyTabsInteractive",
+      "symphonyKeyboardNavigation",
+      "symphonySelectionReconciles",
+      "symphonyActionsWired",
+      "wideLayoutActive",
+    ].sort(),
+  },
+  {
+    scenario: "symphony-activity-1440x900-dark",
+    width: 1440,
+    height: 900,
+    theme: "dark",
+    state: "symphony-activity",
+    assertions: [
+      ...workspaceAssertions,
+      "symphonyHeightBounded",
+      "symphonyScrollsInternally",
+      "symphonyWorkspaceVisible",
+      "wideLayoutActive",
+    ].sort(),
+  },
+  {
+    scenario: "symphony-events-1440x900-dark",
+    width: 1440,
+    height: 900,
+    theme: "dark",
+    state: "symphony-events",
+    assertions: [
+      ...workspaceAssertions,
+      "symphonyHeightBounded",
+      "symphonyScrollsInternally",
+      "symphonyWorkspaceVisible",
       "wideLayoutActive",
     ].sort(),
   },
@@ -171,6 +203,7 @@ async function waitForAcceptanceReady(webContents, scenario) {
         width: window.innerWidth,
         height: window.innerHeight,
         deviceScaleFactor: window.devicePixelRatio,
+        symphonyHeight: document.querySelector("[data-automation-workspace]")?.getBoundingClientRect().height ?? null,
         assertions: window.__ORCHESTRA_ACCEPTANCE__ ?? null
       }))()`,
       true,
@@ -179,6 +212,45 @@ async function waitForAcceptanceReady(webContents, scenario) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`${scenario.scenario} did not set data-acceptance-ready within 30 seconds`);
+}
+
+async function probeSymphonyInteractions(webContents) {
+  return webContents.executeJavaScript(
+    `(async () => {
+      const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const tab = (view) => document.querySelector('#automation-view-tab-' + view);
+      const buttonWithText = (text) => [...document.querySelectorAll('button')].find((button) => button.textContent?.trim().startsWith(text));
+      const issues = tab('issues');
+      issues?.focus();
+      issues?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await settle();
+      const activitySelected = tab('activity')?.getAttribute('aria-selected') === 'true';
+      const activityFocused = document.activeElement === tab('activity');
+      tab('activity')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await settle();
+      const eventsSelected = tab('events')?.getAttribute('aria-selected') === 'true';
+      const eventsFocused = document.activeElement === tab('events');
+      tab('issues')?.click();
+      await settle();
+      buttonWithText('ORC-71')?.click();
+      await settle();
+      const queueSelection = document.querySelector('[aria-label="ORC-71 inspector"]') !== null;
+      buttonWithText('ORC-70')?.click();
+      await settle();
+      const claimSelection = document.querySelector('[aria-label="ORC-70 inspector"]') !== null;
+      buttonWithText('Cancel issue')?.click();
+      buttonWithText('Open issue task')?.click();
+      await settle();
+      const actions = window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {};
+      return {
+        symphonyTabsInteractive: activitySelected && eventsSelected,
+        symphonyKeyboardNavigation: activityFocused && eventsFocused,
+        symphonySelectionReconciles: queueSelection && claimSelection,
+        symphonyActionsWired: actions.cancelledClaimId === 'claim-orc-70' && actions.openedIssueId === 'issue-orc-70',
+      };
+    })()`,
+    true,
+  );
 }
 
 function validateRendererState(state, scenario) {
@@ -199,7 +271,9 @@ function validateRendererState(state, scenario) {
   const assertions = {};
   for (const assertion of scenario.assertions) {
     if (state.assertions[assertion] !== true) {
-      throw new Error(`${scenario.scenario} assertion ${assertion} was not true`);
+      throw new Error(
+        `${scenario.scenario} assertion ${assertion} was not true (Symphony height ${state.symphonyHeight ?? "n/a"}, viewport ${state.height})`,
+      );
     }
     assertions[assertion] = true;
   }
@@ -239,6 +313,12 @@ async function captureScenario(BrowserWindow, scenario, stagingDir) {
     );
 
     const rendererState = await waitForAcceptanceReady(window.webContents, scenario);
+    if (scenario.state === "symphony") {
+      rendererState.assertions = {
+        ...rendererState.assertions,
+        ...(await probeSymphonyInteractions(window.webContents)),
+      };
+    }
     const assertions = validateRendererState(rendererState, scenario);
     const image = await window.webContents.capturePage({
       x: 0,

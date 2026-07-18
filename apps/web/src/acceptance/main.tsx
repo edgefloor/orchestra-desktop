@@ -8,12 +8,14 @@ import { OrchestraWorkspaceAcceptanceFixture } from "./OrchestraWorkspaceAccepta
 
 const parameters = new URLSearchParams(window.location.search);
 const theme = parameters.get("theme") === "light" ? "light" : "dark";
+const requestedState = parameters.get("state");
 const state =
-  parameters.get("state") === "attention-sheet"
-    ? "attention-sheet"
-    : parameters.get("state") === "symphony"
-      ? "symphony"
-      : "workspace";
+  requestedState === "attention-sheet" ||
+  requestedState === "symphony" ||
+  requestedState === "symphony-activity" ||
+  requestedState === "symphony-events"
+    ? requestedState
+    : "workspace";
 document.documentElement.classList.toggle("dark", theme === "dark");
 document.documentElement.style.colorScheme = theme;
 

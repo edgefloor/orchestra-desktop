@@ -17,7 +17,12 @@ interface ScenarioContract {
   readonly width: number;
   readonly height: number;
   readonly theme: "light" | "dark";
-  readonly state: "workspace" | "attention-sheet" | "symphony";
+  readonly state:
+    | "workspace"
+    | "attention-sheet"
+    | "symphony"
+    | "symphony-activity"
+    | "symphony-events";
   readonly assertions: ReadonlyArray<string>;
 }
 
@@ -78,6 +83,36 @@ export const ORCHESTRA_ACCEPTANCE_SCENARIOS = {
     height: 900,
     theme: "dark",
     state: "symphony",
+    assertions: [
+      ...WORKSPACE_ASSERTIONS,
+      "symphonyHeightBounded",
+      "symphonyScrollsInternally",
+      "symphonyWorkspaceVisible",
+      "symphonyTabsInteractive",
+      "symphonyKeyboardNavigation",
+      "symphonySelectionReconciles",
+      "symphonyActionsWired",
+      "wideLayoutActive",
+    ].sort(),
+  },
+  "symphony-activity-1440x900-dark": {
+    width: 1440,
+    height: 900,
+    theme: "dark",
+    state: "symphony-activity",
+    assertions: [
+      ...WORKSPACE_ASSERTIONS,
+      "symphonyHeightBounded",
+      "symphonyScrollsInternally",
+      "symphonyWorkspaceVisible",
+      "wideLayoutActive",
+    ].sort(),
+  },
+  "symphony-events-1440x900-dark": {
+    width: 1440,
+    height: 900,
+    theme: "dark",
+    state: "symphony-events",
     assertions: [
       ...WORKSPACE_ASSERTIONS,
       "symphonyHeightBounded",

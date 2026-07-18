@@ -1,4 +1,4 @@
-import { ThreadId, type AutomationQueueReadResult } from "@t3tools/contracts";
+import { ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -10,7 +10,6 @@ import {
   buildAutomationStartInput,
   buildAutomationValidateInput,
   deriveAutomationWorkspaceState,
-  mergeAutomationQueuePage,
 } from "./AutomationProfileDialog.logic";
 
 describe("buildAutomationStartInput", () => {
@@ -562,51 +561,5 @@ describe("Automation workspace lifecycle", () => {
         },
       }).start,
     ).toBe(false);
-  });
-});
-
-describe("mergeAutomationQueuePage", () => {
-  it("appends bounded pages with stable issue/claim identity and replaces newer duplicates", () => {
-    const first: AutomationQueueReadResult = {
-      category: "running" as const,
-      total: 3,
-      items: [
-        {
-          issueId: "issue-1",
-          issueIdentifier: "ORC-1",
-          issueTitle: { text: "First", truncated: false },
-          state: "Started",
-          claimId: "claim-1",
-          category: "running" as const,
-          nextAction: { text: "Continue", truncated: false },
-        },
-      ],
-      nextOffset: 1,
-    };
-    const second: AutomationQueueReadResult = {
-      category: "running" as const,
-      total: 3,
-      items: [
-        {
-          ...first.items[0]!,
-          state: "In Progress",
-        },
-        {
-          issueId: "issue-2",
-          issueIdentifier: "ORC-2",
-          issueTitle: { text: "Second", truncated: false },
-          state: "Started",
-          claimId: "claim-2",
-          category: "running" as const,
-          nextAction: { text: "Continue", truncated: false },
-        },
-      ],
-      nextOffset: 3,
-    };
-
-    expect(mergeAutomationQueuePage(first, second)).toEqual({
-      ...second,
-      items: [second.items[0], second.items[1]],
-    });
   });
 });

@@ -132,13 +132,13 @@ afterEach(async () => {
 });
 
 describe("Orchestra workspace acceptance verifier", () => {
-  it("accepts the exact six-scenario Product evidence contract", async () => {
+  it("accepts the exact eight-scenario Product evidence contract", async () => {
     const { rootDir } = await makeFixture();
 
     await expect(verifyOrchestraAcceptance({ rootDir })).resolves.toBeUndefined();
   });
 
-  it("requires all six scenarios in their sealed order", async () => {
+  it("requires all eight scenarios in their sealed order", async () => {
     const { rootDir } = await makeFixture((manifest) => {
       manifest.screenshots.pop();
     });
