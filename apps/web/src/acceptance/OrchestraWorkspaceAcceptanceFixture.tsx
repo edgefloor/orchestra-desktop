@@ -4,6 +4,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { AutomationRunWorkspace } from "../components/chat/AutomationRunWorkspace";
 import { AutomationRunActionFeedbackNotice } from "../components/chat/AutomationRunActionFeedback";
+import { AutomationIssueTaskFrame } from "../components/chat/AutomationIssueTaskFrame";
+import { AutomationIssueWorkspacePresentation } from "../components/chat/AutomationIssueWorkspace";
+import { selectExactAutomationIssueSnapshot } from "../components/chat/AutomationIssueWorkspace.logic";
 import type { AutomationRunActionFeedback } from "../components/chat/AutomationProfileDialog.logic";
 import { ChatComposerFrame } from "../components/chat/ChatComposerFrame";
 import { TaskAttentionView } from "../components/chat/TaskAttentionView";
@@ -27,6 +30,7 @@ type AcceptanceState =
   | "symphony-activity"
   | "symphony-recovery"
   | "symphony-events"
+  | "selected-issue"
   | "browser-preview"
   | "browser-preview-narrow"
   | "file-preview";
@@ -40,6 +44,7 @@ declare global {
 
 const environmentId = EnvironmentId.make("acceptance-local");
 const threadId = ThreadId.make("acceptance-task");
+const issueTaskThreadId = ThreadId.make("issue-task-orc-70");
 const acceptanceAutomationRun: AutomationRunResult = {
   run: {
     schemaVersion: 1,
@@ -93,7 +98,7 @@ const acceptanceAutomationRun: AutomationRunResult = {
         issueId: "issue-orc-70",
         issueIdentifier: "ORC-70",
         issueTitle: { text: "Complete the Symphony workspace", truncated: false },
-        issueUrl: null,
+        issueUrl: "https://linear.app/demystify/issue/ORC-70/complete-the-symphony-workspace",
         trackerState: "In Progress",
         priority: 1,
         attempt: 1,
@@ -112,9 +117,19 @@ const acceptanceAutomationRun: AutomationRunResult = {
         status: "running",
         worktree: "/workspace/orchestra/.worktrees/orc-70",
         sourceRevision: "836962e4",
-        issueTask: { threadId: "issue-task-orc-70", taskPath: "/root/automation_orc_70" },
+        issueTask: { threadId: issueTaskThreadId, taskPath: "/root/automation_orc_70" },
         workflowRunId: "workflow-orc-70",
         workflowStatus: "running",
+        latestSteeringReceipt: {
+          sequence: 2,
+          submittedAtMs: 1_789_000_001_100,
+          initiatorThreadId: threadId,
+          targetThreadId: issueTaskThreadId,
+          authority: "automation-claim-native-send-input-v1",
+          inputSha256: "guidance-orc-70",
+          inputPreview: "Keep the selected issue context grounded in native receipts.",
+          status: "delivered",
+        },
         effects: [
           {
             effectId: "effect-orc-70-transition",
@@ -125,6 +140,27 @@ const acceptanceAutomationRun: AutomationRunResult = {
             requestSha256: "effect-orc-70-transition-request",
             bodyPreview: { text: "Move ORC-70 to Done", truncated: false },
             failure: { text: "Provider receipt is ambiguous.", truncated: false },
+          },
+          {
+            effectId: "effect-orc-70-comment",
+            idempotencyKey: "effect-orc-70-comment-key",
+            kind: "tracker.comment",
+            status: "waiting_gate",
+            gatePolicy: "ask_human",
+            requestSha256: "effect-orc-70-comment-request",
+            bodyPreview: {
+              text: "Publish the verified selected-Issue acceptance receipt.",
+              truncated: false,
+            },
+          },
+          {
+            effectId: "effect-orc-70-cleanup",
+            idempotencyKey: "effect-orc-70-cleanup-key",
+            kind: "tracker.link_pull_request",
+            status: "waiting_gate",
+            gatePolicy: "auto_accept",
+            requestSha256: "effect-orc-70-cleanup-request",
+            bodyPreview: { text: "Retain cleanup until verification completes.", truncated: false },
           },
         ],
         hookReceipts: [
@@ -170,6 +206,17 @@ const acceptanceAutomationRun: AutomationRunResult = {
     nextAction: { text: "Automation remains resident in the owner task.", truncated: false },
   },
 };
+
+const acceptanceIssueSnapshot = selectExactAutomationIssueSnapshot(acceptanceAutomationRun, {
+  ownerThreadId: threadId,
+  automationRunId: acceptanceAutomationRun.run.runId,
+  issueId: "issue-orc-70",
+  issueTaskThreadId,
+});
+
+if (!acceptanceIssueSnapshot) {
+  throw new Error("The deterministic acceptance Run must contain the exact ORC-70 issue task");
+}
 
 function StaticSidebar() {
   return (
@@ -265,7 +312,9 @@ function Composer() {
             <span className="rounded-md bg-muted px-2 py-1">Codex</span>
             <span>Workspace write</span>
           </div>
-          <Button size="sm">Send</Button>
+          <Button aria-label="Send task message" size="sm">
+            Send
+          </Button>
         </div>
       </ChatComposerFrame>
     </div>
@@ -390,6 +439,8 @@ export function OrchestraWorkspaceAcceptanceFixture({
   const [automationFeedback, setAutomationFeedback] = useState<AutomationRunActionFeedback | null>(
     null,
   );
+  const [selectedIssueOpen, setSelectedIssueOpen] = useState(false);
+  const [issueGuidance, setIssueGuidance] = useState("");
   const recoveryScenario = state === "symphony-recovery";
   const automationRunResult: AutomationRunResult = recoveryScenario
     ? {
@@ -434,11 +485,23 @@ export function OrchestraWorkspaceAcceptanceFixture({
             {
               key: "task",
               title: "Complete desktop workspace",
-              active: !state.startsWith("symphony"),
+              active: !state.startsWith("symphony") && state !== "selected-issue",
               status: "running",
               onSelect: () => undefined,
               onClose: () => undefined,
             },
+            ...(state === "selected-issue"
+              ? [
+                  {
+                    key: "issue-orc-70",
+                    title: "ORC-70 · Complete the Symphony workspace",
+                    active: selectedIssueOpen,
+                    status: "running" as const,
+                    onSelect: () => setSelectedIssueOpen(true),
+                    onClose: () => undefined,
+                  },
+                ]
+              : []),
             {
               key: "symphony",
               title: "Symphony · Complete desktop workspace",
@@ -455,6 +518,24 @@ export function OrchestraWorkspaceAcceptanceFixture({
           activeView={state === "attention-sheet" ? "attention" : null}
           onSelectView={() => undefined}
         />
+        {state === "selected-issue" && !selectedIssueOpen ? (
+          <div className="shrink-0 border-b border-border px-6 py-3">
+            <Button
+              aria-label="Open ORC-70 issue workspace"
+              onClick={() => {
+                setSelectedIssueOpen(true);
+                window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                  ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                  openedIssueId: "issue-orc-70",
+                };
+              }}
+              size="sm"
+              variant="outline"
+            >
+              Open ORC-70 issue
+            </Button>
+          </div>
+        ) : null}
         {state.startsWith("symphony") ? (
           <section
             aria-label="Symphony automation workspace"
@@ -531,10 +612,58 @@ export function OrchestraWorkspaceAcceptanceFixture({
             </div>
           </section>
         ) : null}
+        {state === "selected-issue" && selectedIssueOpen ? (
+          <AutomationIssueWorkspacePresentation
+            error={null}
+            fallbackIdentifier="Issue issue-orc-70"
+            fallbackTitle="Complete the Symphony workspace"
+            guidance={issueGuidance}
+            onGuidanceChange={setIssueGuidance}
+            onOpenDiff={() => {
+              window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                diffIssueId: "issue-orc-70",
+              };
+            }}
+            onOpenSymphony={() => {
+              window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                parentRunId: acceptanceAutomationRun.run.runId,
+              };
+            }}
+            onOpenTracker={() => {
+              window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                trackerUrl: acceptanceAutomationRun.run.claims[0]?.issueUrl ?? "",
+              };
+            }}
+            onRefresh={() => undefined}
+            onSendGuidance={() => {
+              window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                issueGuidance: issueGuidance.trim(),
+              };
+              setIssueGuidance("");
+            }}
+            pending={false}
+            runtimeState="ready"
+            snapshot={acceptanceIssueSnapshot}
+          />
+        ) : null}
         <div className="flex min-h-0 flex-1">
-          <main className="flex min-w-0 flex-1 flex-col">
-            <Timeline />
-            <Composer />
+          <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            {state === "selected-issue" && selectedIssueOpen ? (
+              <AutomationIssueTaskFrame
+                activity={<Timeline />}
+                composer={<Composer />}
+                issueActive
+              />
+            ) : (
+              <>
+                <Timeline />
+                <Composer />
+              </>
+            )}
           </main>
           {state === "workspace" && window.innerWidth > 1024 ? (
             <ContextRail>

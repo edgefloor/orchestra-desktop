@@ -24,9 +24,12 @@ const DEFAULT_ROOT = NodePath.resolve(
 );
 const DEFAULT_MANIFEST = "docs/acceptance/orchestra-workspace/manifest.json";
 const ACCEPTANCE_DIRECTORY = "docs/acceptance/orchestra-workspace";
-const REQUIRED_BROWSER_PREVIEW_SOURCE_FILES = [
+const REQUIRED_ACCEPTANCE_SOURCE_FILES = [
   "apps/desktop/scripts/capture-orchestra-acceptance.mjs",
   "apps/web/src/acceptance/BrowserPreviewAcceptanceSurface.tsx",
+  "apps/web/src/acceptance/OrchestraWorkspaceAcceptanceFixture.tsx",
+  "apps/web/src/components/chat/AutomationIssueTaskFrame.tsx",
+  "apps/web/src/components/chat/AutomationIssueWorkspace.tsx",
   "apps/web/src/components/files/FilePreviewModeToggle.tsx",
   "scripts/verify-orchestra-acceptance.ts",
 ] as const;
@@ -42,6 +45,7 @@ interface ScenarioContract {
     | "symphony-activity"
     | "symphony-recovery"
     | "symphony-events"
+    | "selected-issue"
     | "browser-preview"
     | "browser-preview-narrow"
     | "file-preview";
@@ -183,6 +187,25 @@ export const ORCHESTRA_ACCEPTANCE_SCENARIOS = {
       "narrowLayoutActive",
     ].sort(),
   },
+  "selected-issue-1024x768-dark": {
+    width: 1024,
+    height: 768,
+    theme: "dark",
+    state: "selected-issue",
+    assertions: [
+      ...WORKSPACE_ASSERTIONS,
+      "issueActivityRegionVisible",
+      "narrowLayoutActive",
+      "selectedIssueActionsNamedFocusable",
+      "selectedIssueComposerReachable",
+      "selectedIssueContextBounded",
+      "selectedIssueContextScrollsInternally",
+      "selectedIssueNavigationActionsWired",
+      "selectedIssueOpenWired",
+      "selectedIssueParentExact",
+      "selectedIssueSteeringWired",
+    ].sort(),
+  },
   "browser-preview-1440x900-dark": {
     width: 1440,
     height: 900,
@@ -286,7 +309,7 @@ export async function verifyOrchestraAcceptance(
     rootDir,
     commit: desktop.commit,
     tree: desktop.tree,
-    requiredSourceFiles: REQUIRED_BROWSER_PREVIEW_SOURCE_FILES,
+    requiredSourceFiles: REQUIRED_ACCEPTANCE_SOURCE_FILES,
   });
 
   requireFields(typedManifest.capture, ["electronVersion", "platform"], "manifest.capture");

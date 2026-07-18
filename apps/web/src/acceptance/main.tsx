@@ -15,6 +15,7 @@ const state =
   requestedState === "symphony-activity" ||
   requestedState === "symphony-recovery" ||
   requestedState === "symphony-events" ||
+  requestedState === "selected-issue" ||
   requestedState === "browser-preview" ||
   requestedState === "browser-preview-narrow" ||
   requestedState === "file-preview"

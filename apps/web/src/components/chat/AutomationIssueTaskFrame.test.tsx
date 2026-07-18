@@ -37,7 +37,8 @@ describe("AutomationIssueTaskFrame", () => {
     expect(sendNormalTaskMessage).toHaveBeenCalledOnce();
 
     const markup = renderToStaticMarkup(frame);
-    expect(markup).toContain('aria-label="Issue activity"');
+    expect(markup).toContain('<section aria-label="Issue activity"');
+    expect(markup).toContain('data-automation-issue-activity="">Issue activity</div>');
     expect(markup).toContain('aria-label="Normal task composer"');
     expect(markup).toContain(
       'data-automation-issue-layout="bounded-context-with-retained-composer"',

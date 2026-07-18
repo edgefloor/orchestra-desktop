@@ -169,6 +169,26 @@ const scenarios = [
     ].sort(),
   },
   {
+    scenario: "selected-issue-1024x768-dark",
+    width: 1024,
+    height: 768,
+    theme: "dark",
+    state: "selected-issue",
+    assertions: [
+      ...workspaceAssertions,
+      "issueActivityRegionVisible",
+      "narrowLayoutActive",
+      "selectedIssueActionsNamedFocusable",
+      "selectedIssueComposerReachable",
+      "selectedIssueContextBounded",
+      "selectedIssueContextScrollsInternally",
+      "selectedIssueNavigationActionsWired",
+      "selectedIssueOpenWired",
+      "selectedIssueParentExact",
+      "selectedIssueSteeringWired",
+    ].sort(),
+  },
+  {
     scenario: "browser-preview-1440x900-dark",
     width: 1440,
     height: 900,
@@ -385,6 +405,124 @@ async function probeSymphonyInteractions(webContents, requestedView) {
   );
 }
 
+async function probeSelectedIssueInteractions(webContents) {
+  const firstPass = await webContents.executeJavaScript(
+    `(async () => {
+      const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const exactButton = (text) => [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === text);
+      const launcher = document.querySelector('[aria-label="Open ORC-70 issue workspace"]');
+      launcher?.focus();
+      launcher?.click();
+      await settle();
+
+      const workspace = document.querySelector('[data-automation-issue-workspace]');
+      const activityHeading = document.querySelector('[data-automation-issue-activity]');
+      const activityRegion = document.querySelector('section[aria-label="Issue activity"]');
+      const composer = document.querySelector('[data-acceptance-composer]');
+      const composerAction = document.querySelector('[aria-label="Send task message"]');
+      const guidance = document.querySelector('input[id^="issue-workspace-guidance-"]');
+      const requiredActions = ['Refresh', 'Open Symphony', 'Diff', 'Open in Linear', 'Send guidance']
+        .map(exactButton);
+      const isVisible = (element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        const bounds = element.getBoundingClientRect();
+        return bounds.width > 0 && bounds.height > 0 && bounds.bottom > 0 && bounds.top < window.innerHeight;
+      };
+      const isNamedFocusable = (element) =>
+        element instanceof HTMLElement
+        && element.tabIndex >= 0
+        && Boolean(element.getAttribute('aria-label') || element.textContent?.trim());
+      const workspaceBounds = workspace?.getBoundingClientRect();
+      const composerBounds = composer?.getBoundingClientRect();
+      const maximumIssueHeight = window.innerHeight * 0.45;
+
+      if (workspace instanceof HTMLElement) {
+        workspace.scrollTop = workspace.scrollHeight;
+        await settle();
+      }
+
+      exactButton('Open Symphony')?.click();
+      exactButton('Diff')?.click();
+      exactButton('Open in Linear')?.click();
+      if (guidance instanceof HTMLInputElement) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        setter?.call(guidance, 'Verify the exact selected issue workspace.');
+        guidance.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          inputType: 'insertText',
+          data: 'Verify the exact selected issue workspace.',
+        }));
+      }
+      await settle();
+      const sendGuidance = exactButton('Send guidance');
+      sendGuidance?.focus();
+
+      return {
+        issueActivityRegionVisible:
+          activityRegion instanceof HTMLElement
+          && activityHeading?.textContent?.trim() === 'Issue activity'
+          && isVisible(activityRegion),
+        selectedIssueActionsNamedFocusable:
+          requiredActions.every(isNamedFocusable)
+          && guidance instanceof HTMLInputElement
+          && guidance.labels?.[0]?.textContent?.trim() === 'Guide Issue task'
+          && guidance.tabIndex >= 0,
+        selectedIssueComposerReachable:
+          isVisible(composer)
+          && isNamedFocusable(composerAction)
+          && composerBounds !== undefined
+          && composerBounds.bottom <= window.innerHeight,
+        selectedIssueContextBounded:
+          workspaceBounds !== undefined
+          && workspaceBounds.height <= maximumIssueHeight + 1,
+        selectedIssueContextScrollsInternally:
+          workspace instanceof HTMLElement
+          && getComputedStyle(workspace).overflowY === 'auto'
+          && workspace.scrollHeight > workspace.clientHeight
+          && workspace.scrollTop > 0,
+        selectedIssueOpenWired:
+          (window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {}).openedIssueId === 'issue-orc-70'
+          && document.querySelector('[aria-label="ORC-70 issue workspace"]') === workspace,
+        selectedIssueParentExact:
+          workspace?.textContent?.includes('Parent: Symphony · Run automation-acceptance') === true,
+        documentStillFits:
+          document.documentElement.scrollWidth <= window.innerWidth
+          && document.documentElement.getBoundingClientRect().width === window.innerWidth,
+        guidanceActionFocused: document.activeElement === sendGuidance,
+      };
+    })()`,
+    true,
+  );
+
+  webContents.sendInputEvent({ type: "rawKeyDown", keyCode: "Enter" });
+  webContents.sendInputEvent({ type: "char", keyCode: "Enter" });
+  webContents.sendInputEvent({ type: "keyUp", keyCode: "Enter" });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const actions = await webContents.executeJavaScript(
+    `(() => window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {})()`,
+    true,
+  );
+  return {
+    issueActivityRegionVisible: firstPass.issueActivityRegionVisible,
+    noDocumentHorizontalOverflow: firstPass.documentStillFits,
+    rootWidthMatchesViewport: firstPass.documentStillFits,
+    selectedIssueActionsNamedFocusable: firstPass.selectedIssueActionsNamedFocusable,
+    selectedIssueComposerReachable: firstPass.selectedIssueComposerReachable,
+    selectedIssueContextBounded: firstPass.selectedIssueContextBounded,
+    selectedIssueContextScrollsInternally: firstPass.selectedIssueContextScrollsInternally,
+    selectedIssueNavigationActionsWired:
+      actions.parentRunId === "automation-acceptance" &&
+      actions.diffIssueId === "issue-orc-70" &&
+      actions.trackerUrl ===
+        "https://linear.app/demystify/issue/ORC-70/complete-the-symphony-workspace",
+    selectedIssueOpenWired: firstPass.selectedIssueOpenWired,
+    selectedIssueParentExact: firstPass.selectedIssueParentExact,
+    selectedIssueSteeringWired:
+      firstPass.guidanceActionFocused &&
+      actions.issueGuidance === "Verify the exact selected issue workspace.",
+  };
+}
+
 async function probeBrowserPreviewInteractions(webContents, narrow) {
   const assertions = await webContents.executeJavaScript(
     `(async () => {
@@ -581,6 +719,12 @@ async function captureScenario(BrowserWindow, scenario, stagingDir) {
           window.webContents,
           scenario.state === "symphony-recovery" ? "recovery" : "issues",
         )),
+      };
+    }
+    if (scenario.state === "selected-issue") {
+      rendererState.assertions = {
+        ...rendererState.assertions,
+        ...(await probeSelectedIssueInteractions(window.webContents)),
       };
     }
     if (scenario.state === "browser-preview" || scenario.state === "browser-preview-narrow") {
