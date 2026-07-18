@@ -434,7 +434,10 @@ async function makeFixture(
     context: { workflowRunId: "run-cycle8", attentionResolved: true },
     modelPicker: { trigger: "Codex gpt-5.4", text: "gpt-5.4" },
     settings: { hash: "#/settings", generalVisible: true },
-    vcs: { items: [{ label: "Commit" }, { label: "Push" }] },
+    vcs: {
+      items: [{ label: "Commit" }, { label: "Push" }],
+      fixtureRemote: { name: "origin", transport: "local-bare", externalMutation: false },
+    },
     surfaces: Object.fromEntries(
       ["Files", "Terminal 1", "Browser", "Diff"].map((title) => [
         title,
@@ -924,6 +927,20 @@ describe("Orchestra native-shell evidence verifier", () => {
     });
     await expect(
       verifyOrchestraNativeShell({ rootDir: falseRetainedProbe.rootDir }),
+    ).rejects.toThrow(
+      "manifest.assertions.retainedDesktopCapabilitiesProbed observed value contradicts passed:true",
+    );
+
+    const externalRetainedRemote = await makeFixture((manifest) => {
+      const observed = manifest.assertions.retainedDesktopCapabilitiesProbed!.observed as Record<
+        string,
+        unknown
+      >;
+      const vcs = observed.vcs as Record<string, unknown>;
+      (vcs.fixtureRemote as Record<string, unknown>).externalMutation = true;
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: externalRetainedRemote.rootDir }),
     ).rejects.toThrow(
       "manifest.assertions.retainedDesktopCapabilitiesProbed observed value contradicts passed:true",
     );

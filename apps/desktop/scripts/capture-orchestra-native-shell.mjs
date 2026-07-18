@@ -91,6 +91,38 @@ function runChecked(command, args, options = {}) {
   });
 }
 
+export function prepareNativeShellGitFixture({ repository, remoteRepository }) {
+  runChecked("git", ["init", "--bare", "--initial-branch=main", remoteRepository], {
+    cwd: NodePath.dirname(remoteRepository),
+  });
+  runGit(repository, ["init", "--initial-branch=main"]);
+  runGit(repository, ["add", "."]);
+  runGit(repository, [
+    "-c",
+    "user.name=Orchestra Acceptance",
+    "-c",
+    "user.email=acceptance@invalid.local",
+    "commit",
+    "-m",
+    "Seed native dogfood repository",
+  ]);
+  runGit(repository, ["remote", "add", "origin", remoteRepository]);
+
+  const configuredRemote = runGit(repository, ["remote", "get-url", "origin"]);
+  const remoteIsBare = runGit(remoteRepository, ["rev-parse", "--is-bare-repository"]);
+  if (
+    NodePath.resolve(configuredRemote) !== NodePath.resolve(remoteRepository) ||
+    remoteIsBare !== "true"
+  ) {
+    throw new Error("native-shell Git fixture must use its isolated local bare origin");
+  }
+  return Object.freeze({
+    name: "origin",
+    transport: "local-bare",
+    externalMutation: false,
+  });
+}
+
 function cleanCargoEnvironment() {
   const environment = { ...process.env };
   delete environment.CARGO_TARGET_DIR;
@@ -388,6 +420,7 @@ async function launchUnderElectron() {
   const failurePort = await reserveNativeShellPort();
   const responsesPort = await reserveNativeShellPort();
   const dogfoodRepository = NodePath.join(runtimeDirectory, "repository");
+  const dogfoodRemoteRepository = NodePath.join(runtimeDirectory, "origin.git");
   const defaultCodexRepository = NodePath.resolve(repoRoot, "..", "orchestra-codex");
   const defaultCodexPath = NodePath.resolve(
     defaultCodexRepository,
@@ -432,17 +465,10 @@ async function launchUnderElectron() {
       NodeFSP.writeFile(NodePath.join(codexHome, relativePath), contents),
     ),
   ]);
-  runGit(dogfoodRepository, ["init", "--initial-branch=main"]);
-  runGit(dogfoodRepository, ["add", "."]);
-  runGit(dogfoodRepository, [
-    "-c",
-    "user.name=Orchestra Acceptance",
-    "-c",
-    "user.email=acceptance@invalid.local",
-    "commit",
-    "-m",
-    "Seed native dogfood repository",
-  ]);
+  const gitFixtureIdentity = prepareNativeShellGitFixture({
+    repository: dogfoodRepository,
+    remoteRepository: dogfoodRemoteRepository,
+  });
   const settingsDirectory = NodePath.join(t3Home, "userdata");
   await NodeFSP.mkdir(settingsDirectory, { recursive: true });
   await NodeFSP.writeFile(
@@ -487,6 +513,7 @@ async function launchUnderElectron() {
     ORCHESTRA_NATIVE_ACCEPTANCE_FAILURE_PORT: String(failurePort),
     ORCHESTRA_NATIVE_ACCEPTANCE_RESPONSES_PORT: String(responsesPort),
     ORCHESTRA_NATIVE_ACCEPTANCE_REPOSITORY: dogfoodRepository,
+    ORCHESTRA_NATIVE_ACCEPTANCE_GIT_FIXTURE_IDENTITY: JSON.stringify(gitFixtureIdentity),
     ORCHESTRA_NATIVE_ACCEPTANCE_CODEX_PATH: dogfoodCodexPath,
     ORCHESTRA_NATIVE_ACCEPTANCE_CODEX_IDENTITY: JSON.stringify(dogfoodCodexIdentity),
     ORCHESTRA_NATIVE_ACCEPTANCE_CORE_IDENTITY: JSON.stringify(orchestraCoreIdentity),
@@ -1149,6 +1176,7 @@ async function runElectronChild() {
   const failurePort = Number(process.env.ORCHESTRA_NATIVE_ACCEPTANCE_FAILURE_PORT);
   const responsesPort = Number(process.env.ORCHESTRA_NATIVE_ACCEPTANCE_RESPONSES_PORT);
   const dogfoodRepository = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_REPOSITORY;
+  const gitFixtureIdentityJson = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_GIT_FIXTURE_IDENTITY;
   const dogfoodCodexPath = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CODEX_PATH;
   const dogfoodCodexIdentityJson = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CODEX_IDENTITY;
   const orchestraCoreIdentityJson = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_CORE_IDENTITY;
@@ -1162,6 +1190,7 @@ async function runElectronChild() {
     !failurePort ||
     !responsesPort ||
     !dogfoodRepository ||
+    !gitFixtureIdentityJson ||
     !dogfoodCodexPath ||
     !dogfoodCodexIdentityJson ||
     !orchestraCoreIdentityJson ||
@@ -1171,6 +1200,7 @@ async function runElectronChild() {
     throw new Error("native-shell child environment is incomplete");
   }
   const dogfoodCodexIdentity = JSON.parse(dogfoodCodexIdentityJson);
+  const gitFixtureIdentity = JSON.parse(gitFixtureIdentityJson);
   const orchestraCoreIdentity = JSON.parse(orchestraCoreIdentityJson);
   const productIdentity = JSON.parse(productIdentityJson);
   const buildReceipts = JSON.parse(buildReceiptsJson);
@@ -1950,7 +1980,7 @@ async function runElectronChild() {
       true,
     );
 
-    retainedDesktopCapabilities.vcs = await renderer.executeJavaScript(
+    const retainedVcsMenu = await renderer.executeJavaScript(
       `new Promise((resolve, reject) => {
         const trigger = document.querySelector('[aria-label="Git action options"]');
         if (!(trigger instanceof HTMLButtonElement) || trigger.disabled) {
@@ -1985,6 +2015,10 @@ async function runElectronChild() {
       })`,
       true,
     );
+    retainedDesktopCapabilities.vcs = {
+      ...retainedVcsMenu,
+      fixtureRemote: gitFixtureIdentity,
+    };
 
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Toggle right panel"]')?.click()`,
@@ -2623,6 +2657,9 @@ async function runElectronChild() {
           true &&
         retainedDesktopCapabilities.vcs.items.some(({ label }) => label.includes("Push")) ===
           true &&
+        retainedDesktopCapabilities.vcs.fixtureRemote?.name === "origin" &&
+        retainedDesktopCapabilities.vcs.fixtureRemote.transport === "local-bare" &&
+        retainedDesktopCapabilities.vcs.fixtureRemote.externalMutation === false &&
         ["Files", "Terminal 1", "Browser", "Diff"].every(
           (title) =>
             retainedDesktopCapabilities.surfaces[title]?.title === title &&

@@ -9,11 +9,14 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
+import { buildMenuItems } from "../../web/src/components/GitActionsControl.logic.ts";
+
 import {
   accumulateNativeShellAssistantMessage,
   NATIVE_SHELL_ASSISTANT_MAX_MESSAGE_CHARS,
   NATIVE_SHELL_ASSISTANT_MAX_PENDING_MESSAGES,
   NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS,
+  prepareNativeShellGitFixture,
   withNativeShellEventTimeout,
 } from "./capture-orchestra-native-shell.mjs";
 
@@ -281,11 +284,8 @@ describe("native-shell acceptance capture contract", () => {
       NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),
       "utf8",
     );
-    const probeStart = captureSource.indexOf("retainedDesktopCapabilities.vcs =");
-    const probeEnd = captureSource.indexOf(
-      "retainedDesktopCapabilities.surfaces.Files",
-      probeStart,
-    );
+    const probeStart = captureSource.indexOf("const retainedVcsMenu =");
+    const probeEnd = captureSource.indexOf("retainedDesktopCapabilities.vcs =", probeStart);
     const probeSource = captureSource.slice(probeStart, probeEnd);
     expect(probeStart).toBeGreaterThanOrEqual(0);
     expect(probeEnd).toBeGreaterThan(probeStart);
@@ -293,6 +293,46 @@ describe("native-shell acceptance capture contract", () => {
     expect(probeSource).toContain("popup.getClientRects().length === 0");
     expect(probeSource).toContain("popup.querySelectorAll('[data-slot=\"menu-item\"]')");
     expect(probeSource).not.toContain("document.querySelectorAll('[role=\"menuitem\"]')");
+  });
+
+  it("gives the isolated repository a local bare origin that exposes production Push", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "orchestra-native-git-"));
+    const repository = NodePath.join(root, "repository");
+    const remoteRepository = NodePath.join(root, "origin.git");
+    try {
+      await NodeFSP.mkdir(repository, { recursive: true });
+      await NodeFSP.writeFile(NodePath.join(repository, "README.md"), "native fixture\n");
+      const identity = prepareNativeShellGitFixture({ repository, remoteRepository });
+      expect(identity).toEqual({
+        name: "origin",
+        transport: "local-bare",
+        externalMutation: false,
+      });
+      expect(runGit(repository, ["remote", "get-url", "origin"])).toBe(remoteRepository);
+      expect(runGit(remoteRepository, ["rev-parse", "--is-bare-repository"])).toBe("true");
+
+      const hasPrimaryRemote = runGit(repository, ["remote"]).split("\n").includes("origin");
+      const menuItems = buildMenuItems(
+        {
+          isRepo: true,
+          hasPrimaryRemote,
+          isDefaultRef: true,
+          refName: "main",
+          hasWorkingTreeChanges: false,
+          workingTree: { files: [], insertions: 0, deletions: 0 },
+          hasUpstream: false,
+          aheadCount: 1,
+          behindCount: 0,
+          pr: null,
+        },
+        false,
+        hasPrimaryRemote,
+      );
+      expect(menuItems.map(({ label }) => label)).toContain("Commit");
+      expect(menuItems.map(({ label }) => label)).toContain("Push");
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("requires the exact all-true semantic assertion set", () => {

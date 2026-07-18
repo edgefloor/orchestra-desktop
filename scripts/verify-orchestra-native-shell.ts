@@ -1158,6 +1158,10 @@ export async function verifyOrchestraNativeShell(
     retained.vcs,
     "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.vcs",
   );
+  const retainedVcsFixtureRemote = record(
+    retainedVcs.fixtureRemote,
+    "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.vcs.fixtureRemote",
+  );
   const retainedSurfaces = record(
     retained.surfaces,
     "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.surfaces",
@@ -1188,6 +1192,9 @@ export async function verifyOrchestraNativeShell(
     !vcsItems.some((item) =>
       stringField(record(item, "vcs item").label, "vcs label").includes("Push"),
     ) ||
+    retainedVcsFixtureRemote.name !== "origin" ||
+    retainedVcsFixtureRemote.transport !== "local-bare" ||
+    retainedVcsFixtureRemote.externalMutation !== false ||
     !["Files", "Terminal 1", "Browser", "Diff"].every((title) => {
       const surface = record(retainedSurfaces[title], `retained surface ${title}`);
       return surface.title === title && surface.panelVisible === true;
