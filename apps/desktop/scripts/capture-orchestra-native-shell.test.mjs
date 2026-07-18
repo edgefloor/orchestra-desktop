@@ -265,6 +265,17 @@ describe("native-shell acceptance capture contract", () => {
     expect(first.digest).toBe(sha256(Buffer.from(JSON.stringify(first.pages))));
   });
 
+  it("reads visible Evidence identity through its structured accessibility label", async () => {
+    const captureSource = await NodeFSP.readFile(
+      NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),
+      "utf8",
+    );
+    expect(
+      captureSource.match(/querySelector\('\[aria-label="Evidence identity"\]'\)/g),
+    ).toHaveLength(2);
+    expect(captureSource).not.toContain("text.match(/\\bid");
+  });
+
   it("requires the exact all-true semantic assertion set", () => {
     expect(ORCHESTRA_NATIVE_SHELL_ASSERTIONS).toContain("nativeDogfoodProviderRestartRecovered");
     const assertions = Object.fromEntries(

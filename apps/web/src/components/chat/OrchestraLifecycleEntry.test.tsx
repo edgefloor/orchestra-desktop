@@ -70,6 +70,7 @@ describe("OrchestraLifecycleEntry", () => {
     expect(lifecycleSource).toContain("min-h-6 w-full");
     expect(lifecycleSource).toContain("pointer-coarse:min-h-11");
     expect(lifecycleSource).toContain('role="alert"');
+    expect(lifecycleSource).toContain('aria-label="Evidence identity"');
   });
 
   it("emits workspace descriptors only while opening run and evidence disclosures", () => {

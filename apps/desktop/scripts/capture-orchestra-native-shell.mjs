@@ -863,7 +863,10 @@ async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelec
         const text = evidence.innerText;
         const labels = [...evidenceButton.querySelectorAll(':scope > span')]
           .map((span) => span.textContent?.trim() ?? '');
-        const identityPrefix = text.match(/\bid ([0-9a-f]{12})\b/)?.[1] ?? null;
+        const identityElement = evidence.querySelector('[aria-label="Evidence identity"]');
+        const identityPrefix = identityElement instanceof HTMLElement
+          ? identityElement.textContent?.trim().match(/^id ([0-9a-f]{12})$/)?.[1] ?? null
+          : null;
         window.clearTimeout(deadline);
         observer.disconnect();
         resolve({
@@ -933,7 +936,10 @@ async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, co
         const text = evidence.innerText;
         const labels = [...evidenceButton.querySelectorAll(':scope > span')]
           .map((span) => span.textContent?.trim() ?? '');
-        const identityPrefix = text.match(/\bid ([0-9a-f]{12})\b/)?.[1] ?? null;
+        const identityElement = evidence.querySelector('[aria-label="Evidence identity"]');
+        const identityPrefix = identityElement instanceof HTMLElement
+          ? identityElement.textContent?.trim().match(/^id ([0-9a-f]{12})$/)?.[1] ?? null
+          : null;
         window.clearTimeout(deadline);
         observer.disconnect();
         resolve({

@@ -599,7 +599,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                               <span>{reference.availability}</span>
                             </button>
                             <div className="mt-1 flex flex-wrap gap-x-3 font-mono text-[10px]">
-                              <span>id {reference.identity}</span>
+                              <span aria-label="Evidence identity">id {reference.identity}</span>
                               <span>{item.bytes} bytes</span>
                               <span className="break-all">
                                 runtime-reported sha256 {item.sha256 ?? "unavailable"}
