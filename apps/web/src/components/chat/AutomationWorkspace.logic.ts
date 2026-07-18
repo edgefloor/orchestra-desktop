@@ -43,6 +43,35 @@ export type AutomationWorkspaceActivity = {
   readonly detail: string;
 };
 
+export type AutomationWorkspaceRecoveryKind =
+  | "coordination"
+  | "dispatch"
+  | "reconciliation"
+  | "retry"
+  | "effect"
+  | "hook"
+  | "cleanup"
+  | "blocker";
+
+export type AutomationWorkspaceRecoveryAction =
+  | "inspect"
+  | "refresh"
+  | "resume"
+  | "open_issue_task";
+
+export type AutomationWorkspaceRecovery = {
+  readonly key: string;
+  readonly kind: AutomationWorkspaceRecoveryKind;
+  readonly status: string;
+  readonly summary: string;
+  readonly detail: string;
+  readonly resolution: string;
+  readonly issueKey?: string | undefined;
+  readonly issueIdentifier?: string | undefined;
+  readonly claimId?: string | undefined;
+  readonly actions: readonly AutomationWorkspaceRecoveryAction[];
+};
+
 export type AutomationWorkspaceEventGroupName =
   | "coordination"
   | "dispatch"
@@ -75,6 +104,7 @@ export type AutomationWorkspaceEventGroup = {
 export type AutomationWorkspaceProjection = {
   readonly issues: readonly AutomationWorkspaceIssue[];
   readonly activity: readonly AutomationWorkspaceActivity[];
+  readonly recovery: readonly AutomationWorkspaceRecovery[];
   readonly eventGroups: readonly AutomationWorkspaceEventGroup[];
   readonly bounds: {
     readonly issues: {
@@ -100,17 +130,24 @@ export type AutomationWorkspaceProjection = {
       readonly available: number;
       readonly truncated: boolean;
     };
+    readonly recovery: {
+      readonly shown: number;
+      readonly available: number;
+      readonly truncated: boolean;
+    };
   };
 };
 
 export type AutomationWorkspaceProjectionLimits = {
   readonly issues?: number;
   readonly activity?: number;
+  readonly recovery?: number;
   readonly eventsPerGroup?: number;
 };
 
 const DEFAULT_ISSUE_LIMIT = 100;
 const DEFAULT_ACTIVITY_LIMIT = 100;
+const DEFAULT_RECOVERY_LIMIT = 100;
 const DEFAULT_EVENTS_PER_GROUP_LIMIT = 50;
 
 const executionStateRank: Readonly<Record<AutomationIssueExecutionState, number>> = {
@@ -171,7 +208,7 @@ function deriveExecutionState(input: {
   if (claim?.status === "cancelled" || claim?.workflowStatus === "cancelled") return "cancelled";
   if (claim?.status === "completed") return "completed";
   if (claim?.status === "suspended") return "suspended";
-  if (claim && claim.retryAttempt > 0) return "retrying";
+  if (claim?.scheduledRetry) return "retrying";
   if (queue?.category === "waiting_gate" || claim?.workflowStatus === "waitingApproval") {
     return "waiting";
   }
@@ -284,10 +321,268 @@ function activityForIssue(issue: AutomationWorkspaceIssue): AutomationWorkspaceA
       occurredAtMs: claim.latestSteeringReceipt.submittedAtMs,
       status: claim.latestSteeringReceipt.status,
       summary: `Guidance ${claim.latestSteeringReceipt.status} for ${issue.issueIdentifier}`,
-      detail: claim.latestSteeringReceipt.inputPreview,
+      detail:
+        claim.latestSteeringReceipt.status === "failed" && claim.latestSteeringReceipt.failure
+          ? claim.latestSteeringReceipt.failure
+          : claim.latestSteeringReceipt.inputPreview,
+    });
+  }
+  for (const effect of claim.effects) {
+    if (effect.status !== "failed" && effect.status !== "ambiguous") continue;
+    activity.push({
+      key: `effect:${claim.claimId}:${effect.effectId}:${effect.status}`,
+      issueKey: issue.key,
+      status: effect.status,
+      summary: `${effect.kind} effect is ${effect.status} for ${issue.issueIdentifier}`,
+      detail:
+        effect.failure?.text ??
+        `Effect ${effect.effectId} has no durable failure detail in this snapshot.`,
+    });
+  }
+  for (const hook of claim.hookReceipts) {
+    if (hook.status !== "failed") continue;
+    activity.push({
+      key: `hook:${claim.claimId}:${hook.kind}:${hook.invocation}:failed`,
+      issueKey: issue.key,
+      status: hook.status,
+      summary: `${hook.kind.replace("_", " ")} hook failed for ${issue.issueIdentifier}`,
+      detail:
+        hook.failure?.text ||
+        hook.stderrPreview.text ||
+        `Hook invocation ${hook.invocation} has no durable failure detail in this snapshot.`,
+    });
+  }
+  if (claim.cleanup.status === "retry_pending") {
+    activity.push({
+      key: `cleanup:${claim.claimId}:retry_pending:${claim.cleanup.attempts}`,
+      issueKey: issue.key,
+      status: claim.cleanup.status,
+      summary: `Worktree cleanup will retry for ${issue.issueIdentifier}`,
+      detail:
+        claim.cleanup.lastFailure?.text ??
+        `${claim.cleanup.attempts} cleanup attempt${claim.cleanup.attempts === 1 ? "" : "s"} recorded without a failure detail.`,
     });
   }
   return activity;
+}
+
+function availableRunActions(run: AutomationRun): AutomationWorkspaceRecoveryAction[] {
+  const actions: AutomationWorkspaceRecoveryAction[] = ["inspect"];
+  if (run.status === "cancelled" || run.status === "failed") return actions;
+  actions.push("refresh");
+  if (run.status === "suspended") actions.push("resume");
+  return actions;
+}
+
+function availableIssueActions(
+  run: AutomationRun,
+  issue: AutomationWorkspaceIssue,
+): AutomationWorkspaceRecoveryAction[] {
+  const claim = issue.claim;
+  const actions = availableRunActions(run);
+  if (claim?.issueTask) actions.push("open_issue_task");
+  return actions;
+}
+
+const recoveryKindRank: Readonly<Record<AutomationWorkspaceRecoveryKind, number>> = {
+  coordination: 0,
+  dispatch: 1,
+  reconciliation: 2,
+  blocker: 3,
+  effect: 4,
+  hook: 5,
+  cleanup: 6,
+  retry: 7,
+};
+
+function recoveryStatusRank(status: string): number {
+  if (status === "error" || status === "failed") return 0;
+  if (status === "ambiguous") return 1;
+  if (status === "blocked") return 2;
+  if (status === "started" || status === "executing") return 3;
+  if (status === "pending" || status === "waiting_gate" || status === "retry_pending") return 4;
+  return 5;
+}
+
+function orderedRecovery(
+  items: readonly AutomationWorkspaceRecovery[],
+): AutomationWorkspaceRecovery[] {
+  const deduplicated = [...new Map(items.map((item) => [item.key, item])).values()];
+  return deduplicated.sort((left, right) => {
+    const urgency =
+      recoveryKindRank[left.kind] - recoveryKindRank[right.kind] ||
+      recoveryStatusRank(left.status) - recoveryStatusRank(right.status);
+    if (urgency !== 0) return urgency;
+    return compareText(
+      `${left.issueIdentifier ?? ""}\0${left.claimId ?? ""}\0${left.key}`,
+      `${right.issueIdentifier ?? ""}\0${right.claimId ?? ""}\0${right.key}`,
+    );
+  });
+}
+
+function projectRecovery(
+  run: AutomationRun,
+  issues: readonly AutomationWorkspaceIssue[],
+): AutomationWorkspaceRecovery[] {
+  const recovery: AutomationWorkspaceRecovery[] = [];
+  if (run.coordination.error) {
+    recovery.push({
+      key: `coordination:${run.runId}:${run.coordination.scanRevision}:error`,
+      kind: "coordination",
+      status: "error",
+      summary: `Coordination cycle ${run.coordination.cycle} failed`,
+      detail: run.coordination.error.text,
+      resolution: "Use the existing Refresh action to request another native coordination cycle.",
+      actions: availableRunActions(run),
+    });
+  }
+  const intent = run.coordination.dispatchIntent;
+  if (intent && intent.status !== "completed") {
+    const issue = issues.find((candidate) => candidate.issueId === intent.issueId);
+    recovery.push({
+      key: `dispatch:${intent.intentId}:${intent.status}`,
+      kind: "dispatch",
+      status: intent.status,
+      summary: `Dispatch ${intent.kind.replace("_", " ")} is ${intent.status}`,
+      detail: `Intent ${intent.intentId} · claim ${intent.claimId} · attempt ${intent.attempt}`,
+      resolution: "Use Inspect or Refresh to observe the next native dispatch transition.",
+      issueKey: issue?.key,
+      issueIdentifier: issue?.issueIdentifier,
+      claimId: intent.claimId,
+      actions: issue ? availableIssueActions(run, issue) : availableRunActions(run),
+    });
+  }
+  if (run.reconciliation !== "complete") {
+    recovery.push({
+      key: `reconciliation:${run.runId}:${run.revision}:${run.reconciliation}`,
+      kind: "reconciliation",
+      status: run.reconciliation,
+      summary: `Root Run reconciliation is ${run.reconciliation.replace("_", " ")}`,
+      detail: run.nextAction.text,
+      resolution: "Use the existing Refresh action to request native reconciliation.",
+      actions: availableRunActions(run),
+    });
+  }
+
+  for (const issue of issues) {
+    const claim = issue.claim;
+    const actions = availableIssueActions(run, issue);
+    if (issue.queue?.category === "blocked") {
+      const blockers = issue.queue.blockedBy ?? [];
+      if (blockers.length === 0) {
+        recovery.push({
+          key: `blocker:${issue.issueId}:unavailable`,
+          kind: "blocker",
+          status: "blocked",
+          summary: `${issue.issueIdentifier} is blocked in ${issue.trackerState}`,
+          detail: issue.queue.nextAction.text,
+          resolution:
+            "This legacy snapshot has no blocker identities; inspect the tracker, then use Refresh to request a current projection.",
+          issueKey: issue.key,
+          issueIdentifier: issue.issueIdentifier,
+          claimId: claim?.claimId,
+          actions,
+        });
+      }
+      for (const [index, blocker] of blockers.entries()) {
+        const identifier = blocker.identifier?.text ?? blocker.id?.text ?? `blocker ${index + 1}`;
+        const state = blocker.state?.text ?? "unknown state";
+        recovery.push({
+          key: `blocker:${issue.issueId}:${blocker.id?.text ?? blocker.identifier?.text ?? index}:${index}`,
+          kind: "blocker",
+          status: "blocked",
+          summary: `${issue.issueIdentifier} is blocked by ${identifier}`,
+          detail: `${identifier} · ${state}. ${issue.queue.nextAction.text}`,
+          resolution:
+            "Inspect the durable blocker in the tracker, then use Refresh to observe the next native queue projection.",
+          issueKey: issue.key,
+          issueIdentifier: issue.issueIdentifier,
+          claimId: claim?.claimId,
+          actions,
+        });
+      }
+    }
+    if (!claim) continue;
+    for (const effect of claim.effects) {
+      if (
+        effect.status !== "failed" &&
+        effect.status !== "ambiguous" &&
+        effect.status !== "executing" &&
+        effect.status !== "waiting_gate"
+      ) {
+        continue;
+      }
+      recovery.push({
+        key: `effect:${claim.claimId}:${effect.effectId}:${effect.status}`,
+        kind: "effect",
+        status: effect.status,
+        summary: `${effect.kind} effect is ${effect.status.replace("_", " ")}`,
+        detail:
+          effect.failure?.text ??
+          `${effect.bodyPreview.text}${effect.bodyPreview.truncated ? "…" : ""}`,
+        resolution:
+          "Effect resolution is unavailable from this Symphony workspace; inspect the durable receipt before taking provider-specific action.",
+        issueKey: issue.key,
+        issueIdentifier: issue.issueIdentifier,
+        claimId: claim.claimId,
+        actions,
+      });
+    }
+    for (const hook of claim.hookReceipts) {
+      if (hook.status !== "failed") continue;
+      recovery.push({
+        key: `hook:${claim.claimId}:${hook.kind}:${hook.invocation}`,
+        kind: "hook",
+        status: hook.status,
+        summary: `${hook.kind.replace("_", " ")} hook failed`,
+        detail:
+          hook.failure?.text ||
+          hook.stderrPreview.text ||
+          `Hook invocation ${hook.invocation} has no durable failure detail in this snapshot.`,
+        resolution: claim.issueTask
+          ? "Open the Issue task to inspect the failure, then use Inspect or Refresh to observe native state changes."
+          : "No Issue task is available in this snapshot; use Inspect or Refresh for native state changes.",
+        issueKey: issue.key,
+        issueIdentifier: issue.issueIdentifier,
+        claimId: claim.claimId,
+        actions,
+      });
+    }
+    if (claim.cleanup.status === "retry_pending") {
+      recovery.push({
+        key: `cleanup:${claim.claimId}:retry_pending:${claim.cleanup.attempts}`,
+        kind: "cleanup",
+        status: claim.cleanup.status,
+        summary: "Worktree cleanup is retrying",
+        detail:
+          claim.cleanup.lastFailure?.text ??
+          `${claim.cleanup.attempts} cleanup attempt${claim.cleanup.attempts === 1 ? "" : "s"} recorded without a failure detail.`,
+        resolution:
+          "Cleanup retry is runtime-owned; use Inspect or Refresh to observe its next durable state.",
+        issueKey: issue.key,
+        issueIdentifier: issue.issueIdentifier,
+        claimId: claim.claimId,
+        actions,
+      });
+    }
+    if (claim.scheduledRetry) {
+      const schedule = claim.scheduledRetry;
+      recovery.push({
+        key: `retry:${claim.claimId}:${schedule.kind}:${schedule.readyAtMs}`,
+        kind: "retry",
+        status: "scheduled",
+        summary: `${schedule.kind === "retry" ? `Retry ${claim.retryAttempt}` : `Continuation ${claim.continuationCount}`} is scheduled for ${issue.issueIdentifier}`,
+        detail: `Ready at ${schedule.readyAtMs} ms · ${schedule.resetTurnWindow ? "turn window resets" : "turn window retained"}. ${claim.nextAction.text}`,
+        resolution:
+          "Retry dispatch is runtime-owned; use Inspect or Refresh to observe the retained schedule.",
+        issueKey: issue.key,
+        issueIdentifier: issue.issueIdentifier,
+        claimId: claim.claimId,
+        actions,
+      });
+    }
+  }
+  return orderedRecovery(recovery);
 }
 
 function projectActivity(
@@ -461,11 +756,14 @@ export function projectAutomationWorkspace(
 ): AutomationWorkspaceProjection {
   const issueLimit = boundedLimit(limits.issues, DEFAULT_ISSUE_LIMIT);
   const activityLimit = boundedLimit(limits.activity, DEFAULT_ACTIVITY_LIMIT);
+  const recoveryLimit = boundedLimit(limits.recovery, DEFAULT_RECOVERY_LIMIT);
   const eventLimit = boundedLimit(limits.eventsPerGroup, DEFAULT_EVENTS_PER_GROUP_LIMIT);
   const allIssues = projectIssues(result.run, queueResult);
   const issues = allIssues.slice(0, issueLimit);
   const allActivity = projectActivity(result.run, allIssues);
   const activity = allActivity.slice(0, activityLimit);
+  const allRecovery = projectRecovery(result.run, allIssues);
+  const recovery = allRecovery.slice(0, recoveryLimit);
   const events = projectEvents(result.run);
   const eventGroups = eventGroupOrder.map(([key, label]): AutomationWorkspaceEventGroup => {
     const allEvents = events.get(key) ?? [];
@@ -486,6 +784,7 @@ export function projectAutomationWorkspace(
   return {
     issues,
     activity,
+    recovery,
     eventGroups,
     bounds: {
       issues: {
@@ -514,6 +813,11 @@ export function projectAutomationWorkspace(
         shown: activity.length,
         available: allActivity.length,
         truncated: activity.length < allActivity.length,
+      },
+      recovery: {
+        shown: recovery.length,
+        available: allRecovery.length,
+        truncated: recovery.length < allRecovery.length,
       },
     },
   };

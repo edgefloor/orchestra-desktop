@@ -2,6 +2,7 @@ import { ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  acceptedAutomationRunAction,
   automationCoordinationSummary,
   automationLinearRows,
   automationLinearAvailability,
@@ -10,7 +11,66 @@ import {
   buildAutomationStartInput,
   buildAutomationValidateInput,
   deriveAutomationWorkspaceState,
+  staleAutomationRunAction,
 } from "./AutomationProfileDialog.logic";
+
+describe("Automation lifecycle action feedback", () => {
+  const run = {
+    schemaVersion: 1,
+    runId: "automation-root-feedback",
+    ownerThreadId: "task-feedback",
+    sourceRevision: "source-feedback",
+    profileDigest: "profile-feedback",
+    profileRevision: 1,
+    profileRevisionStatus: "active" as const,
+    profileDiagnostics: [],
+    trackerProjectSlug: "orchestra",
+    leaseEpoch: 3,
+    revision: 17,
+    status: "running" as const,
+    reconciliation: "complete" as const,
+    coordination: {
+      cycle: 1,
+      scanRevision: 1,
+      intakeStatus: "ready" as const,
+      nextAction: { text: "Continue", truncated: false },
+    },
+    queueCounts: {
+      queued: 0,
+      running: 0,
+      blocked: 0,
+      waitingGate: 0,
+      handoff: 0,
+      terminal: 0,
+    },
+    claimsTotal: 0,
+    claims: [],
+    queuePreview: [],
+    queuePreviewTruncated: false,
+    nextAction: { text: "Continue", truncated: false },
+  };
+
+  it("names an accepted native revision and a retained stale revision", () => {
+    expect(acceptedAutomationRunAction("Refresh", run)).toEqual({
+      kind: "accepted",
+      action: "Refresh",
+      detail: "Refresh accepted native Run revision 17 under lease 3.",
+    });
+    expect(staleAutomationRunAction("Resume", "native command failed", run)).toEqual({
+      kind: "stale",
+      action: "Resume",
+      detail: "Resume failed: native command failed Retained Run revision 17 may be stale.",
+    });
+    expect(staleAutomationRunAction("Start", "native command failed", null)).toBeNull();
+  });
+
+  it("bounds multibyte failure feedback without breaking a character", () => {
+    const feedback = staleAutomationRunAction("Refresh", "é".repeat(400), run);
+    expect(feedback).not.toBeNull();
+    expect(new TextEncoder().encode(feedback!.detail).byteLength).toBeLessThanOrEqual(512);
+    expect(feedback!.detail.endsWith("…")).toBe(true);
+  });
+});
 
 describe("buildAutomationStartInput", () => {
   it("starts production Automation with only the task and profile path", () => {

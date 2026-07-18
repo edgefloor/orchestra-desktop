@@ -123,6 +123,46 @@ const scenarios = [
     ].sort(),
   },
   {
+    scenario: "symphony-recovery-1440x900-dark",
+    width: 1440,
+    height: 900,
+    theme: "dark",
+    state: "symphony-recovery",
+    assertions: [
+      ...workspaceAssertions,
+      "symphonyHeightBounded",
+      "symphonyScrollsInternally",
+      "symphonyWorkspaceVisible",
+      "symphonyRecoveryVisible",
+      "symphonyRecoveryActionWired",
+      "symphonyRecoveryLifecycleActionsWired",
+      "symphonyEffectResolutionUnavailable",
+      "symphonyStaleFeedbackVisible",
+      "symphonyRecoverySelectedAtCapture",
+      "wideLayoutActive",
+    ].sort(),
+  },
+  {
+    scenario: "symphony-recovery-1024x768-dark",
+    width: 1024,
+    height: 768,
+    theme: "dark",
+    state: "symphony-recovery",
+    assertions: [
+      ...workspaceAssertions,
+      "symphonyHeightBounded",
+      "symphonyScrollsInternally",
+      "symphonyWorkspaceVisible",
+      "symphonyRecoveryVisible",
+      "symphonyRecoveryActionWired",
+      "symphonyRecoveryLifecycleActionsWired",
+      "symphonyEffectResolutionUnavailable",
+      "symphonyStaleFeedbackVisible",
+      "symphonyRecoverySelectedAtCapture",
+      "narrowLayoutActive",
+    ].sort(),
+  },
+  {
     scenario: "browser-preview-1440x900-dark",
     width: 1440,
     height: 900,
@@ -279,11 +319,12 @@ async function waitForAcceptanceReady(webContents, scenario) {
   throw new Error(`${scenario.scenario} did not set data-acceptance-ready within 30 seconds`);
 }
 
-async function probeSymphonyInteractions(webContents) {
+async function probeSymphonyInteractions(webContents, requestedView) {
   return webContents.executeJavaScript(
     `(async () => {
       const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const tab = (view) => document.querySelector('#automation-view-tab-' + view);
+      const requestedView = ${JSON.stringify(requestedView)};
       const buttonWithText = (text) => [...document.querySelectorAll('button')].find((button) => button.textContent?.trim().startsWith(text));
       const issues = tab('issues');
       issues?.focus();
@@ -292,6 +333,28 @@ async function probeSymphonyInteractions(webContents) {
       const activitySelected = tab('activity')?.getAttribute('aria-selected') === 'true';
       const activityFocused = document.activeElement === tab('activity');
       tab('activity')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await settle();
+      const recoverySelected = tab('recovery')?.getAttribute('aria-selected') === 'true';
+      const recoveryFocused = document.activeElement === tab('recovery');
+      const recoveryVisible = document.querySelector('[aria-label="Automation recovery"]') !== null;
+      const effectResolutionUnavailable = document.body.textContent?.includes('Effect resolution is unavailable from this Symphony workspace') === true;
+      buttonWithText('Open issue task')?.click();
+      await settle();
+      const recoveryActionWired = (window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {}).openedIssueId === 'issue-orc-70';
+      buttonWithText('Inspect')?.click();
+      await settle();
+      buttonWithText('Refresh')?.click();
+      await settle();
+      buttonWithText('Resume')?.click();
+      await settle();
+      const recoveryActions = window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {};
+      const recoveryLifecycleActionsWired =
+        recoveryActions.inspectedRunId === 'automation-acceptance' &&
+        recoveryActions.refreshedRunId === 'automation-acceptance' &&
+        recoveryActions.resumedRunId === 'automation-acceptance';
+      const staleFeedbackVisible =
+        document.querySelector('[data-automation-action-feedback="stale"]')?.textContent?.includes('may be stale') === true;
+      tab('recovery')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
       await settle();
       const eventsSelected = tab('events')?.getAttribute('aria-selected') === 'true';
       const eventsFocused = document.activeElement === tab('events');
@@ -307,9 +370,18 @@ async function probeSymphonyInteractions(webContents) {
       buttonWithText('Open issue task')?.click();
       await settle();
       const actions = window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {};
+      tab(requestedView)?.click();
+      await settle();
+      const requestedViewSelected = tab(requestedView)?.getAttribute('aria-selected') === 'true';
       return {
-        symphonyTabsInteractive: activitySelected && eventsSelected,
-        symphonyKeyboardNavigation: activityFocused && eventsFocused,
+        symphonyTabsInteractive: activitySelected && recoverySelected && eventsSelected,
+        symphonyKeyboardNavigation: activityFocused && recoveryFocused && eventsFocused,
+        symphonyRecoveryVisible: recoveryVisible,
+        symphonyRecoveryActionWired: recoveryActionWired,
+        symphonyRecoveryLifecycleActionsWired: recoveryLifecycleActionsWired,
+        symphonyEffectResolutionUnavailable: effectResolutionUnavailable,
+        symphonyStaleFeedbackVisible: staleFeedbackVisible,
+        symphonyRecoverySelectedAtCapture: requestedView === 'recovery' && requestedViewSelected,
         symphonySelectionReconciles: queueSelection && claimSelection,
         symphonyActionsWired: actions.cancelledClaimId === 'claim-orc-70' && actions.openedIssueId === 'issue-orc-70',
       };
@@ -507,10 +579,13 @@ async function captureScenario(BrowserWindow, scenario, stagingDir) {
     );
 
     const rendererState = await waitForAcceptanceReady(window.webContents, scenario);
-    if (scenario.state === "symphony") {
+    if (scenario.state === "symphony" || scenario.state === "symphony-recovery") {
       rendererState.assertions = {
         ...rendererState.assertions,
-        ...(await probeSymphonyInteractions(window.webContents)),
+        ...(await probeSymphonyInteractions(
+          window.webContents,
+          scenario.state === "symphony-recovery" ? "recovery" : "issues",
+        )),
       };
     }
     if (scenario.state === "browser-preview" || scenario.state === "browser-preview-narrow") {

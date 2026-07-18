@@ -105,7 +105,7 @@ const runResult: AutomationRunResult = {
 };
 
 function render(
-  initialView: "issues" | "activity" | "events",
+  initialView: "issues" | "activity" | "recovery" | "events",
   options: {
     readonly result?: AutomationRunResult;
     readonly pending?: boolean;
@@ -118,7 +118,10 @@ function render(
       initialView={initialView}
       onCancelClaim={vi.fn()}
       onInspectQueue={vi.fn()}
+      onInspectRun={vi.fn()}
       onOpenIssueTask={vi.fn()}
+      onRefreshRun={vi.fn()}
+      onResumeRun={vi.fn()}
       onSteerClaim={vi.fn()}
       onSteeringInputChange={vi.fn()}
       pending={options.pending ?? false}
@@ -142,6 +145,7 @@ describe("AutomationRunWorkspace", () => {
     expect(markup).toContain('aria-controls="automation-issue-inspector"');
     expect(markup).toContain('aria-label="ORC-70 inspector"');
     expect(markup).toContain("Open issue task");
+    expect(markup).not.toContain(">Resume<");
     expect(markup).toContain("Send guidance");
     expect(markup).toContain("Cancel issue");
   });
@@ -163,6 +167,87 @@ describe("AutomationRunWorkspace", () => {
     expect(markup).toContain("Coordination (1)");
     expect(markup).toContain("Effects (1)");
     expect(markup).toContain("Exact record");
+  });
+
+  it("renders bounded Recovery with only valid task navigation and unavailable effect resolution", () => {
+    const activeClaim = runResult.run.claims[0]!;
+    const result: AutomationRunResult = {
+      run: {
+        ...runResult.run,
+        reconciliation: "required",
+        coordination: {
+          ...runResult.run.coordination,
+          dispatchIntent: {
+            ...runResult.run.coordination.dispatchIntent!,
+            status: "started",
+          },
+        },
+        queuePreview: [
+          {
+            issueId: activeClaim.issueId,
+            issueIdentifier: activeClaim.issueIdentifier,
+            issueTitle: activeClaim.issueTitle,
+            state: "Blocked",
+            priority: activeClaim.priority,
+            claimId: activeClaim.claimId,
+            category: "blocked",
+            nextAction: { text: "Inspect tracker blockers", truncated: false },
+            blockedBy: [
+              {
+                id: { text: "issue-orc-69", truncated: false },
+                identifier: { text: "ORC-69", truncated: false },
+                state: { text: "In Progress", truncated: false },
+              },
+            ],
+          },
+        ],
+        claims: [
+          {
+            ...activeClaim,
+            effects: [
+              {
+                effectId: "effect-ambiguous",
+                idempotencyKey: "idem-ambiguous",
+                kind: "tracker.transition",
+                status: "ambiguous",
+                gatePolicy: "auto_accept",
+                requestSha256: "request-ambiguous",
+                bodyPreview: { text: "Move to Done", truncated: false },
+              },
+            ],
+            hookReceipts: [
+              {
+                kind: "before_run",
+                invocation: 2,
+                status: "failed",
+                exitCode: 1,
+                stdoutPreview: { text: "", truncated: false },
+                stderrPreview: { text: "Dependency missing", truncated: false },
+              },
+            ],
+            cleanup: {
+              status: "retry_pending",
+              attempts: 2,
+              lastFailure: { text: "Worktree busy", truncated: false },
+            },
+          },
+        ],
+      },
+    };
+    const markup = render("recovery", { result });
+
+    expect(markup).toContain('id="automation-view-tab-recovery"');
+    expect(markup).toContain('aria-label="Automation recovery"');
+    expect(markup).toContain("Dispatch new claim is started");
+    expect(markup).toContain("Root Run reconciliation is required");
+    expect(markup).toContain("ORC-70 is blocked by ORC-69");
+    expect(markup).toContain("ORC-69 · In Progress. Inspect tracker blockers");
+    expect(markup).toContain("tracker.transition effect is ambiguous");
+    expect(markup).toContain("Effect resolution is unavailable from this Symphony workspace");
+    expect(markup).toContain("before run hook failed");
+    expect(markup).toContain("Worktree cleanup is retrying");
+    expect(markup).toContain("Open issue task");
+    expect(markup).not.toContain("Cancel issue");
   });
 
   it("keeps coordination failures visible and announced outside raw Events", () => {

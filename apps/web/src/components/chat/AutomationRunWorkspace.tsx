@@ -18,14 +18,16 @@ import {
   projectAutomationWorkspace,
   retainAutomationIssueSelection,
   type AutomationWorkspaceIssue,
+  type AutomationWorkspaceProjection,
 } from "./AutomationWorkspace.logic";
 
-type AutomationWorkspaceView = "issues" | "activity" | "events";
+type AutomationWorkspaceView = "issues" | "activity" | "recovery" | "events";
 
-const WORKSPACE_VIEWS = ["issues", "activity", "events"] as const;
+const WORKSPACE_VIEWS = ["issues", "activity", "recovery", "events"] as const;
 const WORKSPACE_VIEW_LABELS: Record<AutomationWorkspaceView, string> = {
   issues: "Issues",
   activity: "Activity",
+  recovery: "Recovery",
   events: "Events",
 };
 
@@ -39,6 +41,9 @@ interface AutomationRunWorkspaceProps {
     category: AutomationQueueReadInput["category"],
     offset?: number,
   ) => void;
+  readonly onInspectRun: () => void;
+  readonly onRefreshRun: () => void;
+  readonly onResumeRun: () => void;
   readonly onOpenIssueTask: (input: {
     readonly threadId: ThreadId;
     readonly automationRunId: string;
@@ -448,6 +453,100 @@ function IssueInspector({
   );
 }
 
+function RecoveryView({
+  projection,
+  runResult,
+  pending,
+  onInspectRun,
+  onRefreshRun,
+  onResumeRun,
+  onOpenIssueTask,
+}: {
+  readonly projection: AutomationWorkspaceProjection;
+  readonly runResult: AutomationRunResult;
+  readonly pending: boolean;
+  readonly onInspectRun: AutomationRunWorkspaceProps["onInspectRun"];
+  readonly onRefreshRun: AutomationRunWorkspaceProps["onRefreshRun"];
+  readonly onResumeRun: AutomationRunWorkspaceProps["onResumeRun"];
+  readonly onOpenIssueTask: AutomationRunWorkspaceProps["onOpenIssueTask"];
+}) {
+  return (
+    <div aria-label="Automation recovery" className="space-y-2">
+      <p className="text-xs text-muted-foreground">
+        Recovery shows durable conditions from this bounded snapshot. Actions appear only where an
+        existing native task navigation action is valid.
+      </p>
+      {projection.recovery.map((item) => {
+        const issue = item.issueKey
+          ? projection.issues.find((candidate) => candidate.key === item.issueKey)
+          : undefined;
+        const claim = issue?.claim;
+        return (
+          <article className="space-y-2 rounded-lg border bg-background p-3" key={item.key}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">{item.kind}</Badge>
+              <span className="text-sm font-medium">{item.summary}</span>
+              <Badge variant="outline">{item.status.replace("_", " ")}</Badge>
+              {item.issueIdentifier ? (
+                <code className="select-all text-xs text-muted-foreground">
+                  {item.issueIdentifier}
+                </code>
+              ) : null}
+            </div>
+            <p className="text-xs text-muted-foreground">{item.detail}</p>
+            <p className="text-xs">{item.resolution}</p>
+            {item.actions.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {item.actions.includes("inspect") ? (
+                  <Button disabled={pending} onClick={onInspectRun} size="xs" variant="ghost">
+                    Inspect
+                  </Button>
+                ) : null}
+                {item.actions.includes("refresh") ? (
+                  <Button disabled={pending} onClick={onRefreshRun} size="xs" variant="outline">
+                    Refresh
+                  </Button>
+                ) : null}
+                {item.actions.includes("resume") ? (
+                  <Button disabled={pending} onClick={onResumeRun} size="xs" variant="outline">
+                    Resume
+                  </Button>
+                ) : null}
+                {item.actions.includes("open_issue_task") && claim?.issueTask ? (
+                  <Button
+                    onClick={() =>
+                      onOpenIssueTask({
+                        threadId: ThreadId.make(claim.issueTask!.threadId),
+                        automationRunId: runResult.run.runId,
+                        issueId: claim.issueId,
+                      })
+                    }
+                    size="xs"
+                    variant="outline"
+                  >
+                    Open issue task
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
+      {projection.recovery.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          No recovery conditions are present in this bounded native snapshot.
+        </p>
+      ) : null}
+      {projection.bounds.recovery.truncated ? (
+        <p className="text-xs text-amber-600">
+          Showing {projection.bounds.recovery.shown} of {projection.bounds.recovery.available}
+          recovery conditions.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function AutomationRunWorkspace({
   runResult,
   queueResult,
@@ -455,6 +554,9 @@ export function AutomationRunWorkspace({
   pending,
   steeringInputs,
   onInspectQueue,
+  onInspectRun,
+  onRefreshRun,
+  onResumeRun,
   onOpenIssueTask,
   onCancelClaim,
   onSteerClaim,
@@ -686,6 +788,16 @@ export function AutomationRunWorkspace({
                 </p>
               ) : null}
             </div>
+          ) : activeView === "recovery" ? (
+            <RecoveryView
+              onInspectRun={onInspectRun}
+              onOpenIssueTask={onOpenIssueTask}
+              onRefreshRun={onRefreshRun}
+              onResumeRun={onResumeRun}
+              pending={pending}
+              projection={projection}
+              runResult={runResult}
+            />
           ) : (
             <div className="space-y-3" aria-label="Automation events">
               <p className="text-xs text-muted-foreground">

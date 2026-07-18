@@ -29,6 +29,7 @@ interface ScenarioContract {
     | "attention-sheet"
     | "symphony"
     | "symphony-activity"
+    | "symphony-recovery"
     | "symphony-events"
     | "browser-preview"
     | "browser-preview-narrow"
@@ -129,6 +130,44 @@ export const ORCHESTRA_ACCEPTANCE_SCENARIOS = {
       "symphonyScrollsInternally",
       "symphonyWorkspaceVisible",
       "wideLayoutActive",
+    ].sort(),
+  },
+  "symphony-recovery-1440x900-dark": {
+    width: 1440,
+    height: 900,
+    theme: "dark",
+    state: "symphony-recovery",
+    assertions: [
+      ...WORKSPACE_ASSERTIONS,
+      "symphonyHeightBounded",
+      "symphonyScrollsInternally",
+      "symphonyWorkspaceVisible",
+      "symphonyRecoveryVisible",
+      "symphonyRecoveryActionWired",
+      "symphonyRecoveryLifecycleActionsWired",
+      "symphonyEffectResolutionUnavailable",
+      "symphonyStaleFeedbackVisible",
+      "symphonyRecoverySelectedAtCapture",
+      "wideLayoutActive",
+    ].sort(),
+  },
+  "symphony-recovery-1024x768-dark": {
+    width: 1024,
+    height: 768,
+    theme: "dark",
+    state: "symphony-recovery",
+    assertions: [
+      ...WORKSPACE_ASSERTIONS,
+      "symphonyHeightBounded",
+      "symphonyScrollsInternally",
+      "symphonyWorkspaceVisible",
+      "symphonyRecoveryVisible",
+      "symphonyRecoveryActionWired",
+      "symphonyRecoveryLifecycleActionsWired",
+      "symphonyEffectResolutionUnavailable",
+      "symphonyStaleFeedbackVisible",
+      "symphonyRecoverySelectedAtCapture",
+      "narrowLayoutActive",
     ].sort(),
   },
   "browser-preview-1440x900-dark": {

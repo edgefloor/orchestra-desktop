@@ -218,6 +218,14 @@ export const AutomationCleanup = Schema.Struct({
   attempts: NonNegativeInt,
   lastFailure: Schema.optional(AutomationBoundedText),
 });
+export const AutomationRetryKind = Schema.Literals(["retry", "continuation"]);
+export type AutomationRetryKind = typeof AutomationRetryKind.Type;
+export const AutomationRetrySchedule = Schema.Struct({
+  kind: AutomationRetryKind,
+  readyAtMs: NonNegativeInt,
+  resetTurnWindow: Schema.Boolean,
+});
+export type AutomationRetrySchedule = typeof AutomationRetrySchedule.Type;
 export const AutomationCoordinationIntakeStatus = Schema.Literals([
   "not_started",
   "ready",
@@ -266,6 +274,7 @@ export const AutomationIssueClaim = Schema.Struct({
   turnsInWindow: NonNegativeInt,
   continuationCount: NonNegativeInt,
   retryAttempt: NonNegativeInt,
+  scheduledRetry: Schema.optional(AutomationRetrySchedule),
   lastProgressAtMs: Schema.optional(NonNegativeInt),
   profileDigest: Schema.String,
   profileRevision: NonNegativeInt,
@@ -306,6 +315,12 @@ export const AutomationQueueCounts = Schema.Struct({
   handoff: NonNegativeInt,
   terminal: NonNegativeInt,
 });
+export const AutomationQueueBlocker = Schema.Struct({
+  id: Schema.optional(AutomationBoundedText),
+  identifier: Schema.optional(AutomationBoundedText),
+  state: Schema.optional(AutomationBoundedText),
+});
+export type AutomationQueueBlocker = typeof AutomationQueueBlocker.Type;
 export const AutomationQueueItem = Schema.Struct({
   issueId: Schema.String,
   issueIdentifier: Schema.String,
@@ -315,6 +330,7 @@ export const AutomationQueueItem = Schema.Struct({
   claimId: Schema.optional(Schema.String),
   category: AutomationQueueCategory,
   nextAction: AutomationBoundedText,
+  blockedBy: Schema.optional(Schema.Array(AutomationQueueBlocker)),
 });
 export type AutomationQueueItem = typeof AutomationQueueItem.Type;
 

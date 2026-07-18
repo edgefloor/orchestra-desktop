@@ -29,16 +29,22 @@ import {
 } from "~/state/automation";
 import { useAtomCommand } from "~/state/use-atom-command";
 import {
+  acceptedAutomationRunAction,
   automationLinearRows,
   automationLinearAvailability,
   automationRunStorageKey,
   automationWorkspaceCapabilities,
   buildAutomationStartInput,
   buildAutomationValidateInput,
+  boundedAutomationFeedbackText,
   deriveAutomationWorkspaceState,
+  staleAutomationRunAction,
+  type AutomationRunAction,
+  type AutomationRunActionFeedback,
   type AutomationWorkspacePendingAction,
 } from "./AutomationProfileDialog.logic";
 import { AutomationRunWorkspace } from "./AutomationRunWorkspace";
+import { AutomationRunActionFeedbackNotice } from "./AutomationRunActionFeedback";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -58,7 +64,9 @@ interface AutomationWorkspaceProps {
 }
 
 function readableError(cause: unknown): string {
-  return cause instanceof Error ? cause.message : "The Automation request failed.";
+  return boundedAutomationFeedbackText(
+    cause instanceof Error ? cause.message : "The Automation request failed.",
+  );
 }
 
 export const AutomationWorkspace = memo(function AutomationWorkspace({
@@ -94,6 +102,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   const [queueOffset, setQueueOffset] = useState(0);
   const [steeringInputs, setSteeringInputs] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<AutomationRunActionFeedback | null>(null);
   const restoredRunId = useRef<string | null>(null);
   const requestIdRef = useRef(0);
 
@@ -105,11 +114,12 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   );
 
   const acceptRunResult = useCallback(
-    (value: AutomationRunResult) => {
+    (value: AutomationRunResult, action?: AutomationRunAction) => {
       setRunResult(value);
       setRunId(value.run.runId);
       setQueueResult(null);
       setQueueOffset(0);
+      setActionFeedback(action ? acceptedAutomationRunAction(action, value.run) : null);
       localStorage.setItem(automationRunStorageKey(threadId), value.run.runId);
     },
     [threadId],
@@ -156,7 +166,6 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
     setPendingAction("validating");
     setError(null);
     setResult(null);
-    setRunResult(null);
     setQueueResult(null);
     setQueueOffset(0);
     void validate({
@@ -198,7 +207,6 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
     requestIdRef.current = requestId;
     setPendingAction("starting");
     setError(null);
-    setRunResult(null);
     void start({
       environmentId,
       input: buildAutomationStartInput({
@@ -209,14 +217,16 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
       if (requestIdRef.current !== requestId) return;
       setPendingAction(null);
       if (commandResult._tag === "Success") {
-        acceptRunResult(commandResult.value);
+        acceptRunResult(commandResult.value, "Start");
         return;
       }
       if (!isAtomCommandInterrupted(commandResult)) {
-        setError(readableError(squashAtomCommandFailure(commandResult)));
+        const message = readableError(squashAtomCommandFailure(commandResult));
+        setError(message);
+        setActionFeedback(staleAutomationRunAction("Start", message, runResult?.run ?? null));
       }
     });
-  }, [acceptRunResult, environmentId, profilePath, start, threadId]);
+  }, [acceptRunResult, environmentId, profilePath, runResult, start, threadId]);
 
   const steerClaim = useCallback(
     (claimId: string) => {
@@ -234,12 +244,14 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         if (requestIdRef.current !== requestId) return;
         setPendingAction(null);
         if (commandResult._tag === "Success") {
-          acceptRunResult({ run: commandResult.value.run });
+          acceptRunResult({ run: commandResult.value.run }, "Steer issue");
           setSteeringInputs((current) => ({ ...current, [claimId]: "" }));
           return;
         }
         if (!isAtomCommandInterrupted(commandResult)) {
-          setError(readableError(squashAtomCommandFailure(commandResult)));
+          const message = readableError(squashAtomCommandFailure(commandResult));
+          setError(message);
+          setActionFeedback(staleAutomationRunAction("Steer issue", message, runResult.run));
         }
       });
     },
@@ -259,11 +271,13 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
       if (requestIdRef.current !== requestId) return;
       setPendingAction(null);
       if (commandResult._tag === "Success") {
-        acceptRunResult(commandResult.value);
+        acceptRunResult(commandResult.value, "Cancel run");
         return;
       }
       if (!isAtomCommandInterrupted(commandResult)) {
-        setError(readableError(squashAtomCommandFailure(commandResult)));
+        const message = readableError(squashAtomCommandFailure(commandResult));
+        setError(message);
+        setActionFeedback(staleAutomationRunAction("Cancel run", message, runResult.run));
       }
     });
   }, [acceptRunResult, cancel, environmentId, runResult, threadId]);
@@ -282,11 +296,13 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         if (requestIdRef.current !== requestId) return;
         setPendingAction(null);
         if (commandResult._tag === "Success") {
-          acceptRunResult(commandResult.value);
+          acceptRunResult(commandResult.value, "Cancel issue");
           return;
         }
         if (!isAtomCommandInterrupted(commandResult)) {
-          setError(readableError(squashAtomCommandFailure(commandResult)));
+          const message = readableError(squashAtomCommandFailure(commandResult));
+          setError(message);
+          setActionFeedback(staleAutomationRunAction("Cancel issue", message, runResult.run));
         }
       });
     },
@@ -324,11 +340,29 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
         if (requestIdRef.current !== requestId) return;
         setPendingAction(null);
         if (commandResult._tag === "Success") {
-          acceptRunResult(commandResult.value);
+          const actionLabel =
+            action === "status"
+              ? "Inspect"
+              : action === "pause"
+                ? "Pause"
+                : action === "refresh"
+                  ? "Refresh"
+                  : "Resume";
+          acceptRunResult(commandResult.value, actionLabel);
           return;
         }
         if (!isAtomCommandInterrupted(commandResult)) {
-          setError(readableError(squashAtomCommandFailure(commandResult)));
+          const actionLabel =
+            action === "status"
+              ? "Inspect"
+              : action === "pause"
+                ? "Pause"
+                : action === "refresh"
+                  ? "Refresh"
+                  : "Resume";
+          const message = readableError(squashAtomCommandFailure(commandResult));
+          setError(message);
+          setActionFeedback(staleAutomationRunAction(actionLabel, message, runResult.run));
         }
       });
     },
@@ -462,6 +496,8 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
             <span>{error}</span>
           </div>
         ) : null}
+
+        <AutomationRunActionFeedbackNotice feedback={actionFeedback} />
 
         <details className="rounded-xl border bg-muted/10 p-3" open={!runResult}>
           <summary className="cursor-pointer text-sm font-medium">
@@ -647,7 +683,10 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
           <AutomationRunWorkspace
             onCancelClaim={cancelClaim}
             onInspectQueue={inspectQueue}
+            onInspectRun={() => runLifecycleAction("status")}
             onOpenIssueTask={onOpenIssueTask}
+            onRefreshRun={() => runLifecycleAction("refresh")}
+            onResumeRun={() => runLifecycleAction("resume")}
             onSteerClaim={steerClaim}
             onSteeringInputChange={(claimId, value) =>
               setSteeringInputs((current) => ({ ...current, [claimId]: value }))

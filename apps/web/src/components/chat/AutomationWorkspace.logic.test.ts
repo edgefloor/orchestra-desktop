@@ -170,6 +170,7 @@ describe("projectAutomationWorkspace issues", () => {
         claimId: "claim-retry",
         issueIdentifier: "ORC-2",
         retryAttempt: 2,
+        scheduledRetry: { kind: "retry", readyAtMs: 120, resetTurnWindow: true },
       }),
       claim({
         issueId: "failed",
@@ -221,7 +222,13 @@ describe("projectAutomationWorkspace issues", () => {
     const projection = projectAutomationWorkspace(
       runResult([
         claim({ claimId: "old", attempt: 1, lastProgressAtMs: 99 }),
-        claim({ claimId: "new", attempt: 2, lastProgressAtMs: 10, retryAttempt: 1 }),
+        claim({
+          claimId: "new",
+          attempt: 2,
+          lastProgressAtMs: 10,
+          retryAttempt: 1,
+          scheduledRetry: { kind: "retry", readyAtMs: 120, resetTurnWindow: true },
+        }),
       ]),
     );
 
@@ -351,6 +358,240 @@ describe("projectAutomationWorkspace activity and events", () => {
       total: 3,
       truncated: true,
     });
+  });
+});
+
+describe("projectAutomationWorkspace recovery", () => {
+  it("projects only durable recovery conditions and marks effect resolution unavailable", () => {
+    const recoveringClaim = claim({
+      retryAttempt: 2,
+      scheduledRetry: { kind: "retry", readyAtMs: 1_789_000_002_000, resetTurnWindow: true },
+      effects: [
+        {
+          effectId: "effect-failed",
+          idempotencyKey: "idem-failed",
+          kind: "tracker.comment",
+          status: "failed",
+          gatePolicy: "auto_accept",
+          requestSha256: "request-failed",
+          bodyPreview: { text: "Post update", truncated: false },
+          failure: { text: "Provider rejected the comment", truncated: false },
+        },
+        {
+          effectId: "effect-ambiguous",
+          idempotencyKey: "idem-ambiguous",
+          kind: "tracker.transition",
+          status: "ambiguous",
+          gatePolicy: "auto_accept",
+          requestSha256: "request-ambiguous",
+          bodyPreview: { text: "Move to Done", truncated: false },
+        },
+        {
+          effectId: "effect-waiting",
+          idempotencyKey: "idem-waiting",
+          kind: "tracker.link_pull_request",
+          status: "waiting_gate",
+          gatePolicy: "ask_human",
+          requestSha256: "request-waiting",
+          bodyPreview: { text: "Link PR 12", truncated: false },
+        },
+        {
+          effectId: "effect-executing",
+          idempotencyKey: "idem-executing",
+          kind: "tracker.comment",
+          status: "executing",
+          gatePolicy: "auto_accept",
+          requestSha256: "request-executing",
+          bodyPreview: { text: "Publish update", truncated: false },
+        },
+      ],
+      hookReceipts: [
+        {
+          kind: "before_run",
+          invocation: 2,
+          commandSha256: "hook-command",
+          status: "failed",
+          exitCode: 1,
+          stdoutPreview: { text: "", truncated: false },
+          stderrPreview: { text: "Dependency missing", truncated: false },
+          failure: { text: "Hook exited unsuccessfully", truncated: false },
+        },
+      ],
+      cleanup: {
+        status: "retry_pending",
+        attempts: 3,
+        lastFailure: { text: "Worktree is busy", truncated: false },
+      },
+    });
+    const initial = runResult([recoveringClaim]);
+    const result: AutomationRunResult = {
+      run: {
+        ...initial.run,
+        reconciliation: "blocked",
+        coordination: {
+          ...initial.run.coordination,
+          intakeStatus: "skipped",
+          error: { text: "Linear intake failed", truncated: false },
+          dispatchIntent: {
+            ...initial.run.coordination.dispatchIntent!,
+            status: "pending",
+          },
+        },
+        queuePreview: [
+          queueItem({
+            category: "blocked",
+            state: "Blocked",
+            nextAction: { text: "Inspect tracker blockers", truncated: false },
+            blockedBy: [
+              {
+                id: { text: "issue-blocker", truncated: false },
+                identifier: { text: "ORC-0", truncated: false },
+                state: { text: "In Progress", truncated: false },
+              },
+            ],
+          }),
+        ],
+      },
+    };
+
+    const projection = projectAutomationWorkspace(result);
+
+    expect(projection.recovery.map((item) => [item.kind, item.status])).toEqual([
+      ["coordination", "error"],
+      ["dispatch", "pending"],
+      ["reconciliation", "blocked"],
+      ["blocker", "blocked"],
+      ["effect", "failed"],
+      ["effect", "ambiguous"],
+      ["effect", "executing"],
+      ["effect", "waiting_gate"],
+      ["hook", "failed"],
+      ["cleanup", "retry_pending"],
+      ["retry", "scheduled"],
+    ]);
+    expect(
+      projection.recovery
+        .filter((item) => item.kind === "effect")
+        .every(
+          (item) =>
+            item.resolution ===
+            "Effect resolution is unavailable from this Symphony workspace; inspect the durable receipt before taking provider-specific action.",
+        ),
+    ).toBe(true);
+    expect(projection.recovery.find((item) => item.kind === "blocker")).toMatchObject({
+      issueIdentifier: "ORC-1",
+      summary: "ORC-1 is blocked by ORC-0",
+      detail: "ORC-0 · In Progress. Inspect tracker blockers",
+      resolution:
+        "Inspect the durable blocker in the tracker, then use Refresh to observe the next native queue projection.",
+      actions: ["inspect", "refresh", "open_issue_task"],
+    });
+    expect(projection.recovery.find((item) => item.kind === "retry")).toMatchObject({
+      summary: "Retry 2 is scheduled for ORC-1",
+      detail: "Ready at 1789000002000 ms · turn window resets. Continue the workflow",
+    });
+    expect(
+      projection.recovery
+        .filter((item) => item.issueKey)
+        .every((item) =>
+          item.actions.every((action) =>
+            ["inspect", "refresh", "resume", "open_issue_task"].includes(action),
+          ),
+        ),
+    ).toBe(true);
+    expect(projectAutomationWorkspace(result, null, { recovery: 2 }).bounds.recovery).toEqual({
+      shown: 2,
+      available: 11,
+      truncated: true,
+    });
+  });
+
+  it("keeps pending and started dispatch intents visible until completion", () => {
+    const initial = runResult();
+    const projectIntent = (status: "pending" | "started" | "completed") =>
+      projectAutomationWorkspace({
+        run: {
+          ...initial.run,
+          coordination: {
+            ...initial.run.coordination,
+            dispatchIntent: { ...initial.run.coordination.dispatchIntent!, status },
+          },
+        },
+      }).recovery.filter((item) => item.kind === "dispatch");
+
+    expect(projectIntent("pending")).toMatchObject([{ status: "pending" }]);
+    expect(projectIntent("started")).toMatchObject([{ status: "started" }]);
+    expect(projectIntent("completed")).toEqual([]);
+  });
+
+  it("deduplicates durable keys and derives Resume only for suspended roots", () => {
+    const effect = {
+      effectId: "effect-duplicate",
+      idempotencyKey: "idem-duplicate",
+      kind: "tracker.comment" as const,
+      status: "failed" as const,
+      gatePolicy: "auto_accept" as const,
+      requestSha256: "request-duplicate",
+      bodyPreview: { text: "Publish update", truncated: false },
+    };
+    const initial = runResult([claim({ effects: [effect, effect] })]);
+    const projection = projectAutomationWorkspace({
+      run: { ...initial.run, status: "suspended" },
+    });
+    const effects = projection.recovery.filter((item) => item.kind === "effect");
+
+    expect(effects).toHaveLength(1);
+    expect(effects[0]?.actions).toEqual(["inspect", "refresh", "resume", "open_issue_task"]);
+  });
+
+  it("adds failed and ambiguous operations to human-readable Activity", () => {
+    const projection = projectAutomationWorkspace(
+      runResult([
+        claim({
+          effects: [
+            {
+              effectId: "effect-failed",
+              idempotencyKey: "idem-failed",
+              kind: "tracker.comment",
+              status: "failed",
+              gatePolicy: "auto_accept",
+              requestSha256: "request-failed",
+              bodyPreview: { text: "Post update", truncated: false },
+              failure: { text: "Comment failed", truncated: false },
+            },
+            {
+              effectId: "effect-ambiguous",
+              idempotencyKey: "idem-ambiguous",
+              kind: "tracker.transition",
+              status: "ambiguous",
+              gatePolicy: "auto_accept",
+              requestSha256: "request-ambiguous",
+              bodyPreview: { text: "Transition", truncated: false },
+            },
+          ],
+          hookReceipts: [
+            {
+              kind: "after_run",
+              invocation: 1,
+              status: "failed",
+              exitCode: 2,
+              stdoutPreview: { text: "", truncated: false },
+              stderrPreview: { text: "Hook failed", truncated: false },
+            },
+          ],
+          cleanup: { status: "retry_pending", attempts: 1 },
+        }),
+      ]),
+    );
+
+    expect(projection.activity.map((entry) => entry.summary)).toEqual(
+      expect.arrayContaining([
+        "tracker.comment effect is failed for ORC-1",
+        "tracker.transition effect is ambiguous for ORC-1",
+        "after run hook failed for ORC-1",
+        "Worktree cleanup will retry for ORC-1",
+      ]),
+    );
   });
 });
 

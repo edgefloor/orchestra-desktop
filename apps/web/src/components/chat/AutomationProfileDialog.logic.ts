@@ -30,6 +30,68 @@ export type AutomationWorkspaceState =
   | "cancelled"
   | "unavailable";
 
+export type AutomationRunAction =
+  | "Start"
+  | "Inspect"
+  | "Pause"
+  | "Refresh"
+  | "Resume"
+  | "Cancel run"
+  | "Cancel issue"
+  | "Steer issue";
+
+export type AutomationRunActionFeedback = {
+  readonly kind: "accepted" | "stale";
+  readonly action: AutomationRunAction;
+  readonly detail: string;
+};
+
+const MAX_AUTOMATION_ACTION_FEEDBACK_BYTES = 512;
+
+export function boundedAutomationFeedbackText(value: string): string {
+  const normalized = value.trim();
+  const encoder = new TextEncoder();
+  if (encoder.encode(normalized).byteLength <= MAX_AUTOMATION_ACTION_FEEDBACK_BYTES) {
+    return normalized;
+  }
+  const characters = Array.from(normalized).slice(0, MAX_AUTOMATION_ACTION_FEEDBACK_BYTES);
+  while (
+    characters.length > 0 &&
+    encoder.encode(`${characters.join("")}…`).byteLength > MAX_AUTOMATION_ACTION_FEEDBACK_BYTES
+  ) {
+    characters.pop();
+  }
+  return `${characters.join("")}…`;
+}
+
+export function acceptedAutomationRunAction(
+  action: AutomationRunAction,
+  run: AutomationRun,
+): AutomationRunActionFeedback {
+  return {
+    kind: "accepted",
+    action,
+    detail: boundedAutomationFeedbackText(
+      `${action} accepted native Run revision ${run.revision} under lease ${run.leaseEpoch}.`,
+    ),
+  };
+}
+
+export function staleAutomationRunAction(
+  action: AutomationRunAction,
+  message: string,
+  run: AutomationRun | null,
+): AutomationRunActionFeedback | null {
+  if (!run) return null;
+  return {
+    kind: "stale",
+    action,
+    detail: boundedAutomationFeedbackText(
+      `${action} failed: ${message} Retained Run revision ${run.revision} may be stale.`,
+    ),
+  };
+}
+
 export function automationRunStorageKey(threadId: ThreadId): string {
   return `t3code:automation-run:${threadId}`;
 }
@@ -77,7 +139,7 @@ export function automationWorkspaceCapabilities(input: {
       input.validation?.valid === true &&
       !missingRequiredSecret &&
       input.run === null,
-    inspect: !input.pending && input.run !== null && !terminal,
+    inspect: !input.pending && input.run !== null,
     pause: !input.pending && input.run?.status === "running",
     resume: !input.pending && input.run?.status === "suspended",
     refresh: !input.pending && input.run !== null && !terminal,

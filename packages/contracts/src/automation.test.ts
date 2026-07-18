@@ -134,6 +134,11 @@ describe("production Automation operations", () => {
           turnsInWindow: 8,
           continuationCount: 3,
           retryAttempt: 1,
+          scheduledRetry: {
+            kind: "continuation",
+            readyAtMs: 1_768_435_260_500,
+            resetTurnWindow: true,
+          },
           lastProgressAtMs: 1_768_435_260_090,
           profileDigest: "profile-60",
           profileRevision: 2,
@@ -146,7 +151,23 @@ describe("production Automation operations", () => {
           nextAction: { text: "Resume the workflow run.", truncated: false },
         },
       ],
-      queuePreview: [],
+      queuePreview: [
+        {
+          issueId: "issue-61",
+          issueIdentifier: "ORC-61",
+          issueTitle: { text: "Wait for dependency", truncated: false },
+          state: "Blocked",
+          category: "blocked",
+          nextAction: { text: "Wait for ORC-59.", truncated: false },
+          blockedBy: [
+            {
+              id: { text: "issue-59", truncated: false },
+              identifier: { text: "ORC-59", truncated: false },
+              state: { text: "In Progress", truncated: false },
+            },
+          ],
+        },
+      ],
       queuePreviewTruncated: false,
       nextAction: { text: "Continue coordination.", truncated: false },
     } as const;
@@ -169,7 +190,23 @@ describe("production Automation operations", () => {
           turnsInWindow: 8,
           continuationCount: 3,
           retryAttempt: 1,
+          scheduledRetry: {
+            kind: "continuation",
+            readyAtMs: 1_768_435_260_500,
+            resetTurnWindow: true,
+          },
           lastProgressAtMs: 1_768_435_260_090,
+        },
+      ],
+      queuePreview: [
+        {
+          issueIdentifier: "ORC-61",
+          blockedBy: [
+            {
+              identifier: { text: "ORC-59", truncated: false },
+              state: { text: "In Progress", truncated: false },
+            },
+          ],
         },
       ],
     });

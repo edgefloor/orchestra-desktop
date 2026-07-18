@@ -3,6 +3,8 @@ import { BotIcon, CheckCircle2Icon, FolderGit2Icon, GitBranchIcon, SearchIcon } 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { AutomationRunWorkspace } from "../components/chat/AutomationRunWorkspace";
+import { AutomationRunActionFeedbackNotice } from "../components/chat/AutomationRunActionFeedback";
+import type { AutomationRunActionFeedback } from "../components/chat/AutomationProfileDialog.logic";
 import { ChatComposerFrame } from "../components/chat/ChatComposerFrame";
 import { TaskAttentionView } from "../components/chat/TaskAttentionView";
 import { RightPanelSheet } from "../components/RightPanelSheet";
@@ -23,6 +25,7 @@ type AcceptanceState =
   | "attention-sheet"
   | "symphony"
   | "symphony-activity"
+  | "symphony-recovery"
   | "symphony-events"
   | "browser-preview"
   | "browser-preview-narrow"
@@ -51,13 +54,14 @@ const acceptanceAutomationRun: AutomationRunResult = {
     leaseEpoch: 2,
     revision: 19,
     status: "running",
-    reconciliation: "complete",
+    reconciliation: "required",
     coordination: {
       cycle: 7,
       scanRevision: 12,
       inputCursor: "linear-11",
       outputCursor: "linear-12",
       intakeStatus: "ready",
+      error: { text: "Linear refresh failed before native dispatch.", truncated: false },
       pageDigest: "page-12",
       startedAtMs: 1_789_000_000_000,
       completedAtMs: 1_789_000_000_500,
@@ -67,7 +71,7 @@ const acceptanceAutomationRun: AutomationRunResult = {
         claimId: "claim-orc-70",
         issueId: "issue-orc-70",
         kind: "new_claim",
-        status: "completed",
+        status: "started",
         attempt: 1,
         profileDigest: "profile-acceptance",
         createdAtMs: 1_789_000_000_100,
@@ -77,7 +81,7 @@ const acceptanceAutomationRun: AutomationRunResult = {
     queueCounts: {
       queued: 1,
       running: 1,
-      blocked: 0,
+      blocked: 1,
       waitingGate: 0,
       handoff: 0,
       terminal: 3,
@@ -95,7 +99,12 @@ const acceptanceAutomationRun: AutomationRunResult = {
         workflowInvocations: 2,
         turnsInWindow: 6,
         continuationCount: 1,
-        retryAttempt: 0,
+        retryAttempt: 1,
+        scheduledRetry: {
+          kind: "retry",
+          readyAtMs: 1_789_000_002_000,
+          resetTurnWindow: true,
+        },
         lastProgressAtMs: 1_789_000_001_000,
         profileDigest: "profile-acceptance",
         profileRevision: 3,
@@ -105,9 +114,33 @@ const acceptanceAutomationRun: AutomationRunResult = {
         issueTask: { threadId: "issue-task-orc-70", taskPath: "/root/automation_orc_70" },
         workflowRunId: "workflow-orc-70",
         workflowStatus: "running",
-        effects: [],
-        hookReceipts: [],
-        cleanup: { status: "retained", attempts: 0 },
+        effects: [
+          {
+            effectId: "effect-orc-70-transition",
+            idempotencyKey: "effect-orc-70-transition-key",
+            kind: "tracker.transition",
+            status: "ambiguous",
+            gatePolicy: "auto_accept",
+            requestSha256: "effect-orc-70-transition-request",
+            bodyPreview: { text: "Move ORC-70 to Done", truncated: false },
+            failure: { text: "Provider receipt is ambiguous.", truncated: false },
+          },
+        ],
+        hookReceipts: [
+          {
+            kind: "after_run",
+            invocation: 1,
+            status: "failed",
+            exitCode: 1,
+            stdoutPreview: { text: "", truncated: false },
+            stderrPreview: { text: "Verification hook failed.", truncated: false },
+          },
+        ],
+        cleanup: {
+          status: "retry_pending",
+          attempts: 2,
+          lastFailure: { text: "Worktree is still in use.", truncated: false },
+        },
         nextAction: {
           text: "Verify the desktop workspace and publish evidence.",
           truncated: false,
@@ -119,10 +152,17 @@ const acceptanceAutomationRun: AutomationRunResult = {
         issueId: "issue-orc-71",
         issueIdentifier: "ORC-71",
         issueTitle: { text: "Exercise durable recovery", truncated: false },
-        state: "Todo",
+        state: "Blocked",
         priority: 2,
-        category: "queued",
-        nextAction: { text: "Await the next bounded dispatch slot.", truncated: false },
+        category: "blocked",
+        nextAction: { text: "Inspect tracker blockers before dispatch.", truncated: false },
+        blockedBy: [
+          {
+            id: { text: "issue-orc-69", truncated: false },
+            identifier: { text: "ORC-69", truncated: false },
+            state: { text: "In Progress", truncated: false },
+          },
+        ],
       },
     ],
     queuePreviewTruncated: false,
@@ -346,8 +386,26 @@ export function OrchestraWorkspaceAcceptanceFixture({
 }) {
   const openBrowserPreviewButtonRef = useRef<HTMLButtonElement>(null);
   const [browserPreviewSheetOpen, setBrowserPreviewSheetOpen] = useState(true);
+  const [automationFeedback, setAutomationFeedback] = useState<AutomationRunActionFeedback | null>(
+    null,
+  );
+  const recoveryScenario = state === "symphony-recovery";
+  const automationRunResult: AutomationRunResult = recoveryScenario
+    ? {
+        run: {
+          ...acceptanceAutomationRun.run,
+          status: "suspended",
+        },
+      }
+    : acceptanceAutomationRun;
   const symphonyView =
-    state === "symphony-activity" ? "activity" : state === "symphony-events" ? "events" : "issues";
+    state === "symphony-activity"
+      ? "activity"
+      : state === "symphony-recovery"
+        ? "recovery"
+        : state === "symphony-events"
+          ? "events"
+          : "issues";
   useEffect(() => {
     window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {};
     let cancelled = false;
@@ -412,6 +470,7 @@ export function OrchestraWorkspaceAcceptanceFixture({
               className="min-h-0 flex-1 overflow-y-auto px-6 py-4"
               data-automation-workspace-scroll=""
             >
+              <AutomationRunActionFeedbackNotice feedback={automationFeedback} />
               <AutomationRunWorkspace
                 initialView={symphonyView}
                 onCancelClaim={(claimId) => {
@@ -421,18 +480,51 @@ export function OrchestraWorkspaceAcceptanceFixture({
                   };
                 }}
                 onInspectQueue={() => undefined}
+                onInspectRun={() => {
+                  window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                    ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                    inspectedRunId: acceptanceAutomationRun.run.runId,
+                  };
+                  setAutomationFeedback({
+                    kind: "accepted",
+                    action: "Inspect",
+                    detail: "Inspect accepted native Run revision 19 under lease 2.",
+                  });
+                }}
                 onOpenIssueTask={(input) => {
                   window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
                     ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
                     openedIssueId: input.issueId,
                   };
                 }}
+                onRefreshRun={() => {
+                  window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                    ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                    refreshedRunId: acceptanceAutomationRun.run.runId,
+                  };
+                  setAutomationFeedback({
+                    kind: "accepted",
+                    action: "Refresh",
+                    detail: "Refresh accepted native Run revision 20 under lease 2.",
+                  });
+                }}
+                onResumeRun={() => {
+                  window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ = {
+                    ...window.__ORCHESTRA_ACCEPTANCE_ACTIONS__,
+                    resumedRunId: acceptanceAutomationRun.run.runId,
+                  };
+                  setAutomationFeedback({
+                    kind: "stale",
+                    action: "Resume",
+                    detail: "Resume failed. Retained Run revision 19 may be stale.",
+                  });
+                }}
                 onSteerClaim={() => undefined}
                 onSteeringInputChange={() => undefined}
                 pending={false}
                 queueResult={null}
                 queueOffset={0}
-                runResult={acceptanceAutomationRun}
+                runResult={automationRunResult}
                 steeringInputs={{}}
               />
             </div>

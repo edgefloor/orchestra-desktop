@@ -13,6 +13,7 @@ const state =
   requestedState === "attention-sheet" ||
   requestedState === "symphony" ||
   requestedState === "symphony-activity" ||
+  requestedState === "symphony-recovery" ||
   requestedState === "symphony-events" ||
   requestedState === "browser-preview" ||
   requestedState === "browser-preview-narrow" ||
