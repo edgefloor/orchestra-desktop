@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import * as NodeChildProcess from "node:child_process";
-import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeModule from "node:module";
@@ -9,6 +8,11 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 
+import {
+  readPngDimensions,
+  runGit,
+  sha256,
+} from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 import { resolveElectronLaunchCommand } from "./electron-launcher.mjs";
 
 const scriptPath = NodeURL.fileURLToPath(import.meta.url);
@@ -230,33 +234,6 @@ const scenarios = [
     ].sort(),
   },
 ];
-
-function runGit(args) {
-  return NodeChildProcess.execFileSync("git", args, {
-    cwd: repoRoot,
-    encoding: "utf8",
-  }).trim();
-}
-
-function sha256(bytes) {
-  return NodeCrypto.createHash("sha256").update(bytes).digest("hex");
-}
-
-function readPngDimensions(bytes, context) {
-  const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  if (
-    bytes.length < 33 ||
-    !bytes.subarray(0, pngSignature.length).equals(pngSignature) ||
-    bytes.readUInt32BE(8) !== 13 ||
-    bytes.subarray(12, 16).toString("ascii") !== "IHDR"
-  ) {
-    throw new Error(`${context} did not produce a valid PNG`);
-  }
-  return {
-    width: bytes.readUInt32BE(16),
-    height: bytes.readUInt32BE(20),
-  };
-}
 
 function launchUnderElectron() {
   const appDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "orchestra-capture-app-"));
@@ -725,8 +702,8 @@ async function captureUnderElectron() {
       role: "product-acceptance-evidence",
       desktop: {
         repository: "edgefloor/orchestra-desktop",
-        commit: runGit(["rev-parse", "HEAD"]),
-        tree: runGit(["rev-parse", "HEAD^{tree}"]),
+        commit: runGit(repoRoot, ["rev-parse", "HEAD"]),
+        tree: runGit(repoRoot, ["rev-parse", "HEAD^{tree}"]),
       },
       capture: {
         electronVersion: process.versions.electron,

@@ -3,10 +3,7 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
-import {
-  readNativeShellPngDimensions as readPngDimensions,
-  sha256,
-} from "./orchestra-native-shell-contract.mjs";
+import { readPngDimensions, sha256 } from "./orchestra-evidence-primitives.mjs";
 
 export { readPngDimensions, sha256 };
 

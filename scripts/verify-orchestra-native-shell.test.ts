@@ -3,15 +3,15 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import * as NodeZlib from "node:zlib";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
+import { minimalPng } from "./lib/orchestra-evidence-fixtures.ts";
 import {
   buildNativeGuestFixture,
   makeNativeShellAssertion,
-  sha256,
 } from "./lib/orchestra-native-shell-contract.mjs";
+import { sha256 } from "./lib/orchestra-evidence-primitives.mjs";
 
 import {
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
@@ -24,40 +24,6 @@ import {
 
 const temporaryRoots: string[] = [];
 const acceptanceDirectory = "docs/acceptance/orchestra-native-shell";
-
-function crc32(bytes: Buffer): number {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function pngChunk(type: string, data: Buffer): Buffer {
-  const typeBytes = Buffer.from(type, "ascii");
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length);
-  const checksum = Buffer.alloc(4);
-  checksum.writeUInt32BE(crc32(Buffer.concat([typeBytes, data])));
-  return Buffer.concat([length, typeBytes, data, checksum]);
-}
-
-function minimalPng(width: number, height: number): Buffer {
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(width, 0);
-  header.writeUInt32BE(height, 4);
-  header[8] = 8;
-  const rows = Buffer.alloc((width + 1) * height);
-  return Buffer.concat([
-    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    pngChunk("IHDR", header),
-    pngChunk("IDAT", NodeZlib.deflateSync(rows)),
-    pngChunk("IEND", Buffer.alloc(0)),
-  ]);
-}
 
 type MutableManifest = {
   schemaVersion: number;
@@ -109,6 +75,14 @@ type MutableManifest = {
         nodeIntegration: boolean;
         nodeIntegrationInSubFrames: boolean;
       };
+    };
+    rejectedAttachmentProbe: {
+      partition: string;
+      attachmentGuardAllowed: boolean;
+      sandbox: boolean;
+      contextIsolation: boolean;
+      nodeIntegration: boolean;
+      nodeIntegrationInSubFrames: boolean;
     };
     navigation: Array<{ action: string; expected: unknown; observed: unknown; passed: boolean }>;
     cleanup: { portsClosed: boolean; processGroupEmpty: boolean | null };
@@ -202,6 +176,14 @@ async function makeFixture(
           nodeIntegration: false,
           nodeIntegrationInSubFrames: false,
         },
+      },
+      rejectedAttachmentProbe: {
+        partition: "persist:orchestra-native-shell-rejected",
+        attachmentGuardAllowed: false,
+        sandbox: false,
+        contextIsolation: false,
+        nodeIntegration: false,
+        nodeIntegrationInSubFrames: false,
       },
       navigation: [
         "navigate-page-a",
@@ -362,6 +344,12 @@ describe("Orchestra native-shell evidence verifier", () => {
           manifest.runtime.guest.attachment.sandbox = false;
         },
         message: "manifest.runtime.guest.attachment must record the effective guarded preferences",
+      },
+      {
+        mutate: (manifest) => {
+          manifest.runtime.rejectedAttachmentProbe.attachmentGuardAllowed = true;
+        },
+        message: "manifest.runtime.rejectedAttachmentProbe must prove guard rejection",
       },
       {
         mutate: (manifest) => {

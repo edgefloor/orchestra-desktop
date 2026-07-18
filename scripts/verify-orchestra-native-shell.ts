@@ -21,9 +21,11 @@ import {
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
   ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS,
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
-  readNativeShellPngDimensions,
-  sha256,
 } from "./lib/orchestra-native-shell-contract.mjs";
+import {
+  readPngDimensions as readNativeShellPngDimensions,
+  sha256,
+} from "./lib/orchestra-evidence-primitives.mjs";
 
 export {
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
@@ -41,6 +43,7 @@ const ACCEPTANCE_DIRECTORY = ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY;
 const REQUIRED_NATIVE_SHELL_SOURCE_FILES = [
   "apps/desktop/scripts/capture-orchestra-native-shell.mjs",
   "scripts/lib/orchestra-evidence-verifier.ts",
+  "scripts/lib/orchestra-evidence-primitives.mjs",
   "scripts/lib/orchestra-native-shell-contract.mjs",
   "scripts/verify-orchestra-native-shell.ts",
 ] as const;
@@ -273,7 +276,7 @@ export async function verifyOrchestraNativeShell(
 
   requireFields(
     typedManifest.runtime,
-    ["rendererUrl", "appViewport", "guest", "navigation", "cleanup"],
+    ["rendererUrl", "appViewport", "guest", "rejectedAttachmentProbe", "navigation", "cleanup"],
     "manifest.runtime",
   );
   const runtime = typedManifest.runtime as Record<string, unknown>;
@@ -326,6 +329,25 @@ export async function verifyOrchestraNativeShell(
     throw new Error(
       "manifest.runtime.guest.attachment must record the effective guarded preferences",
     );
+  }
+  requireFields(
+    runtime.rejectedAttachmentProbe,
+    [
+      "partition",
+      "attachmentGuardAllowed",
+      "sandbox",
+      "contextIsolation",
+      "nodeIntegration",
+      "nodeIntegrationInSubFrames",
+    ],
+    "manifest.runtime.rejectedAttachmentProbe",
+  );
+  const rejectedProbe = runtime.rejectedAttachmentProbe as Record<string, unknown>;
+  if (
+    rejectedProbe.partition !== "persist:orchestra-native-shell-rejected" ||
+    rejectedProbe.attachmentGuardAllowed !== false
+  ) {
+    throw new Error("manifest.runtime.rejectedAttachmentProbe must prove guard rejection");
   }
   if (!Array.isArray(runtime.navigation)) {
     throw new Error("manifest.runtime.navigation must be an array");

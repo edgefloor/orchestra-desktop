@@ -4,7 +4,6 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
-import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
@@ -12,6 +11,7 @@ import * as NodeURL from "node:url";
 import {
   assertNativeShellAssertions,
   buildNativeGuestFixture,
+  canConnectToNativeShellPort,
   cleanupFailedNativeShellCapture,
   isNativeShellProcessGroupEmpty,
   makeNativeShellAssertion,
@@ -19,10 +19,15 @@ import {
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
   ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS,
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
-  readNativeShellPngDimensions,
-  sha256,
+  reserveNativeShellPort,
   shouldRunNativeShellElectronChild,
+  terminateAndVerifyNativeShellResources,
 } from "../../../scripts/lib/orchestra-native-shell-contract.mjs";
+import {
+  readPngDimensions,
+  runGit,
+  sha256,
+} from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 import { resolveElectronLaunchCommand } from "./electron-launcher.mjs";
 
 const scriptPath = NodeURL.fileURLToPath(import.meta.url);
@@ -40,44 +45,9 @@ const projectId = "project-native-shell-acceptance";
 const threadId = "thread-native-shell-acceptance";
 const projectTitle = "Orchestra Desktop Native Acceptance";
 const threadTitle = "Native Browser acceptance";
+const rejectedProbePartition = "persist:orchestra-native-shell-rejected";
 const requiredAssertionNames = ORCHESTRA_NATIVE_SHELL_ASSERTIONS;
 const screenshotScenarios = ORCHESTRA_NATIVE_SHELL_SCREENSHOTS;
-
-function runGit(args) {
-  return NodeChildProcess.execFileSync("git", args, {
-    cwd: repoRoot,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-}
-
-async function reservePort() {
-  const server = NodeNet.createServer();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  if (!address || typeof address === "string") throw new Error("could not reserve loopback port");
-  await new Promise((resolve, reject) =>
-    server.close((error) => (error ? reject(error) : resolve())),
-  );
-  return address.port;
-}
-
-async function canConnect(port) {
-  return new Promise((resolve) => {
-    const socket = NodeNet.createConnection({ host: "127.0.0.1", port });
-    const finish = (value) => {
-      socket.destroy();
-      resolve(value);
-    };
-    socket.setTimeout(500);
-    socket.once("connect", () => finish(true));
-    socket.once("timeout", () => finish(false));
-    socket.once("error", () => finish(false));
-  });
-}
 
 async function waitFor(predicate, context, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
@@ -108,7 +78,7 @@ function scrubProviderCredentials(environment) {
 }
 
 async function launchUnderElectron() {
-  const trackedChanges = runGit(["status", "--porcelain", "--untracked-files=no"]);
+  const trackedChanges = runGit(repoRoot, ["status", "--porcelain", "--untracked-files=no"]);
   if (trackedChanges.length > 0 && process.env.ORCHESTRA_NATIVE_ACCEPTANCE_ALLOW_DIRTY !== "1") {
     throw new Error(
       "native-shell capture requires a clean tracked worktree; commit source changes first",
@@ -132,9 +102,9 @@ async function launchUnderElectron() {
   const homeDirectory = NodePath.join(runtimeDirectory, "home");
   const t3Home = NodePath.join(runtimeDirectory, "t3");
   const codexHome = NodePath.join(runtimeDirectory, "codex");
-  const backendPort = await reservePort();
-  const guestPort = await reservePort();
-  const failurePort = await reservePort();
+  const backendPort = await reserveNativeShellPort();
+  const guestPort = await reserveNativeShellPort();
+  const failurePort = await reserveNativeShellPort();
   await Promise.all(
     [wrapperDirectory, homeDirectory, t3Home, codexHome].map((directory) =>
       NodeFSP.mkdir(directory, { recursive: true }),
@@ -175,8 +145,9 @@ async function launchUnderElectron() {
 
   const launch = resolveElectronLaunchCommand([wrapperDirectory, "--force-device-scale-factor=1"]);
   let captureCompleted = false;
+  let child = null;
   try {
-    const child = NodeChildProcess.spawn(launch.electronPath, launch.args, {
+    child = NodeChildProcess.spawn(launch.electronPath, launch.args, {
       cwd: repoRoot,
       env: environment,
       stdio: "inherit",
@@ -184,15 +155,6 @@ async function launchUnderElectron() {
     });
     const exit = await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        if (hostPlatform !== "win32" && child.pid) {
-          try {
-            process.kill(-child.pid, "SIGKILL");
-          } catch {
-            child.kill("SIGKILL");
-          }
-        } else {
-          child.kill("SIGKILL");
-        }
         reject(new Error("native-shell Electron capture timed out after 180 seconds"));
       }, 180_000);
       child.once("error", (error) => {
@@ -216,9 +178,9 @@ async function launchUnderElectron() {
 
     await new Promise((resolve) => setTimeout(resolve, 500));
     const portsClosed =
-      !(await canConnect(backendPort)) &&
-      !(await canConnect(guestPort)) &&
-      !(await canConnect(failurePort));
+      !(await canConnectToNativeShellPort(backendPort)) &&
+      !(await canConnectToNativeShellPort(guestPort)) &&
+      !(await canConnectToNativeShellPort(failurePort));
     const processGroupEmpty = child.pid
       ? isNativeShellProcessGroupEmpty(child.pid, hostPlatform)
       : false;
@@ -235,6 +197,19 @@ async function launchUnderElectron() {
     console.log(
       `Native-shell evidence captured at ${NodePath.relative(repoRoot, evidenceDirectory)}`,
     );
+  } catch (error) {
+    const failureCleanup = await terminateAndVerifyNativeShellResources({
+      ...(child?.pid ? { pid: child.pid } : {}),
+      ports: [backendPort, guestPort, failurePort],
+      platform: hostPlatform,
+    });
+    if (!failureCleanup.portsClosed || failureCleanup.processGroupEmpty === false) {
+      throw new Error(
+        `native-shell capture failed and cleanup remained incomplete: ${JSON.stringify(failureCleanup)}`,
+        { cause: error },
+      );
+    }
+    throw error;
   } finally {
     if (captureCompleted) {
       await NodeFSP.rm(runtimeDirectory, { recursive: true, force: true });
@@ -308,8 +283,9 @@ async function runElectronChild() {
     mainWindow.focus();
     const renderer = mainWindow.webContents;
     let attachmentObservation = null;
+    let rejectedAttachmentObservation = null;
     renderer.on("will-attach-webview", (event, webPreferences, params) => {
-      attachmentObservation = {
+      const observation = {
         partition: params.partition ?? null,
         attachmentGuardAllowed: event.defaultPrevented !== true,
         sandbox: webPreferences.sandbox === true,
@@ -317,6 +293,11 @@ async function runElectronChild() {
         nodeIntegration: webPreferences.nodeIntegration === true,
         nodeIntegrationInSubFrames: webPreferences.nodeIntegrationInSubFrames === true,
       };
+      if (params.partition === rejectedProbePartition) {
+        rejectedAttachmentObservation = observation;
+      } else {
+        attachmentObservation = observation;
+      }
     });
     await waitFor(
       () =>
@@ -327,6 +308,18 @@ async function runElectronChild() {
       "production preload bridge",
     );
     await renderer.executeJavaScript(`window.desktopBridge.setTheme("dark")`, true);
+    await renderer.executeJavaScript(
+      `(() => { const probe = document.createElement('webview'); probe.id = 'orchestra-rejected-webview-probe'; probe.setAttribute('partition', ${JSON.stringify(rejectedProbePartition)}); probe.setAttribute('src', 'data:text/html,guard-probe'); probe.style.display = 'none'; document.body.append(probe); })()`,
+      true,
+    );
+    rejectedAttachmentObservation = await waitFor(
+      () => rejectedAttachmentObservation,
+      "rejected production will-attach-webview probe",
+    );
+    await renderer.executeJavaScript(
+      `document.querySelector('#orchestra-rejected-webview-probe')?.remove()`,
+      true,
+    );
 
     const bootstrap = await waitFor(
       async () => {
@@ -642,6 +635,11 @@ async function runElectronChild() {
         attachmentObservation.attachmentGuardAllowed === true &&
           attachmentObservation.partition === webviewState.partition,
       ),
+      attachmentGuardRejectedInvalidPartition: makeNativeShellAssertion(
+        rejectedAttachmentObservation,
+        rejectedAttachmentObservation.attachmentGuardAllowed === false &&
+          rejectedAttachmentObservation.partition === rejectedProbePartition,
+      ),
       guestSandboxEnabled: makeNativeShellAssertion(
         attachmentObservation.sandbox,
         attachmentObservation.sandbox === true,
@@ -738,7 +736,7 @@ async function runElectronChild() {
       }
       const image = await mainWindow.webContents.capturePage();
       const bytes = image.toPNG();
-      const dimensions = readNativeShellPngDimensions(bytes, scenario.scenario);
+      const dimensions = readPngDimensions(bytes, scenario.scenario);
       if (dimensions.width !== scenario.width || dimensions.height !== scenario.height) {
         throw new Error(
           `${scenario.scenario} produced ${dimensions.width}x${dimensions.height}, expected ${scenario.width}x${scenario.height}`,
@@ -772,8 +770,8 @@ async function runElectronChild() {
       role: "product-native-shell-evidence",
       desktop: {
         repository: "edgefloor/orchestra-desktop",
-        commit: runGit(["rev-parse", "HEAD"]),
-        tree: runGit(["rev-parse", "HEAD^{tree}"]),
+        commit: runGit(repoRoot, ["rev-parse", "HEAD"]),
+        tree: runGit(repoRoot, ["rev-parse", "HEAD^{tree}"]),
       },
       capture: {
         electronVersion: process.versions.electron,
@@ -805,6 +803,7 @@ async function runElectronChild() {
           viewport: recoveredA.viewport,
           attachment: attachmentObservation,
         },
+        rejectedAttachmentProbe: rejectedAttachmentObservation,
         navigation,
         cleanup: { portsClosed: false, processGroupEmpty: false },
       },

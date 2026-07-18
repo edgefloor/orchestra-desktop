@@ -1,19 +1,24 @@
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import * as NodeProcess from "node:process";
 
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   assertNativeShellAssertions,
   buildNativeGuestFixture,
+  canConnectToNativeShellPort,
   cleanupFailedNativeShellCapture,
   makeNativeShellAssertion,
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
-  sha256,
+  reserveNativeShellPort,
   shouldRunNativeShellElectronChild,
+  terminateAndVerifyNativeShellResources,
 } from "../../../scripts/lib/orchestra-native-shell-contract.mjs";
+import { sha256 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 
 describe("native-shell acceptance capture contract", () => {
   it("builds deterministic history-distinct loopback guest pages", () => {
@@ -82,5 +87,44 @@ describe("native-shell acceptance capture contract", () => {
       "keep",
     );
     await NodeFSP.rm(root, { recursive: true, force: true });
+  });
+
+  it("terminates the owned process group and closes its listener after failure", async () => {
+    // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone harness test has no Effect runtime.
+    const platform = NodeOS.platform();
+    if (platform === "win32") return;
+    const port = await reserveNativeShellPort();
+    // oxlint-disable-next-line t3code/no-global-process-runtime -- Test launches the current Node binary as an owned disposable child.
+    const child = NodeChildProcess.spawn(
+      NodeProcess.execPath,
+      [
+        "-e",
+        `require('node:net').createServer().listen(${port}, '127.0.0.1'); setInterval(() => {}, 1000);`,
+      ],
+      {
+        detached: true,
+        stdio: "ignore",
+      },
+    );
+    let cleanup;
+    try {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (await canConnectToNativeShellPort(port)) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(await canConnectToNativeShellPort(port)).toBe(true);
+    } finally {
+      cleanup = await terminateAndVerifyNativeShellResources({
+        ...(child.pid ? { pid: child.pid } : {}),
+        ports: [port],
+        platform,
+      });
+    }
+
+    expect(cleanup).toEqual({
+      terminationAttempted: true,
+      portsClosed: true,
+      processGroupEmpty: true,
+    });
   });
 });

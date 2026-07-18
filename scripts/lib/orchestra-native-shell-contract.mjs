@@ -1,7 +1,9 @@
-import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
+import * as NodeNet from "node:net";
 import * as NodePath from "node:path";
 import * as NodeProcess from "node:process";
+
+import { sha256 } from "./orchestra-evidence-primitives.mjs";
 
 export const ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY = "docs/acceptance/orchestra-native-shell";
 
@@ -25,6 +27,7 @@ export const ORCHESTRA_NATIVE_SHELL_ASSERTIONS = Object.freeze(
     "realWebviewAttached",
     "approvedPreviewPartition",
     "attachmentGuardAllowed",
+    "attachmentGuardRejectedInvalidPartition",
     "guestSandboxEnabled",
     "guestContextIsolationDisabled",
     "guestNodeIntegrationDisabled",
@@ -48,10 +51,6 @@ export const ORCHESTRA_NATIVE_SHELL_SCREENSHOTS = Object.freeze([
   Object.freeze({ scenario: "native-browser-1440x900-dark", width: 1440, height: 900 }),
   Object.freeze({ scenario: "native-workspace-1024x768-dark", width: 1024, height: 768 }),
 ]);
-
-export function sha256(bytes) {
-  return NodeCrypto.createHash("sha256").update(bytes).digest("hex");
-}
 
 export function buildNativeGuestFixture(origin) {
   const sharedStyle = `html{font-family:ui-sans-serif,system-ui;background:#111827;color:#f9fafb}body{margin:0;min-height:100vh;display:grid;place-items:center}.card{width:min(560px,calc(100vw - 48px));padding:32px;border:1px solid #374151;border-radius:18px;background:#1f2937;box-shadow:0 20px 60px #0008}h1{margin:0 0 12px;font-size:28px}p{color:#cbd5e1}button,a{display:inline-flex;margin:8px 8px 0 0;padding:10px 14px;border:0;border-radius:9px;background:#7c3aed;color:#fff;font:inherit;text-decoration:none;cursor:pointer}.marker{margin-top:16px;color:#a7f3d0;font-family:ui-monospace,monospace}`;
@@ -85,22 +84,6 @@ export function assertNativeShellAssertions(assertions) {
   }
 }
 
-export function readNativeShellPngDimensions(bytes, context = "image") {
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  if (bytes.length < 33 || !bytes.subarray(0, signature.length).equals(signature)) {
-    throw new Error(`${context} must be a PNG image`);
-  }
-  if (bytes.readUInt32BE(8) !== 13 || bytes.subarray(12, 16).toString("ascii") !== "IHDR") {
-    throw new Error(`${context} must begin with a 13-byte PNG IHDR chunk`);
-  }
-  const width = bytes.readUInt32BE(16);
-  const height = bytes.readUInt32BE(20);
-  if (width === 0 || height === 0) {
-    throw new Error(`${context} must have positive PNG dimensions`);
-  }
-  return { width, height };
-}
-
 export function shouldRunNativeShellElectronChild(environment) {
   return environment.ORCHESTRA_NATIVE_ACCEPTANCE_CHILD === "1";
 }
@@ -114,6 +97,70 @@ export function isNativeShellProcessGroupEmpty(pid, platform) {
   } catch (error) {
     return error !== null && typeof error === "object" && error.code === "ESRCH";
   }
+}
+
+export async function reserveNativeShellPort() {
+  const server = NodeNet.createServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("could not reserve loopback port");
+  await new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+  return address.port;
+}
+
+export async function canConnectToNativeShellPort(port) {
+  return new Promise((resolve) => {
+    const socket = NodeNet.createConnection({ host: "127.0.0.1", port });
+    const finish = (value) => {
+      socket.destroy();
+      resolve(value);
+    };
+    socket.setTimeout(250);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+  });
+}
+
+export async function terminateAndVerifyNativeShellResources({
+  pid,
+  ports,
+  platform,
+  timeoutMs = 5_000,
+}) {
+  let terminationAttempted = false;
+  if (typeof pid === "number" && pid > 0) {
+    const processTarget = platform === "win32" ? pid : -pid;
+    if (isNativeShellProcessGroupEmpty(pid, platform) !== true) {
+      terminationAttempted = true;
+      try {
+        // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone harness terminates only its owned child process group.
+        NodeProcess.kill(processTarget, "SIGKILL");
+      } catch (error) {
+        if (!(error !== null && typeof error === "object" && error.code === "ESRCH")) throw error;
+      }
+    }
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  let processGroupEmpty =
+    typeof pid === "number" && pid > 0 ? isNativeShellProcessGroupEmpty(pid, platform) : true;
+  let portsClosed = false;
+  while (Date.now() < deadline) {
+    portsClosed = (await Promise.all(ports.map(canConnectToNativeShellPort))).every(
+      (connected) => !connected,
+    );
+    processGroupEmpty =
+      typeof pid === "number" && pid > 0 ? isNativeShellProcessGroupEmpty(pid, platform) : true;
+    if (portsClosed && processGroupEmpty !== false) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return { terminationAttempted, portsClosed, processGroupEmpty };
 }
 
 export async function cleanupFailedNativeShellCapture({
