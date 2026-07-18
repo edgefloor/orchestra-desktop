@@ -1,10 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as PlatformError from "effect/PlatformError";
+import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import * as CodexError from "../errors.ts";
 import {
+  CODEX_APP_SERVER_STDERR_DRAIN_TIMEOUT_MS,
   CODEX_APP_SERVER_STDERR_MAX_CHARS,
   makeBoundedChildStderr,
   makeTerminationError,
@@ -64,6 +67,27 @@ describe("Codex App Server child process termination", () => {
     }),
   );
 
+  it.effect("bounds stderr drain settlement after the child exits", () =>
+    Effect.gen(function* () {
+      const errorFiber = yield* makeTerminationError(
+        {
+          pid: ChildProcessSpawner.ProcessId(55),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+        },
+        () => ({ stderr: "partial drain" }),
+        Effect.never,
+      ).pipe(Effect.forkChild);
+
+      yield* Effect.yieldNow;
+      yield* TestClock.adjust(`${CODEX_APP_SERVER_STDERR_DRAIN_TIMEOUT_MS} millis`);
+      const error = yield* Fiber.join(errorFiber);
+
+      assert.instanceOf(error, CodexError.CodexAppServerProcessExitedError);
+      assert.equal(error.stderr, "partial drain");
+      assert.isTrue(error.stderrTruncated);
+    }),
+  );
+
   it("keeps the exact bound when a later chunk proves truncation", () => {
     const stderr = makeBoundedChildStderr();
     stderr.push(new TextEncoder().encode("x".repeat(CODEX_APP_SERVER_STDERR_MAX_CHARS)));
@@ -84,6 +108,17 @@ describe("Codex App Server child process termination", () => {
 
     assert.equal(stderr.snapshot().stderr, "€");
     assert.isFalse(stderr.snapshot().stderrTruncated);
+  });
+
+  it("truncates an astral character only at its code-point boundary", () => {
+    const stderr = makeBoundedChildStderr();
+    const prefix = "x".repeat(CODEX_APP_SERVER_STDERR_MAX_CHARS - 2);
+    stderr.push(new TextEncoder().encode(`${prefix}😀`));
+    stderr.push(new TextEncoder().encode("later"));
+    stderr.flush();
+
+    assert.equal(stderr.snapshot().stderr, `${prefix}…`);
+    assert.isTrue(stderr.snapshot().stderrTruncated);
   });
 
   it.effect("retains the process identifier and exact exit-status cause", () =>

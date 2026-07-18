@@ -65,6 +65,11 @@ const asTurnId = (value: string): TurnId => TurnId.make(value);
 const asEventId = (value: string): EventId => EventId.make(value);
 const asItemId = (value: string): ProviderItemId => ProviderItemId.make(value);
 
+interface FakeCodexRuntimeFailures {
+  readonly start?: CodexSessionRuntimeError;
+  readonly sendTurn?: CodexSessionRuntimeError;
+}
+
 class FakeCodexRuntime implements CodexSessionRuntimeShape {
   private readonly eventQueue = Effect.runSync(Queue.unbounded<ProviderEvent>());
   private readonly now = "2026-01-01T00:00:00.000Z";
@@ -138,23 +143,27 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
   public readonly closeImpl = vi.fn(() => Promise.resolve(undefined));
 
   readonly options: CodexSessionRuntimeOptions;
-  readonly startFailure: CodexSessionRuntimeError | undefined;
+  readonly failures: FakeCodexRuntimeFailures;
 
-  constructor(options: CodexSessionRuntimeOptions, startFailure?: CodexSessionRuntimeError) {
+  constructor(options: CodexSessionRuntimeOptions, failures: FakeCodexRuntimeFailures = {}) {
     this.options = options;
-    this.startFailure = startFailure;
+    this.failures = failures;
   }
 
   start(): Effect.Effect<ProviderSession, CodexSessionRuntimeError> {
-    return this.startFailure
-      ? Effect.fail(this.startFailure)
+    return this.failures.start
+      ? Effect.fail(this.failures.start)
       : Effect.promise(() => this.startImpl());
   }
 
   getSession = Effect.promise(() => this.startImpl());
 
-  sendTurn(input: CodexSessionRuntimeSendTurnInput) {
-    return Effect.promise(() => this.sendTurnImpl(input));
+  sendTurn(
+    input: CodexSessionRuntimeSendTurnInput,
+  ): Effect.Effect<ProviderTurnStartResult, CodexSessionRuntimeError> {
+    return this.failures.sendTurn
+      ? Effect.fail(this.failures.sendTurn)
+      : Effect.promise(() => this.sendTurnImpl(input));
   }
 
   interruptTurn(turnId?: TurnId) {
@@ -220,7 +229,14 @@ function makeRuntimeFactory() {
 
 function makeStartFailureRuntimeFactory(failure: CodexSessionRuntimeError) {
   return vi.fn((options: CodexSessionRuntimeOptions) => {
-    const runtime = new FakeCodexRuntime(options, failure);
+    const runtime = new FakeCodexRuntime(options, { start: failure });
+    return Effect.succeed(runtime);
+  });
+}
+
+function makeSendTurnFailureRuntimeFactory(failure: CodexSessionRuntimeError) {
+  return vi.fn((options: CodexSessionRuntimeOptions) => {
+    const runtime = new FakeCodexRuntime(options, { sendTurn: failure });
     return Effect.succeed(runtime);
   });
 }
@@ -1383,6 +1399,57 @@ processFailureLayer("CodexAdapterLive process failure redaction", (it) => {
       if (result.failure._tag !== "ProviderAdapterProcessError") return;
       NodeAssert.doesNotMatch(result.failure.detail, new RegExp(providerSecretSentinel));
       NodeAssert.match(result.failure.detail, /\[REDACTED\]/);
+      const isProcessExit = Schema.is(CodexErrors.CodexAppServerProcessExitedError);
+      NodeAssert.ok(isProcessExit(result.failure.cause));
+      if (!isProcessExit(result.failure.cause)) return;
+      NodeAssert.doesNotMatch(result.failure.cause.message, new RegExp(providerSecretSentinel));
+      NodeAssert.match(result.failure.cause.stderr ?? "", /\[REDACTED\]/);
+    }),
+  );
+});
+
+const postStartProcessFailureRuntimeFactory = makeSendTurnFailureRuntimeFactory(
+  new CodexErrors.CodexAppServerProcessExitedError({
+    code: 1,
+    stderr: `{"api_key":"${providerSecretSentinel}"}`,
+  }),
+);
+const postStartProcessFailureLayer = it.layer(
+  Layer.effect(
+    CodexAdapter,
+    Effect.gen(function* () {
+      const codexConfig = decodeCodexSettings({});
+      return yield* makeCodexAdapter(codexConfig, {
+        makeRuntime: postStartProcessFailureRuntimeFactory,
+      });
+    }),
+  ).pipe(
+    Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+    Layer.provideMerge(ServerSettingsService.layerTest()),
+    Layer.provideMerge(providerSessionDirectoryTestLayer),
+    Layer.provideMerge(NodeServices.layer),
+  ),
+);
+
+postStartProcessFailureLayer("CodexAdapterLive post-start process failure redaction", (it) => {
+  it.effect("redacts stderr from an attached session-closed cause", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      const threadId = asThreadId("thread-process-fail-after-start");
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("codex"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      const result = yield* adapter
+        .sendTurn({ threadId, input: "hello", attachments: [] })
+        .pipe(Effect.result);
+
+      NodeAssert.equal(result._tag, "Failure");
+      if (result._tag !== "Failure") return;
+      NodeAssert.equal(result.failure._tag, "ProviderAdapterSessionClosedError");
+      if (result.failure._tag !== "ProviderAdapterSessionClosedError") return;
       const isProcessExit = Schema.is(CodexErrors.CodexAppServerProcessExitedError);
       NodeAssert.ok(isProcessExit(result.failure.cause));
       if (!isProcessExit(result.failure.cause)) return;

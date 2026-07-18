@@ -116,6 +116,14 @@ const BENIGN_ERROR_LOG_SNIPPETS = [
 ];
 const CODEX_APP_SERVER_FORCE_KILL_AFTER = "2 seconds" as const;
 const MAX_CODEX_DIAGNOSTIC_CHARS = 4_096;
+
+function truncateCodexDiagnostic(value: string): string {
+  const sliced = value.slice(0, MAX_CODEX_DIAGNOSTIC_CHARS - 1);
+  const lastCodeUnit = sliced.charCodeAt(sliced.length - 1);
+  const completePrefix =
+    lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff ? sliced.slice(0, -1) : sliced;
+  return `${completePrefix}…`;
+}
 const RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS = [
   "not found",
   "missing thread",
@@ -562,13 +570,13 @@ export function redactCodexDiagnostic(rawDiagnostic: string): string {
   const redacted = rawDiagnostic
     .replace(/(bearer\s+)[a-z0-9._~+/=-]+/giu, "$1[REDACTED]")
     .replace(
-      /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|secret)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu,
+      /(["']?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|secret)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}]+)/giu,
       "$1[REDACTED]",
     );
   if (redacted.length <= MAX_CODEX_DIAGNOSTIC_CHARS) {
     return redacted;
   }
-  return `${redacted.slice(0, MAX_CODEX_DIAGNOSTIC_CHARS - 1)}…`;
+  return truncateCodexDiagnostic(redacted);
 }
 
 function classifyCodexStderrLine(rawLine: string): { readonly message: string } | null {

@@ -106,7 +106,7 @@ function mapCodexRuntimeError(
     return new ProviderAdapterSessionClosedError({
       provider: PROVIDER,
       threadId,
-      cause: error,
+      cause: redactCodexRuntimeCause(error),
     });
   }
 
@@ -126,21 +126,23 @@ function mapCodexRuntimeError(
   });
 }
 
+function redactCodexRuntimeCause(cause: CodexSessionRuntimeError): CodexSessionRuntimeError {
+  if (!isCodexAppServerProcessExitedError(cause)) return cause;
+  return new CodexErrors.CodexAppServerProcessExitedError({
+    code: cause.code,
+    ...(cause.pid === undefined ? {} : { pid: cause.pid }),
+    ...(cause.stderr === undefined ? {} : { stderr: redactCodexDiagnostic(cause.stderr) }),
+    ...(cause.stderrTruncated === undefined ? {} : { stderrTruncated: cause.stderrTruncated }),
+  });
+}
+
 function providerProcessError(threadId: ThreadId, cause: CodexSessionRuntimeError) {
   const detail = redactCodexDiagnostic(cause.message);
-  const redactedCause = isCodexAppServerProcessExitedError(cause)
-    ? new CodexErrors.CodexAppServerProcessExitedError({
-        code: cause.code,
-        ...(cause.pid === undefined ? {} : { pid: cause.pid }),
-        ...(cause.stderr === undefined ? {} : { stderr: redactCodexDiagnostic(cause.stderr) }),
-        ...(cause.stderrTruncated === undefined ? {} : { stderrTruncated: cause.stderrTruncated }),
-      })
-    : cause;
   return new ProviderAdapterProcessError({
     provider: PROVIDER,
     threadId,
     detail,
-    cause: redactedCause,
+    cause: redactCodexRuntimeCause(cause),
   });
 }
 

@@ -238,13 +238,20 @@ describe("Codex diagnostics", () => {
   it("redacts credential-shaped values and bounds support output", () => {
     const secret = "diagnostic-secret-sentinel";
     const diagnostic = redactCodexDiagnostic(
-      `Authorization: Bearer ${secret} api_key=${secret} ${"x".repeat(8_192)}`,
+      `Authorization: Bearer ${secret} api_key=${secret} {"api_key":"${secret}","access_token":"${secret}"} ${"x".repeat(8_192)}`,
     );
 
     NodeAssert.doesNotMatch(diagnostic, new RegExp(secret));
     NodeAssert.match(diagnostic, /\[REDACTED\]/);
     NodeAssert.ok(diagnostic.length <= 4_096);
     NodeAssert.ok(diagnostic.endsWith("…"));
+  });
+
+  it("bounds support output without splitting an astral character", () => {
+    const prefix = "x".repeat(4_094);
+    const diagnostic = redactCodexDiagnostic(`${prefix}😀later`);
+
+    NodeAssert.equal(diagnostic, `${prefix}…`);
   });
 });
 

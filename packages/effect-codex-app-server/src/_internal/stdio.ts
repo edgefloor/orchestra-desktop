@@ -1,5 +1,6 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Sink from "effect/Sink";
 import * as Stdio from "effect/Stdio";
@@ -50,6 +51,14 @@ type ChildProcessTerminationHandle = Pick<
 >;
 
 export const CODEX_APP_SERVER_STDERR_MAX_CHARS = 4_096;
+export const CODEX_APP_SERVER_STDERR_DRAIN_TIMEOUT_MS = 250;
+
+function sliceOnCodePointBoundary(value: string, maxCodeUnits: number): string {
+  const sliced = value.slice(0, Math.max(0, maxCodeUnits));
+  if (sliced.length === 0) return sliced;
+  const lastCodeUnit = sliced.charCodeAt(sliced.length - 1);
+  return lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff ? sliced.slice(0, -1) : sliced;
+}
 
 export function makeBoundedChildStderr(maxChars = CODEX_APP_SERVER_STDERR_MAX_CHARS) {
   const decoder = new TextDecoder();
@@ -63,10 +72,7 @@ export function makeBoundedChildStderr(maxChars = CODEX_APP_SERVER_STDERR_MAX_CH
       return;
     }
     if (maxChars > 0) {
-      stderr =
-        remaining === 0
-          ? `${stderr.slice(0, maxChars - 1)}…`
-          : `${stderr}${decoded.slice(0, Math.max(0, remaining - 1))}…`;
+      stderr = `${sliceOnCodePointBoundary(`${stderr}${decoded}`, maxChars - 1)}…`;
     }
     stderrTruncated = true;
   };
@@ -103,15 +109,15 @@ export const makeTerminationError = (
       ),
     onSuccess: (code) =>
       awaitStderr.pipe(
-        Effect.andThen(
-          Effect.sync(
-            () =>
-              new CodexError.CodexAppServerProcessExitedError({
-                code,
-                pid: handle.pid,
-                ...readStderr(),
-              }),
-          ),
-        ),
+        Effect.timeoutOption(CODEX_APP_SERVER_STDERR_DRAIN_TIMEOUT_MS),
+        Effect.map((drainResult) => {
+          const diagnostic = readStderr();
+          return new CodexError.CodexAppServerProcessExitedError({
+            code,
+            pid: handle.pid,
+            ...diagnostic,
+            ...(Option.isNone(drainResult) ? { stderrTruncated: true } : {}),
+          });
+        }),
       ),
   });
