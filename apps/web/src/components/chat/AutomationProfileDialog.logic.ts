@@ -129,16 +129,9 @@ export function automationWorkspaceCapabilities(input: {
   readonly run: AutomationRun | null;
 }) {
   const terminal = input.run?.status === "cancelled" || input.run?.status === "failed";
-  const missingRequiredSecret = input.validation?.diagnostics.some(
-    (diagnostic) => diagnostic.code === "missing_secret",
-  );
   return {
     validate: !input.pending,
-    start:
-      !input.pending &&
-      input.validation?.valid === true &&
-      !missingRequiredSecret &&
-      input.run === null,
+    start: !input.pending && input.validation?.valid === true && input.run === null,
     inspect: !input.pending && input.run !== null,
     pause: !input.pending && input.run?.status === "running",
     resume: !input.pending && input.run?.status === "suspended",

@@ -3,10 +3,13 @@ import { type ReactNode } from "react";
 import { RIGHT_PANEL_SHEET_CLASS_NAME } from "../rightPanelLayout";
 import { Sheet, SheetDescription, SheetPopup, SheetTitle } from "./ui/sheet";
 
+export const RIGHT_PANEL_TOGGLE_ID = "workspace-right-panel-toggle";
+
 export function RightPanelSheet(props: {
   children: ReactNode;
   open: boolean;
   onClose: () => void;
+  returnFocusId?: string;
 }) {
   return (
     <Sheet
@@ -14,6 +17,10 @@ export function RightPanelSheet(props: {
       onOpenChange={(open) => {
         if (!open) {
           props.onClose();
+          const returnFocusId = props.returnFocusId;
+          if (returnFocusId) {
+            requestAnimationFrame(() => document.getElementById(returnFocusId)?.focus());
+          }
         }
       }}
     >
@@ -21,6 +28,7 @@ export function RightPanelSheet(props: {
         side="right"
         showCloseButton={false}
         keepMounted
+        finalFocus={props.returnFocusId ? false : undefined}
         className={RIGHT_PANEL_SHEET_CLASS_NAME}
       >
         <SheetTitle className="sr-only">Workspace panel</SheetTitle>

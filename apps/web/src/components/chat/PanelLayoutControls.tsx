@@ -1,6 +1,7 @@
 import { Maximize2Icon, Minimize2Icon, PanelBottomIcon, PanelRightIcon } from "lucide-react";
 import { memo } from "react";
 
+import { RIGHT_PANEL_TOGGLE_ID } from "../RightPanelSheet";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
@@ -56,6 +57,7 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
         <TooltipTrigger
           render={
             <Toggle
+              id={RIGHT_PANEL_TOGGLE_ID}
               className="shrink-0 [-webkit-app-region:no-drag]"
               pressed={rightPanelOpen}
               onPressedChange={onToggleRightPanel}

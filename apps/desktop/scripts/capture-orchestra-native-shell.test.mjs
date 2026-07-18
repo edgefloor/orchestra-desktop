@@ -33,6 +33,7 @@ describe("native-shell acceptance capture contract", () => {
   });
 
   it("requires the exact all-true semantic assertion set", () => {
+    expect(ORCHESTRA_NATIVE_SHELL_ASSERTIONS).toContain("nativeDogfoodProviderRestartRecovered");
     const assertions = Object.fromEntries(
       ORCHESTRA_NATIVE_SHELL_ASSERTIONS.map((name) => [
         name,
@@ -48,6 +49,39 @@ describe("native-shell acceptance capture contract", () => {
     ).toThrow("guestRecovered");
     const { guestRecovered: _removed, ...missing } = assertions;
     expect(() => assertNativeShellAssertions(missing)).toThrow("sealed contract");
+  });
+
+  it("seals both themes and real narrow drawer scenarios", () => {
+    expect(ORCHESTRA_NATIVE_SHELL_SCREENSHOTS).toEqual([
+      {
+        scenario: "native-browser-1440x900-dark",
+        width: 1440,
+        height: 900,
+        theme: "dark",
+        drawerOpen: false,
+      },
+      {
+        scenario: "native-browser-1440x900-light",
+        width: 1440,
+        height: 900,
+        theme: "light",
+        drawerOpen: false,
+      },
+      {
+        scenario: "native-workspace-1024x768-dark-drawer",
+        width: 1024,
+        height: 768,
+        theme: "dark",
+        drawerOpen: true,
+      },
+      {
+        scenario: "native-workspace-1024x768-light-drawer",
+        width: 1024,
+        height: 768,
+        theme: "light",
+        drawerOpen: true,
+      },
+    ]);
   });
 
   it("enters Electron child mode only for the explicit acceptance capability", () => {

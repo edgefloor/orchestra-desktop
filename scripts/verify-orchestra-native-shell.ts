@@ -44,6 +44,7 @@ const REQUIRED_NATIVE_SHELL_SOURCE_FILES = [
   "apps/desktop/scripts/capture-orchestra-native-shell.mjs",
   "scripts/lib/orchestra-evidence-verifier.ts",
   "scripts/lib/orchestra-evidence-primitives.mjs",
+  "scripts/lib/orchestra-native-dogfood-contract.mjs",
   "scripts/lib/orchestra-native-shell-contract.mjs",
   "scripts/verify-orchestra-native-shell.ts",
 ] as const;
@@ -51,7 +52,16 @@ const REQUIRED_NATIVE_SHELL_SOURCE_FILES = [
 const screenshotsByName = Object.fromEntries(
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS.map((scenario) => [scenario.scenario, scenario]),
 ) as Readonly<
-  Record<string, { readonly scenario: string; readonly width: number; readonly height: number }>
+  Record<
+    string,
+    {
+      readonly scenario: string;
+      readonly width: number;
+      readonly height: number;
+      readonly theme: "dark" | "light";
+      readonly drawerOpen: boolean;
+    }
+  >
 >;
 
 export const ORCHESTRA_NATIVE_SHELL_SCREENSHOT_NAMES = Object.freeze(
@@ -75,6 +85,7 @@ export async function verifyOrchestraNativeShell(
       "id",
       "role",
       "desktop",
+      "codex",
       "capture",
       "productionEntry",
       "buildArtifacts",
@@ -108,6 +119,19 @@ export async function verifyOrchestraNativeShell(
     tree: desktop.tree,
     requiredSourceFiles: REQUIRED_NATIVE_SHELL_SOURCE_FILES,
   });
+
+  requireFields(
+    typedManifest.codex,
+    ["repository", "commit", "tree", "binarySha256"],
+    "manifest.codex",
+  );
+  const codex = typedManifest.codex as Record<string, unknown>;
+  if (codex.repository !== "edgefloor/orchestra-codex") {
+    throw new Error("manifest.codex.repository must be edgefloor/orchestra-codex");
+  }
+  requireGitObjectId(codex.commit, "manifest.codex.commit");
+  requireGitObjectId(codex.tree, "manifest.codex.tree");
+  requireSha256(codex.binarySha256, "manifest.codex.binarySha256");
 
   requireFields(
     typedManifest.capture,
@@ -206,7 +230,9 @@ export async function verifyOrchestraNativeShell(
     if (screenshot.deviceScaleFactor !== 1) {
       throw new Error(`${context}.deviceScaleFactor must be 1`);
     }
-    if (screenshot.theme !== "dark") throw new Error(`${context}.theme must be dark`);
+    if (screenshot.theme !== contract.theme) {
+      throw new Error(`${context}.theme must be ${contract.theme}`);
+    }
     requireFields(
       screenshot.layout,
       [
@@ -215,6 +241,7 @@ export async function verifyOrchestraNativeShell(
         "overflow",
         "browserVisible",
         "narrowDisclosure",
+        "drawerOpen",
         "webviewRect",
         "wrapperRect",
       ],
@@ -224,7 +251,8 @@ export async function verifyOrchestraNativeShell(
     if (
       layout.width !== contract.width ||
       layout.height !== contract.height ||
-      layout.overflow !== true
+      layout.overflow !== true ||
+      layout.drawerOpen !== contract.drawerOpen
     ) {
       throw new Error(`${context}.layout must match the viewport without horizontal overflow`);
     }

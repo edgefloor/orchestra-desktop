@@ -271,7 +271,7 @@ import {
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useComposerHandleContext } from "../composerHandleContext";
 import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
-import { RightPanelSheet } from "./RightPanelSheet";
+import { RIGHT_PANEL_TOGGLE_ID, RightPanelSheet } from "./RightPanelSheet";
 import { previewEnvironment } from "../state/preview";
 import { useAtomCommand } from "../state/use-atom-command";
 import { Button } from "./ui/button";
@@ -6236,7 +6236,11 @@ function ChatViewContent(props: ChatViewProps) {
         </RightPanelTabs>
       ) : null}
       {shouldUsePlanSidebarSheet && rightPanelOpen && activeThreadRef ? (
-        <RightPanelSheet open onClose={planSidebarOpen ? closePlanSidebar : closePreviewPanel}>
+        <RightPanelSheet
+          open
+          onClose={planSidebarOpen ? closePlanSidebar : closePreviewPanel}
+          returnFocusId={RIGHT_PANEL_TOGGLE_ID}
+        >
           <RightPanelTabs
             mode="sheet"
             layoutControls={panelToggleControls}

@@ -602,7 +602,7 @@ describe("Automation workspace lifecycle", () => {
     });
   });
 
-  it("does not enable production start while required native secrets are missing", () => {
+  it("allows a valid production root to start with skipped intake while a tracker secret is missing", () => {
     expect(
       automationWorkspaceCapabilities({
         pending: false,
@@ -620,6 +620,6 @@ describe("Automation workspace lifecycle", () => {
           ],
         },
       }).start,
-    ).toBe(false);
+    ).toBe(true);
   });
 });
