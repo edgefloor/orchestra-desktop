@@ -208,9 +208,11 @@ export function isNativeWorkflowLifecycleObservation(observation) {
   return (
     observation?.sameRun === true &&
     observation.waiting?.runLabels.length === 1 &&
-    observation.waiting.text.includes("Waiting") &&
+    observation.waiting.runStatuses.length === 1 &&
+    observation.waiting.runStatuses[0] === "waiting" &&
     observation.completed?.runLabels.length === 1 &&
-    observation.completed.text.includes("Completed")
+    observation.completed.runStatuses.length === 1 &&
+    observation.completed.runStatuses[0] === "completed"
   );
 }
 

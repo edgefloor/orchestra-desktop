@@ -724,8 +724,22 @@ describe("native-shell acceptance capture contract", () => {
       evaluate: () =>
         isNativeWorkflowLifecycleObservation({
           sameRun: true,
-          waiting: { runLabels: ["run-cycle8", "run-cycle8-duplicate"], text: "Waiting" },
-          completed: { runLabels: ["run-cycle8"], text: "Completed" },
+          waiting: {
+            runLabels: ["run-cycle8", "run-cycle8-duplicate"],
+            runStatuses: ["waiting", "waiting"],
+          },
+          completed: { runLabels: ["run-cycle8"], runStatuses: ["completed"] },
+        }),
+    },
+    {
+      failure: "stale root Run status",
+      assertion: "nativeWorkflowLifecycleRendered",
+      observed: { waiting: "waiting", completed: "running" },
+      evaluate: () =>
+        isNativeWorkflowLifecycleObservation({
+          sameRun: true,
+          waiting: { runLabels: ["run-cycle8"], runStatuses: ["waiting"] },
+          completed: { runLabels: ["run-cycle8"], runStatuses: ["running"] },
         }),
     },
     {

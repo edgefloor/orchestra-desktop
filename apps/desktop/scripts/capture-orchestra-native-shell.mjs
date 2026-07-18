@@ -59,9 +59,12 @@ import {
   buildNativeDogfoodFixtures,
   matchNativeDogfoodResponsesRequest,
   NativeDogfoodContractError,
+  ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID,
   ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME,
   ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH,
   ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID,
+  ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
+  ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME,
   ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT,
   ORCHESTRA_NATIVE_DOGFOOD_PARENT_PROMPT,
   ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,
@@ -1168,6 +1171,59 @@ async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelec
   );
 }
 
+async function observeNativeChildProjection(renderer, workflowRunSelector, context) {
+  return renderer.executeJavaScript(
+    `new Promise((resolve, reject) => {
+      const deadline = window.setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
+      }, 45000);
+      const complete = () => {
+        const run = document.querySelector(${JSON.stringify(workflowRunSelector)});
+        if (!(run instanceof HTMLElement)) return;
+        const runDisclosure = run.querySelector(':scope > div > button[aria-controls]');
+        if (runDisclosure instanceof HTMLButtonElement && runDisclosure.getAttribute('aria-expanded') === 'false') {
+          runDisclosure.click();
+          return;
+        }
+        if (run.innerText.includes('Loading bounded native run tree…')) return;
+        const stepButton = [...run.querySelectorAll('button[aria-controls]')]
+          .find((button) => button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID)}));
+        if (!(stepButton instanceof HTMLButtonElement)) return;
+        if (stepButton.getAttribute('aria-expanded') === 'false') {
+          stepButton.click();
+          return;
+        }
+        const step = stepButton.parentElement;
+        if (!(step instanceof HTMLElement) || step.innerText.includes('Loading step outputs and evidence references…')) return;
+        const child = [...step.querySelectorAll('p')]
+          .find((node) => node.textContent?.trim().startsWith('Child '));
+        const outputName = [...step.querySelectorAll('span')]
+          .find((node) => node.textContent?.trim() === ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME)});
+        const outputCard = outputName?.parentElement?.parentElement;
+        const outputValue = outputCard?.querySelector('pre');
+        if (!(child instanceof HTMLElement) || !(outputName instanceof HTMLElement) || !(outputValue instanceof HTMLElement)) return;
+        const childText = child.innerText;
+        const valueText = outputValue.innerText;
+        window.clearTimeout(deadline);
+        observer.disconnect();
+        resolve({
+          stepId: ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID)},
+          childText: childText.slice(0, 1000),
+          childTextTruncated: childText.length > 1000,
+          outputName: outputName.innerText.trim(),
+          outputValue: valueText.slice(0, 4000),
+          outputValueTruncated: valueText.length > 4000,
+        });
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
+      complete();
+    })`,
+    true,
+  );
+}
+
 async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, context) {
   return renderer.executeJavaScript(
     `new Promise((resolve, reject) => {
@@ -1402,12 +1458,22 @@ async function observeDocumentText(renderer, requiredTexts, context) {
 
 async function observeWorkspaceContext(
   renderer,
-  { tabSelector, sectionLabel, requiredTexts, expectedRunLabels, expectedRunCount, context },
+  {
+    tabSelector,
+    sectionLabel,
+    requiredTexts,
+    expectedRunLabels,
+    expectedRunCount,
+    expectedRunStatus = null,
+    context,
+  },
 ) {
   return renderer.executeJavaScript(
     `new Promise((resolve, reject) => {
       const required = ${JSON.stringify(requiredTexts)}.map((text) => text.toLowerCase());
       const expectedLabels = ${JSON.stringify(expectedRunLabels)};
+      const expectedStatus = ${JSON.stringify(expectedRunStatus)};
+      const statusLabels = new Set(['cancelled', 'completed', 'failed', 'paused', 'queued', 'recovering', 'running', 'unavailable', 'waiting']);
       let clicked = false;
       const deadline = window.setTimeout(() => {
         observer.disconnect();
@@ -1425,11 +1491,21 @@ async function observeWorkspaceContext(
         if (!(section instanceof HTMLElement)) return;
         const text = section.innerText;
         if (!required.every((value) => text.toLowerCase().includes(value))) return;
-        const runLabels = [...section.querySelectorAll('section[aria-label^="Workflow run "]')]
-          .map((node) => node.getAttribute('aria-label'))
+        const runs = [...section.querySelectorAll('section[aria-label^="Workflow run "]')];
+        const runLabels = runs
+          .map((run) => run.getAttribute('aria-label'))
           .filter(Boolean);
+        const runStatuses = runs.map((run) => {
+          const rootDisclosure = run.querySelector(':scope > div > button[aria-controls]');
+          if (!(rootDisclosure instanceof HTMLButtonElement)) return null;
+          return [...rootDisclosure.children]
+            .filter((child) => child instanceof HTMLElement)
+            .map((child) => child.innerText.trim().toLowerCase())
+            .find((value) => statusLabels.has(value)) ?? null;
+        });
         if (${JSON.stringify(expectedRunCount)} !== null && runLabels.length !== ${JSON.stringify(expectedRunCount)}) return;
         if (expectedLabels !== null && JSON.stringify(runLabels) !== JSON.stringify(expectedLabels)) return;
+        if (expectedStatus !== null && !runStatuses.every((status) => status === expectedStatus)) return;
         window.clearTimeout(deadline);
         observer.disconnect();
         resolve({
@@ -1437,6 +1513,7 @@ async function observeWorkspaceContext(
           text: text.slice(0, 4000),
           textTruncated: text.length > 4000,
           runLabels,
+          runStatuses,
           expandedButtons: section.querySelectorAll('button[aria-expanded="true"]').length,
           collapsedButtons: section.querySelectorAll('button[aria-expanded="false"]').length,
         });
@@ -1850,6 +1927,7 @@ async function runElectronChild() {
 
     const nativeDogfoodObservation = {
       workflow: { waiting: null, completed: null, sameRun: false },
+      child: null,
       attention: { waiting: null, completed: null },
       evidence: null,
       symphony: null,
@@ -1913,6 +1991,7 @@ async function runElectronChild() {
       requiredTexts: ["Waiting"],
       expectedRunLabels: null,
       expectedRunCount: 1,
+      expectedRunStatus: "waiting",
       context: "rendered waiting native Run",
     });
     nativeDogfoodObservation.workflow.waiting = waitingWorkflowView;
@@ -1974,6 +2053,7 @@ async function runElectronChild() {
       requiredTexts: ["Completed"],
       expectedRunLabels: [waitingRunLabel],
       expectedRunCount: 1,
+      expectedRunStatus: "completed",
       context: "same rendered native Run after completion",
     });
     nativeDogfoodObservation.workflow.completed = completedWorkflowView;
@@ -1984,6 +2064,11 @@ async function runElectronChild() {
       completedWorkflowView.runLabels[0] === waitingRunLabel;
 
     const workflowRunSelector = `[aria-label=${JSON.stringify(waitingRunLabel)}]`;
+    nativeDogfoodObservation.child = await observeNativeChildProjection(
+      renderer,
+      workflowRunSelector,
+      "native child projection",
+    );
     const evidenceBefore = await observeNativeGitCheckEvidenceReference(
       renderer,
       workflowRunSelector,
@@ -2161,6 +2246,7 @@ async function runElectronChild() {
       requiredTexts: ["Completed"],
       expectedRunLabels: [waitingRunLabel],
       expectedRunCount: 1,
+      expectedRunStatus: "completed",
       context: "same native Run after renderer reload",
     });
     const reloadEvidence = await observeExpandedWorkflowEvidence(
@@ -2267,6 +2353,7 @@ async function runElectronChild() {
       requiredTexts: ["Completed"],
       expectedRunLabels: [waitingRunLabel],
       expectedRunCount: 1,
+      expectedRunStatus: "completed",
       context: "same native Run after provider restart",
     });
     const restartEvidence = await observeExpandedWorkflowEvidence(
@@ -2658,9 +2745,14 @@ async function runElectronChild() {
           /^[0-9a-f]{64}$/.test(dogfoodCodexIdentity.binarySha256),
       ),
       nativeChildProjected: makeNativeShellAssertion(
-        nativeDogfoodObservation.evidence?.after,
-        nativeDogfoodObservation.evidence?.after?.runText.includes("Child /root/") === true &&
-          nativeDogfoodObservation.evidence.after.runText.includes("deterministic native child"),
+        nativeDogfoodObservation.child,
+        nativeDogfoodObservation.child?.stepId === ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID &&
+          nativeDogfoodObservation.child.childText.includes("Child /root/") &&
+          nativeDogfoodObservation.child.outputName ===
+            ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME &&
+          nativeDogfoodObservation.child.outputValue.includes(
+            ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
+          ),
       ),
       nativeWorkflowLifecycleRendered: makeNativeShellAssertion(
         nativeDogfoodObservation.workflow,

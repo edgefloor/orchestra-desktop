@@ -37,6 +37,11 @@ import {
   readPngDimensions as readNativeShellPngDimensions,
   sha256,
 } from "./lib/orchestra-evidence-primitives.mjs";
+import {
+  ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID,
+  ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
+  ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME,
+} from "./lib/orchestra-native-dogfood-contract.mjs";
 
 export {
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
@@ -113,6 +118,7 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
       "waitingProjectionVisible",
       "completedProjectionVisible",
       "workflow",
+      "child",
       "attention",
       "evidence",
       "symphony",
@@ -153,6 +159,36 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     throw new Error("manifest.runtime.nativeDogfood.workflow.completed must identify one Run");
   }
   const workflowRunLabel = completedRunLabels[0];
+
+  const child = record(dogfood.child, "manifest.runtime.nativeDogfood.child");
+  requireFields(
+    child,
+    [
+      "stepId",
+      "childText",
+      "childTextTruncated",
+      "outputName",
+      "outputValue",
+      "outputValueTruncated",
+    ],
+    "manifest.runtime.nativeDogfood.child",
+  );
+  if (
+    child.stepId !== ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID ||
+    !stringField(child.childText, "manifest.runtime.nativeDogfood.child.childText").includes(
+      "Child /root/",
+    ) ||
+    child.outputName !== ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME ||
+    !stringField(child.outputValue, "manifest.runtime.nativeDogfood.child.outputValue").includes(
+      ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
+    ) ||
+    child.childTextTruncated !== false ||
+    child.outputValueTruncated !== false
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.child must contain the genuine bounded native child projection",
+    );
+  }
 
   const attention = record(dogfood.attention, "manifest.runtime.nativeDogfood.attention");
   const waitingAttention = record(
@@ -198,19 +234,6 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
       "manifest.runtime.nativeDogfood.evidence.after must prove the exact verify-native-repository check",
     );
   }
-  const expandedRunText = stringField(
-    expandedEvidence.runText,
-    "manifest.runtime.nativeDogfood.evidence.after.runText",
-  );
-  if (
-    !expandedRunText.includes("Child /root/") ||
-    !expandedRunText.includes("deterministic native child")
-  ) {
-    throw new Error(
-      "manifest.runtime.nativeDogfood.evidence must contain the genuine native child",
-    );
-  }
-
   const symphony = record(dogfood.symphony, "manifest.runtime.nativeDogfood.symphony");
   const symphonyValidation = record(
     symphony.validation,
@@ -1105,7 +1128,7 @@ export async function verifyOrchestraNativeShell(
   requireSameObservation("nativeDogfoodResponsesExact", {
     requestCount: nativeDogfood.responsesRequestCount,
   });
-  requireSameObservation("nativeChildProjected", record(nativeDogfood.evidence, "evidence").after);
+  requireSameObservation("nativeChildProjected", nativeDogfood.child);
   requireSameObservation("nativeWorkflowLifecycleRendered", nativeDogfood.workflow);
   requireSameObservation("nativeAttentionResolved", nativeDogfood.attention);
   requireSameObservation("nativeEvidenceLazyExpanded", nativeDogfood.evidence);

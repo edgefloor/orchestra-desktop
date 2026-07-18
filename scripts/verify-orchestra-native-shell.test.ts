@@ -321,6 +321,7 @@ async function makeFixture(
     label: "Task Workflow Runs",
     text: "Waiting",
     runLabels: ["Workflow run run-cycle8"],
+    runStatuses: ["waiting"],
     expandedButtons: 0,
     collapsedButtons: 1,
   };
@@ -328,6 +329,7 @@ async function makeFixture(
     label: "Task Workflow Runs",
     text: "Completed",
     runLabels: ["Workflow run run-cycle8"],
+    runStatuses: ["completed"],
     expandedButtons: 1,
     collapsedButtons: 0,
   };
@@ -363,8 +365,16 @@ async function makeFixture(
         stdout: "true\n",
         stderr: "",
       },
-      runText: "Child /root/child deterministic native child Plain-text preview",
+      runText: "Plain-text preview",
     },
+  };
+  const child = {
+    stepId: "inspect-native-runtime",
+    childText: "Child /root/child · child-thread",
+    childTextTruncated: false,
+    outputName: "finding",
+    outputValue: '"deterministic native child"',
+    outputValueTruncated: false,
   };
   const symphony = {
     validation: {
@@ -418,6 +428,7 @@ async function makeFixture(
     waitingProjectionVisible: true,
     completedProjectionVisible: true,
     workflow,
+    child,
     attention,
     evidence,
     symphony,
@@ -453,7 +464,7 @@ async function makeFixture(
     ]),
   );
   assertions.nativeDogfoodResponsesExact = makeNativeShellAssertion({ requestCount: 5 }, true);
-  assertions.nativeChildProjected = makeNativeShellAssertion(evidence.after, true);
+  assertions.nativeChildProjected = makeNativeShellAssertion(child, true);
   assertions.nativeWorkflowLifecycleRendered = makeNativeShellAssertion(workflow, true);
   assertions.nativeAttentionResolved = makeNativeShellAssertion(attention, true);
   assertions.nativeEvidenceLazyExpanded = makeNativeShellAssertion(evidence, true);
@@ -981,7 +992,6 @@ describe("Orchestra native-shell evidence verifier", () => {
       const dogfood = manifest.runtime.nativeDogfood;
       const evidence = dogfood.evidence as { after: Record<string, unknown> };
       evidence.after.evidenceId = "f".repeat(64);
-      manifest.assertions.nativeChildProjected!.observed = evidence.after;
       manifest.assertions.nativeEvidenceLazyExpanded!.observed = evidence;
     });
     await expect(
@@ -1018,6 +1028,18 @@ describe("Orchestra native-shell evidence verifier", () => {
       verifyOrchestraNativeShell({ rootDir: wrongRestartEvidence.rootDir }),
     ).rejects.toThrow(
       "manifest.runtime.nativeDogfood.restart must recover the same Run, Evidence, and Root after a stopped/ready provider cycle",
+    );
+  });
+
+  it("requires the exact bounded native child projection", async () => {
+    const wrongChild = await makeFixture((manifest) => {
+      const child = manifest.runtime.nativeDogfood.child as Record<string, unknown>;
+      child.outputValue = '"fabricated child"';
+      manifest.assertions.nativeChildProjected!.observed = child;
+    });
+
+    await expect(verifyOrchestraNativeShell({ rootDir: wrongChild.rootDir })).rejects.toThrow(
+      "manifest.runtime.nativeDogfood.child must contain the genuine bounded native child projection",
     );
   });
 

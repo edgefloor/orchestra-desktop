@@ -15,6 +15,8 @@ export const ORCHESTRA_NATIVE_DOGFOOD_RESUME_CALL_ID = "call-cycle8-orchestra-re
 export const ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT = 5;
 export const ORCHESTRA_NATIVE_DOGFOOD_MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID = "verify-native-repository";
+export const ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID = "inspect-native-runtime";
+export const ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME = "finding";
 export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME = `${ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID}-1.json`;
 export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH = `checks/${ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_NAME}`;
 export const ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT =
@@ -22,7 +24,6 @@ export const ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT =
 
 const providerId = "orchestra_native_dogfood";
 const model = "gpt-5.4";
-const agentStepId = "inspect-native-runtime";
 const checkStepId = ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID;
 const approvalStepId = "accept-native-finding";
 const missingLinearCredential = "ORCHESTRA_NATIVE_DOGFOOD_LINEAR_API_KEY";
@@ -30,7 +31,7 @@ const functionArguments = JSON.stringify({
   workflow_path: ORCHESTRA_NATIVE_DOGFOOD_WORKFLOW_PATH,
 });
 const childOutput = JSON.stringify({
-  finding: ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
+  [ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME]: ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
 });
 const waitingAssistantText = "Native workflow is waiting for approval.";
 
@@ -141,11 +142,11 @@ export default workflow({
   max_parallel: 1,
   steps: [pipeline([
     agent({
-      id: "${agentStepId}",
+      id: "${ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID}",
       prompt: "${ORCHESTRA_NATIVE_DOGFOOD_CHILD_PROMPT}",
       model: "${model}",
       reasoning_effort: "low",
-      outputs: ["finding"],
+      outputs: ["${ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME}"],
     }),
     check({ id: "${checkStepId}", command: ["git", "rev-parse", "--is-inside-work-tree"] }),
     approval({
@@ -402,7 +403,7 @@ function finalResponseDiagnostic(outcome, checkpoint, step) {
 
 function assertWaitingOutcome(outcome) {
   const checkpoint = outcomeCheckpoint(outcome, "Paused", "workflow_projection_mismatch");
-  const step = checkpoint.steps?.[agentStepId] ?? null;
+  const step = checkpoint.steps?.[ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID] ?? null;
   if (typeof step?.final_response !== "string") {
     contractError(
       "workflow_projection_mismatch",
@@ -519,7 +520,7 @@ function assertResumeTurnRequest(body) {
 
 function assertCompletedOutcome(outcome, runId) {
   const checkpoint = outcomeCheckpoint(outcome, "Completed", "resume_projection_mismatch");
-  const agentStep = checkpoint.steps?.[agentStepId] ?? null;
+  const agentStep = checkpoint.steps?.[ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID] ?? null;
   if (typeof agentStep?.final_response !== "string") {
     contractError(
       "resume_projection_mismatch",
