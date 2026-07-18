@@ -373,6 +373,21 @@ async function probeSymphonyInteractions(webContents, requestedView) {
       tab(requestedView)?.click();
       await settle();
       const requestedViewSelected = tab(requestedView)?.getAttribute('aria-selected') === 'true';
+      const recoveryPanel = document.querySelector('[aria-label="Automation recovery"]');
+      const recoveryCard = recoveryPanel?.querySelector('article');
+      const symphonyScroll = document.querySelector('[data-automation-workspace-scroll]');
+      if (requestedView === 'recovery' && recoveryPanel && symphonyScroll) {
+        symphonyScroll.scrollTop += recoveryPanel.getBoundingClientRect().top - symphonyScroll.getBoundingClientRect().top - 8;
+        await settle();
+      }
+      const recoveryCardBounds = recoveryCard?.getBoundingClientRect();
+      const symphonyScrollBounds = symphonyScroll?.getBoundingClientRect();
+      const recoveryContentVisibleAtCapture =
+        requestedView === 'recovery' &&
+        recoveryCardBounds !== undefined &&
+        symphonyScrollBounds !== undefined &&
+        recoveryCardBounds.bottom > symphonyScrollBounds.top &&
+        recoveryCardBounds.top < symphonyScrollBounds.bottom;
       return {
         symphonyTabsInteractive: activitySelected && recoverySelected && eventsSelected,
         symphonyKeyboardNavigation: activityFocused && recoveryFocused && eventsFocused,
@@ -382,6 +397,7 @@ async function probeSymphonyInteractions(webContents, requestedView) {
         symphonyEffectResolutionUnavailable: effectResolutionUnavailable,
         symphonyStaleFeedbackVisible: staleFeedbackVisible,
         symphonyRecoverySelectedAtCapture: requestedView === 'recovery' && requestedViewSelected,
+        symphonyRecoveryContentVisibleAtCapture: recoveryContentVisibleAtCapture,
         symphonySelectionReconciles: queueSelection && claimSelection,
         symphonyActionsWired: actions.cancelledClaimId === 'claim-orc-70' && actions.openedIssueId === 'issue-orc-70',
       };
