@@ -425,6 +425,24 @@ export function createNativeShellResponsesRequestJournal({
   });
 }
 
+export async function withNativeShellDiagnosticDeadline(collect, { timeoutMs = 2_000 } = {}) {
+  const abortController = new AbortController();
+  let timeout;
+  try {
+    return await Promise.race([
+      collect(abortController.signal),
+      new Promise((resolve) => {
+        timeout = setTimeout(() => {
+          abortController.abort();
+          resolve({ status: "diagnostic-timeout", timeoutMs });
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function scrubProviderCredentials(environment) {
   for (const key of Object.keys(environment)) {
     if (
@@ -690,11 +708,12 @@ async function dispatchCommand(baseUrl, token, command) {
   return body.length > 0 ? JSON.parse(body) : null;
 }
 
-async function fetchThreadSnapshot(baseUrl, token, targetThreadId) {
+async function fetchThreadSnapshot(baseUrl, token, targetThreadId, signal) {
   const response = await fetch(
     new URL(`/api/orchestration/threads/${encodeURIComponent(targetThreadId)}`, baseUrl),
     {
       headers: { authorization: `Bearer ${token}` },
+      signal,
     },
   );
   const body = await response.text();
@@ -1360,17 +1379,19 @@ async function collectNativeDogfoodTimeoutDiagnostic({
   requestCounter,
   requestJournal,
 }) {
-  const thread = await fetchThreadSnapshot(baseUrl, token, targetThreadId)
-    .then(boundedThreadSessionObservation)
-    .catch((error) => ({
-      readError: String(error instanceof Error ? error.message : error).slice(0, 320),
-    }));
-  return {
-    responsesRequestCount: requestCounter.count,
-    requests: requestJournal.snapshot(),
-    thread,
-    runs: await readNativeDogfoodRunStateSummaries(repository),
-  };
+  return withNativeShellDiagnosticDeadline(async (signal) => {
+    const thread = await fetchThreadSnapshot(baseUrl, token, targetThreadId, signal)
+      .then(boundedThreadSessionObservation)
+      .catch((error) => ({
+        readError: String(error instanceof Error ? error.message : error).slice(0, 320),
+      }));
+    return {
+      responsesRequestCount: requestCounter.count,
+      requests: requestJournal.snapshot(),
+      thread,
+      runs: await readNativeDogfoodRunStateSummaries(repository),
+    };
+  });
 }
 
 async function runElectronChild() {

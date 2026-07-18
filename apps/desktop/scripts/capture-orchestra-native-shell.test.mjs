@@ -20,6 +20,7 @@ import {
   executeNativeShellRendererStep,
   prepareNativeShellGitFixture,
   readNativeDogfoodRunStateSummaries,
+  withNativeShellDiagnosticDeadline,
   withNativeShellEventTimeout,
 } from "./capture-orchestra-native-shell.mjs";
 
@@ -53,6 +54,20 @@ import {
 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 
 describe("native-shell acceptance capture contract", () => {
+  it("bounds a never-settling timeout diagnostic and aborts its snapshot work", async () => {
+    let signal;
+    const diagnostic = await withNativeShellDiagnosticDeadline(
+      (nextSignal) => {
+        signal = nextSignal;
+        return new Promise(() => {});
+      },
+      { timeoutMs: 5 },
+    );
+
+    expect(diagnostic).toEqual({ status: "diagnostic-timeout", timeoutMs: 5 });
+    expect(signal.aborted).toBe(true);
+  });
+
   it("journals Responses request timing without retaining bodies", () => {
     let now = 1_000;
     const journal = createNativeShellResponsesRequestJournal({
