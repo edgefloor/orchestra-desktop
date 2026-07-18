@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  EvidenceIdentity,
   findRequestedEvidenceReference,
   OrchestraLifecycleEntry,
   readOrchestraReplayEvent,
@@ -70,7 +71,16 @@ describe("OrchestraLifecycleEntry", () => {
     expect(lifecycleSource).toContain("min-h-6 w-full");
     expect(lifecycleSource).toContain("pointer-coarse:min-h-11");
     expect(lifecycleSource).toContain('role="alert"');
-    expect(lifecycleSource).toContain('aria-label="Evidence identity"');
+    expect(lifecycleSource).toContain("data-evidence-identity");
+  });
+
+  it("renders the actual Evidence identity for sighted and assistive readers", () => {
+    const markup = renderToStaticMarkup(<EvidenceIdentity identity="baa13f55437f" />);
+
+    expect(markup).toContain('data-evidence-identity="baa13f55437f"');
+    expect(markup).toContain("Evidence identity: baa13f55437f");
+    expect(markup).toContain('aria-hidden="true">id baa13f55437f');
+    expect(markup).not.toContain("aria-label=");
   });
 
   it("emits workspace descriptors only while opening run and evidence disclosures", () => {

@@ -113,6 +113,15 @@ function BoundedText(props: {
   );
 }
 
+export function EvidenceIdentity({ identity }: { readonly identity: string }) {
+  return (
+    <span data-evidence-identity={identity}>
+      <span className="sr-only">Evidence identity: {identity}</span>
+      <span aria-hidden="true">id {identity}</span>
+    </span>
+  );
+}
+
 export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(props: {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
@@ -599,7 +608,7 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                               <span>{reference.availability}</span>
                             </button>
                             <div className="mt-1 flex flex-wrap gap-x-3 font-mono text-[10px]">
-                              <span aria-label="Evidence identity">id {reference.identity}</span>
+                              <EvidenceIdentity identity={reference.identity} />
                               <span>{item.bytes} bytes</span>
                               <span className="break-all">
                                 runtime-reported sha256 {item.sha256 ?? "unavailable"}

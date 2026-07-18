@@ -863,9 +863,13 @@ async function observeNativeGitCheckEvidenceReference(renderer, workflowRunSelec
         const text = evidence.innerText;
         const labels = [...evidenceButton.querySelectorAll(':scope > span')]
           .map((span) => span.textContent?.trim() ?? '');
-        const identityElement = evidence.querySelector('[aria-label="Evidence identity"]');
-        const identityPrefix = identityElement instanceof HTMLElement
-          ? identityElement.textContent?.trim().match(/^id ([0-9a-f]{12})$/)?.[1] ?? null
+        const identityElement = evidence.querySelector('[data-evidence-identity]');
+        const identityAttribute = identityElement instanceof HTMLElement
+          ? identityElement.getAttribute('data-evidence-identity')?.match(/^[0-9a-f]{12}$/)?.[0] ?? null
+          : null;
+        const visibleIdentity = identityElement?.querySelector('[aria-hidden="true"]');
+        const identityPrefix = identityAttribute && visibleIdentity?.textContent?.trim() === 'id ' + identityAttribute
+          ? identityAttribute
           : null;
         window.clearTimeout(deadline);
         observer.disconnect();
@@ -936,9 +940,13 @@ async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, co
         const text = evidence.innerText;
         const labels = [...evidenceButton.querySelectorAll(':scope > span')]
           .map((span) => span.textContent?.trim() ?? '');
-        const identityElement = evidence.querySelector('[aria-label="Evidence identity"]');
-        const identityPrefix = identityElement instanceof HTMLElement
-          ? identityElement.textContent?.trim().match(/^id ([0-9a-f]{12})$/)?.[1] ?? null
+        const identityElement = evidence.querySelector('[data-evidence-identity]');
+        const identityAttribute = identityElement instanceof HTMLElement
+          ? identityElement.getAttribute('data-evidence-identity')?.match(/^[0-9a-f]{12}$/)?.[0] ?? null
+          : null;
+        const visibleIdentity = identityElement?.querySelector('[aria-hidden="true"]');
+        const identityPrefix = identityAttribute && visibleIdentity?.textContent?.trim() === 'id ' + identityAttribute
+          ? identityAttribute
           : null;
         window.clearTimeout(deadline);
         observer.disconnect();

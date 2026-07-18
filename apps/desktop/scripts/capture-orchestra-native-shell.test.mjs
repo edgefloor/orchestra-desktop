@@ -265,15 +265,15 @@ describe("native-shell acceptance capture contract", () => {
     expect(first.digest).toBe(sha256(Buffer.from(JSON.stringify(first.pages))));
   });
 
-  it("reads visible Evidence identity through its structured accessibility label", async () => {
+  it("reads visible Evidence identity through its structured identity attribute", async () => {
     const captureSource = await NodeFSP.readFile(
       NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),
       "utf8",
     );
-    expect(
-      captureSource.match(/querySelector\('\[aria-label="Evidence identity"\]'\)/g),
-    ).toHaveLength(2);
-    expect(captureSource).not.toContain("text.match(/\\bid");
+    expect(captureSource.match(/querySelector\('\[data-evidence-identity\]'\)/g)).toHaveLength(2);
+    expect(captureSource).toContain("getAttribute('data-evidence-identity')");
+    expect(captureSource).toContain("visibleIdentity?.textContent?.trim() === 'id '");
+    expect(captureSource).not.toContain('aria-label="Evidence identity"');
   });
 
   it("requires the exact all-true semantic assertion set", () => {
