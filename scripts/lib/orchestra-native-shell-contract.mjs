@@ -19,6 +19,8 @@ export const ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY = Object.freeze({
   externalMutation: false,
 });
 
+export const ORCHESTRA_NATIVE_SHELL_TERMINAL_TITLE_PATTERN = "^Terminal [1-9][0-9]*$";
+
 export function isNativeShellGitFixtureIdentity(value) {
   return (
     value !== null &&
@@ -28,6 +30,13 @@ export function isNativeShellGitFixtureIdentity(value) {
     value.name === ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY.name &&
     value.transport === ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY.transport &&
     value.externalMutation === ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY.externalMutation
+  );
+}
+
+export function isNativeShellTerminalSurfaceTitle(value) {
+  return (
+    typeof value === "string" &&
+    new RegExp(ORCHESTRA_NATIVE_SHELL_TERMINAL_TITLE_PATTERN).test(value)
   );
 }
 

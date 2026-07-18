@@ -24,6 +24,7 @@ import {
   isNativeGitCheckEvidenceObservation,
   isNativeShellResourceCleanupComplete,
   isNativeShellGitFixtureIdentity,
+  isNativeShellTerminalSurfaceTitle,
   isNativeWorkflowLifecycleObservation,
   isUniqueNativeSymphonyInspection,
   type NativeShellScenario,
@@ -1163,6 +1164,10 @@ export async function verifyOrchestraNativeShell(
     retained.surfaces,
     "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.surfaces",
   );
+  const retainedTerminalSurface = record(
+    retainedSurfaces.Terminal,
+    "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.surfaces.Terminal",
+  );
   const retainedMutations = record(
     retained.mutations,
     "manifest.assertions.retainedDesktopCapabilitiesProbed.observed.mutations",
@@ -1190,10 +1195,12 @@ export async function verifyOrchestraNativeShell(
       stringField(record(item, "vcs item").label, "vcs label").includes("Push"),
     ) ||
     !isNativeShellGitFixtureIdentity(retainedVcs.fixtureRemote) ||
-    !["Files", "Terminal 1", "Browser", "Diff"].every((title) => {
+    !["Files", "Browser", "Diff"].every((title) => {
       const surface = record(retainedSurfaces[title], `retained surface ${title}`);
       return surface.title === title && surface.panelVisible === true;
     }) ||
+    !isNativeShellTerminalSurfaceTitle(retainedTerminalSurface.title) ||
+    retainedTerminalSurface.panelVisible !== true ||
     retainedMutations.commit !== "unobserved" ||
     retainedMutations.push !== "unobserved"
   ) {

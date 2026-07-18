@@ -34,6 +34,7 @@ import {
   isNativeShellProcessGroupEmpty,
   isNativeShellGitFixtureIdentity,
   isNativeShellResourceCleanupComplete,
+  isNativeShellTerminalSurfaceTitle,
   isUniqueNativeSymphonyInspection,
   makeNativeShellAssertion,
   ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY,
@@ -41,6 +42,7 @@ import {
   ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS,
   ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY,
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
+  ORCHESTRA_NATIVE_SHELL_TERMINAL_TITLE_PATTERN,
   reserveNativeShellPort,
   shouldRunNativeShellElectronChild,
   terminateAndVerifyNativeShellResources,
@@ -1000,8 +1002,11 @@ async function observeExpandedWorkflowEvidence(renderer, workflowRunSelector, co
 }
 
 async function observeActiveRightPanelSurface(renderer, expectedTitle, context) {
+  const titleExpectation =
+    typeof expectedTitle === "string" ? { exact: expectedTitle } : expectedTitle;
   return renderer.executeJavaScript(
     `new Promise((resolve, reject) => {
+      const titleExpectation = ${JSON.stringify(titleExpectation)};
       const deadline = window.setTimeout(() => {
         observer.disconnect();
         reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
@@ -1010,7 +1015,10 @@ async function observeActiveRightPanelSurface(renderer, expectedTitle, context) 
         const active = document.querySelector('[role="tab"][aria-selected="true"]');
         if (!(active instanceof HTMLElement)) return;
         const title = active.textContent?.trim() ?? '';
-        if (title !== ${JSON.stringify(expectedTitle)}) return;
+        const titleMatches = typeof titleExpectation.exact === 'string'
+          ? title === titleExpectation.exact
+          : new RegExp(titleExpectation.pattern).test(title);
+        if (!titleMatches) return;
         window.clearTimeout(deadline);
         observer.disconnect();
         resolve({ title, panelVisible: document.querySelector('[role="tabpanel"]') !== null });
@@ -2029,11 +2037,11 @@ async function runElectronChild() {
     retainedDesktopCapabilities.surfaces.Files = await addRightPanelSurface(renderer, "Files", {
       emptyState: true,
     });
-    retainedDesktopCapabilities.surfaces["Terminal 1"] = await addRightPanelSurface(
+    retainedDesktopCapabilities.surfaces.Terminal = await addRightPanelSurface(
       renderer,
       "Terminal",
       {
-        expectedTitle: "Terminal 1",
+        expectedTitle: { pattern: ORCHESTRA_NATIVE_SHELL_TERMINAL_TITLE_PATTERN },
       },
     );
     retainedDesktopCapabilities.surfaces.Browser = await addRightPanelSurface(renderer, "Browser");
@@ -2656,11 +2664,13 @@ async function runElectronChild() {
         retainedDesktopCapabilities.vcs.items.some(({ label }) => label.includes("Push")) ===
           true &&
         isNativeShellGitFixtureIdentity(retainedDesktopCapabilities.vcs.fixtureRemote) &&
-        ["Files", "Terminal 1", "Browser", "Diff"].every(
+        ["Files", "Browser", "Diff"].every(
           (title) =>
             retainedDesktopCapabilities.surfaces[title]?.title === title &&
             retainedDesktopCapabilities.surfaces[title]?.panelVisible === true,
         ) &&
+        isNativeShellTerminalSurfaceTitle(retainedDesktopCapabilities.surfaces.Terminal?.title) &&
+        retainedDesktopCapabilities.surfaces.Terminal.panelVisible === true &&
         retainedDesktopCapabilities.mutations.commit === "unobserved" &&
         retainedDesktopCapabilities.mutations.push === "unobserved",
     );

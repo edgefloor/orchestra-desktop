@@ -438,12 +438,12 @@ async function makeFixture(
       items: [{ label: "Commit" }, { label: "Push" }],
       fixtureRemote: { name: "origin", transport: "local-bare", externalMutation: false },
     },
-    surfaces: Object.fromEntries(
-      ["Files", "Terminal 1", "Browser", "Diff"].map((title) => [
-        title,
-        { title, panelVisible: true },
-      ]),
-    ),
+    surfaces: {
+      ...Object.fromEntries(
+        ["Files", "Browser", "Diff"].map((title) => [title, { title, panelVisible: true }]),
+      ),
+      Terminal: { title: "Terminal 2", panelVisible: true },
+    },
     mutations: { commit: "unobserved", push: "unobserved" },
   };
   const assertions = Object.fromEntries(
@@ -941,6 +941,20 @@ describe("Orchestra native-shell evidence verifier", () => {
     });
     await expect(
       verifyOrchestraNativeShell({ rootDir: externalRetainedRemote.rootDir }),
+    ).rejects.toThrow(
+      "manifest.assertions.retainedDesktopCapabilitiesProbed observed value contradicts passed:true",
+    );
+
+    const invalidTerminalOrdinal = await makeFixture((manifest) => {
+      const observed = manifest.assertions.retainedDesktopCapabilitiesProbed!.observed as Record<
+        string,
+        unknown
+      >;
+      const surfaces = observed.surfaces as Record<string, unknown>;
+      (surfaces.Terminal as Record<string, unknown>).title = "Terminal 0";
+    });
+    await expect(
+      verifyOrchestraNativeShell({ rootDir: invalidTerminalOrdinal.rootDir }),
     ).rejects.toThrow(
       "manifest.assertions.retainedDesktopCapabilitiesProbed observed value contradicts passed:true",
     );

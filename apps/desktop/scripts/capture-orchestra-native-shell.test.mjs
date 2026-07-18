@@ -34,6 +34,7 @@ import {
   isNativeWorkflowLifecycleObservation,
   isNativeShellProcessGroupEmpty,
   isNativeShellResourceCleanupComplete,
+  isNativeShellTerminalSurfaceTitle,
   isUniqueNativeSymphonyInspection,
   makeNativeShellAssertion,
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
@@ -333,6 +334,13 @@ describe("native-shell acceptance capture contract", () => {
     } finally {
       await NodeFSP.rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("accepts a real positive terminal ordinal without assuming it is the first session", () => {
+    expect(isNativeShellTerminalSurfaceTitle("Terminal 1")).toBe(true);
+    expect(isNativeShellTerminalSurfaceTitle("Terminal 2")).toBe(true);
+    expect(isNativeShellTerminalSurfaceTitle("Terminal 0")).toBe(false);
+    expect(isNativeShellTerminalSurfaceTitle("term-2")).toBe(false);
   });
 
   it("requires the exact all-true semantic assertion set", () => {
