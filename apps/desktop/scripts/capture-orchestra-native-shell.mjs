@@ -26,11 +26,13 @@ import {
   cleanupFailedNativeShellCapture,
   createNativeShellRequestCountWaiter,
   isExactNativeDogfoodResponseCount,
+  isNativeGitCheckEvidenceReferenceObservation,
   isNativeGitCheckEvidenceObservation,
   isNarrowDrawerOpenedObservation,
   isNativeEvidenceObservation,
   isNativeWorkflowLifecycleObservation,
   isNativeShellProcessGroupEmpty,
+  isNativeShellResourceCleanupComplete,
   isUniqueNativeSymphonyInspection,
   makeNativeShellAssertion,
   ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY,
@@ -543,7 +545,10 @@ async function launchUnderElectron() {
     const processGroupEmpty = child.pid
       ? isNativeShellProcessGroupEmpty(child.pid, hostPlatform)
       : false;
-    const cleanupVerified = portsClosed && processGroupEmpty !== false;
+    const cleanupVerified = isNativeShellResourceCleanupComplete({
+      portsClosed,
+      processGroupEmpty,
+    });
     const manifest = JSON.parse(await NodeFSP.readFile(manifestPath, "utf8"));
     manifest.runtime.cleanup = { portsClosed, processGroupEmpty };
     manifest.assertions.processCleanupVerified = makeNativeShellAssertion(
@@ -562,7 +567,7 @@ async function launchUnderElectron() {
       ports: [backendPort, guestPort, failurePort, responsesPort],
       platform: hostPlatform,
     });
-    if (!failureCleanup.portsClosed || failureCleanup.processGroupEmpty === false) {
+    if (!isNativeShellResourceCleanupComplete(failureCleanup)) {
       throw new Error(
         `native-shell capture failed and cleanup remained incomplete: ${JSON.stringify(failureCleanup)}`,
         { cause: error },
@@ -1425,6 +1430,11 @@ async function runElectronChild() {
       workflowRunSelector,
       "native git check Evidence reference",
     );
+    if (!isNativeGitCheckEvidenceReferenceObservation(evidenceBefore)) {
+      throw new Error(
+        `native workflow returned the wrong collapsed git check Evidence: ${JSON.stringify(evidenceBefore)}`,
+      );
+    }
     const evidenceAfter = await observeExpandedWorkflowEvidence(
       renderer,
       workflowRunSelector,
@@ -2130,7 +2140,8 @@ async function runElectronChild() {
       ),
       nativeEvidenceLazyExpanded: makeNativeShellAssertion(
         nativeDogfoodObservation.evidence,
-        isNativeEvidenceObservation(nativeDogfoodObservation.evidence) &&
+        isNativeGitCheckEvidenceReferenceObservation(nativeDogfoodObservation.evidence?.before) &&
+          isNativeEvidenceObservation(nativeDogfoodObservation.evidence) &&
           isNativeGitCheckEvidenceObservation(nativeDogfoodObservation.evidence?.after),
       ),
       nativeSymphonySkippedIntake: makeNativeShellAssertion(

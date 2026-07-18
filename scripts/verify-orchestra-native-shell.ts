@@ -20,7 +20,9 @@ import {
   isExactNativeDogfoodResponseCount,
   isNarrowDrawerOpenedObservation,
   isNativeEvidenceObservation,
+  isNativeGitCheckEvidenceReferenceObservation,
   isNativeGitCheckEvidenceObservation,
+  isNativeShellResourceCleanupComplete,
   isNativeWorkflowLifecycleObservation,
   isUniqueNativeSymphonyInspection,
   type NativeShellScenario,
@@ -179,6 +181,15 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     throw new Error("manifest.runtime.nativeDogfood.evidence must prove lazy text expansion");
   }
   const evidence = record(dogfood.evidence, "manifest.runtime.nativeDogfood.evidence");
+  const collapsedEvidence = record(
+    evidence.before,
+    "manifest.runtime.nativeDogfood.evidence.before",
+  );
+  if (!isNativeGitCheckEvidenceReferenceObservation(collapsedEvidence)) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.evidence.before must prove the exact collapsed verify-native-repository reference",
+    );
+  }
   const expandedEvidence = record(evidence.after, "manifest.runtime.nativeDogfood.evidence.after");
   if (!isNativeGitCheckEvidenceObservation(expandedEvidence)) {
     throw new Error(
@@ -1078,7 +1089,7 @@ export async function verifyOrchestraNativeShell(
   }
   requireFields(runtime.cleanup, ["portsClosed", "processGroupEmpty"], "manifest.runtime.cleanup");
   const cleanup = runtime.cleanup as Record<string, unknown>;
-  if (cleanup.portsClosed !== true || cleanup.processGroupEmpty === false) {
+  if (!isNativeShellResourceCleanupComplete(cleanup)) {
     throw new Error("manifest.runtime.cleanup must prove listener and process-group cleanup");
   }
 

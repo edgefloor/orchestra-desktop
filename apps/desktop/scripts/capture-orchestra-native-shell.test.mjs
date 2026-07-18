@@ -13,10 +13,13 @@ import {
   cleanupFailedNativeShellCapture,
   createNativeShellRequestCountWaiter,
   isExactNativeDogfoodResponseCount,
+  isNativeGitCheckEvidenceReferenceObservation,
   isNativeGitCheckEvidenceObservation,
   isNarrowDrawerOpenedObservation,
   isNativeEvidenceObservation,
   isNativeWorkflowLifecycleObservation,
+  isNativeShellProcessGroupEmpty,
+  isNativeShellResourceCleanupComplete,
   isUniqueNativeSymphonyInspection,
   makeNativeShellAssertion,
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
@@ -136,7 +139,7 @@ describe("native-shell acceptance capture contract", () => {
       }),
     ).toBe(false);
 
-    const evidence = {
+    const evidenceReference = {
       stepId: "verify-native-repository",
       evidenceName: "verify-native-repository-1.json",
       evidenceId: sha256(Buffer.from("checks/verify-native-repository-1.json")),
@@ -146,6 +149,19 @@ describe("native-shell acceptance capture contract", () => {
       kind: "check",
       provenance: "runtime_check",
       availability: "available",
+      exposed: true,
+      contentAbsentBeforeExpand: true,
+    };
+    expect(isNativeGitCheckEvidenceReferenceObservation(evidenceReference)).toBe(true);
+    expect(
+      isNativeGitCheckEvidenceReferenceObservation({
+        ...evidenceReference,
+        provenance: "provider",
+      }),
+    ).toBe(false);
+
+    const evidence = {
+      ...evidenceReference,
       expanded: true,
       contentState: "text",
       content: {
@@ -163,6 +179,19 @@ describe("native-shell acceptance capture contract", () => {
         content: { ...evidence.content, stdout: "false\n" },
       }),
     ).toBe(false);
+  });
+
+  it("requires affirmative process-group cleanup instead of accepting unknown", () => {
+    expect(isNativeShellProcessGroupEmpty(1, "win32")).toBeNull();
+    expect(
+      isNativeShellResourceCleanupComplete({ portsClosed: true, processGroupEmpty: null }),
+    ).toBe(false);
+    expect(
+      isNativeShellResourceCleanupComplete({ portsClosed: true, processGroupEmpty: false }),
+    ).toBe(false);
+    expect(
+      isNativeShellResourceCleanupComplete({ portsClosed: true, processGroupEmpty: true }),
+    ).toBe(true);
   });
 
   it("seals both themes and real narrow drawer scenarios", () => {

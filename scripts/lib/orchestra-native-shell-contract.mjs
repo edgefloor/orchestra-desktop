@@ -196,7 +196,7 @@ export function isNativeEvidenceObservation(observation) {
   );
 }
 
-export function isNativeGitCheckEvidenceObservation(observation) {
+function isNativeGitCheckEvidenceIdentityObservation(observation) {
   const expectedEvidenceId = sha256(
     Buffer.from(ORCHESTRA_NATIVE_DOGFOOD_CHECK_EVIDENCE_RELATIVE_PATH),
   );
@@ -207,7 +207,21 @@ export function isNativeGitCheckEvidenceObservation(observation) {
     observation.displayedEvidenceIdPrefix === expectedEvidenceId.slice(0, 12) &&
     observation.kind === "check" &&
     observation.provenance === "runtime_check" &&
-    observation.availability === "available" &&
+    observation.availability === "available"
+  );
+}
+
+export function isNativeGitCheckEvidenceReferenceObservation(observation) {
+  return (
+    isNativeGitCheckEvidenceIdentityObservation(observation) &&
+    observation.exposed === true &&
+    observation.contentAbsentBeforeExpand === true
+  );
+}
+
+export function isNativeGitCheckEvidenceObservation(observation) {
+  return (
+    isNativeGitCheckEvidenceIdentityObservation(observation) &&
     observation.expanded === true &&
     observation.contentState === "text" &&
     Array.isArray(observation.content?.argv) &&
@@ -271,6 +285,10 @@ export function isNativeShellProcessGroupEmpty(pid, platform) {
   }
 }
 
+export function isNativeShellResourceCleanupComplete(observation) {
+  return observation?.portsClosed === true && observation.processGroupEmpty === true;
+}
+
 export async function reserveNativeShellPort() {
   const server = NodeNet.createServer();
   await new Promise((resolve, reject) => {
@@ -329,7 +347,7 @@ export async function terminateAndVerifyNativeShellResources({
     );
     processGroupEmpty =
       typeof pid === "number" && pid > 0 ? isNativeShellProcessGroupEmpty(pid, platform) : true;
-    if (portsClosed && processGroupEmpty !== false) break;
+    if (isNativeShellResourceCleanupComplete({ portsClosed, processGroupEmpty })) break;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   return { terminationAttempted, portsClosed, processGroupEmpty };

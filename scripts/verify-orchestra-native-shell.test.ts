@@ -332,7 +332,19 @@ async function makeFixture(
     collapsedButtons: 0,
   };
   const evidence = {
-    before: { exposed: true, contentAbsentBeforeExpand: true },
+    before: {
+      exposed: true,
+      stepId: "verify-native-repository",
+      evidenceName: "verify-native-repository-1.json",
+      evidenceId: sha256(Buffer.from("checks/verify-native-repository-1.json")),
+      displayedEvidenceIdPrefix: sha256(
+        Buffer.from("checks/verify-native-repository-1.json"),
+      ).slice(0, 12),
+      kind: "check",
+      provenance: "runtime_check",
+      availability: "available",
+      contentAbsentBeforeExpand: true,
+    },
     after: {
       stepId: "verify-native-repository",
       evidenceName: "verify-native-repository-1.json",
@@ -765,6 +777,12 @@ describe("Orchestra native-shell evidence verifier", () => {
         },
         message: "manifest.runtime.cleanup must prove listener and process-group cleanup",
       },
+      {
+        mutate: (manifest) => {
+          manifest.runtime.cleanup.processGroupEmpty = null;
+        },
+        message: "manifest.runtime.cleanup must prove listener and process-group cleanup",
+      },
     ];
 
     for (const invalidCase of invalidCases) {
@@ -912,6 +930,22 @@ describe("Orchestra native-shell evidence verifier", () => {
   });
 
   it("requires the exact git check Evidence initially and after reload and restart", async () => {
+    for (const [field, value] of [
+      ["evidenceId", "f".repeat(64)],
+      ["stepId", "wrong-step"],
+      ["provenance", "fabricated"],
+    ] as const) {
+      const wrongReference = await makeFixture((manifest) => {
+        const dogfood = manifest.runtime.nativeDogfood;
+        const evidence = dogfood.evidence as { before: Record<string, unknown> };
+        evidence.before[field] = value;
+        manifest.assertions.nativeEvidenceLazyExpanded!.observed = evidence;
+      });
+      await expect(verifyOrchestraNativeShell({ rootDir: wrongReference.rootDir })).rejects.toThrow(
+        "manifest.runtime.nativeDogfood.evidence.before must prove the exact collapsed verify-native-repository reference",
+      );
+    }
+
     const wrongInitialEvidence = await makeFixture((manifest) => {
       const dogfood = manifest.runtime.nativeDogfood;
       const evidence = dogfood.evidence as { after: Record<string, unknown> };

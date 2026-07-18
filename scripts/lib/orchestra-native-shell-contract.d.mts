@@ -30,6 +30,7 @@ export function createNativeShellRequestCountWaiter(): {
 };
 export function isNativeWorkflowLifecycleObservation(observation: unknown): boolean;
 export function isNativeEvidenceObservation(observation: unknown): boolean;
+export function isNativeGitCheckEvidenceReferenceObservation(observation: unknown): boolean;
 export function isNativeGitCheckEvidenceObservation(observation: unknown): boolean;
 export function isUniqueNativeSymphonyInspection(started: unknown, inspected: unknown): boolean;
 export function isNarrowDrawerOpenedObservation(observations: unknown): boolean;
@@ -43,6 +44,7 @@ export function isNativeShellProcessGroupEmpty(
   pid: number,
   platform: NodeJS.Platform,
 ): boolean | null;
+export function isNativeShellResourceCleanupComplete(observation: unknown): boolean;
 export function reserveNativeShellPort(): Promise<number>;
 export function canConnectToNativeShellPort(port: number): Promise<boolean>;
 export function terminateAndVerifyNativeShellResources(input: {
