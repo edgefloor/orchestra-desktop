@@ -499,7 +499,14 @@ async function probeSelectedIssueInteractions(webContents) {
   webContents.sendInputEvent({ type: "keyUp", keyCode: "Enter" });
   await new Promise((resolve) => setTimeout(resolve, 50));
   const actions = await webContents.executeJavaScript(
-    `(() => window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {})()`,
+    `(async () => {
+      const workspace = document.querySelector('[data-automation-issue-workspace]');
+      if (workspace instanceof HTMLElement) {
+        workspace.scrollTop = 0;
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      }
+      return window.__ORCHESTRA_ACCEPTANCE_ACTIONS__ ?? {};
+    })()`,
     true,
   );
   return {
