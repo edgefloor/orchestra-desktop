@@ -1,6 +1,5 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -17,7 +16,12 @@ import {
   encodeOptionalPayload,
   runHandler,
 } from "./_internal/shared.ts";
-import { makeBoundedChildStderr, makeChildStdio, makeTerminationError } from "./_internal/stdio.ts";
+import {
+  awaitStderrDrain,
+  makeBoundedChildStderr,
+  makeChildStdio,
+  makeTerminationError,
+} from "./_internal/stdio.ts";
 
 export interface CodexAppServerClientOptions {
   readonly logIncoming?: boolean;
@@ -268,10 +272,10 @@ const makeChildProcessClient = Effect.fn(
   const stderr = makeBoundedChildStderr();
   const stderrFiber = yield* Stream.runForEach(handle.stderr, (chunk) =>
     Effect.sync(() => stderr.push(chunk)),
-  ).pipe(Effect.ensuring(Effect.sync(stderr.flush)), Effect.ignore, Effect.forkScoped);
+  ).pipe(Effect.ensuring(Effect.sync(stderr.flush)), Effect.forkScoped);
   return yield* make(
     makeChildStdio(handle),
     options,
-    makeTerminationError(handle, stderr.snapshot, Fiber.await(stderrFiber).pipe(Effect.asVoid)),
+    makeTerminationError(handle, stderr.snapshot, awaitStderrDrain(stderrFiber)),
   );
 });

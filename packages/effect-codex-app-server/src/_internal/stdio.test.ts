@@ -9,6 +9,7 @@ import * as CodexError from "../errors.ts";
 import {
   CODEX_APP_SERVER_STDERR_DRAIN_TIMEOUT_MS,
   CODEX_APP_SERVER_STDERR_MAX_CHARS,
+  awaitStderrDrain,
   makeBoundedChildStderr,
   makeTerminationError,
 } from "./stdio.ts";
@@ -59,11 +60,29 @@ describe("Codex App Server child process termination", () => {
         () => ({ stderr }),
         Effect.sync(() => {
           stderr = "after drain";
-        }),
+        }).pipe(Effect.as(true)),
       );
 
       assert.instanceOf(error, CodexError.CodexAppServerProcessExitedError);
       assert.equal(error.stderr, "after drain");
+    }),
+  );
+
+  it.effect("marks a failed stderr stream as an incomplete drain", () =>
+    Effect.gen(function* () {
+      const stderrFiber = yield* Effect.fail("stderr stream failed").pipe(Effect.forkChild);
+      const error = yield* makeTerminationError(
+        {
+          pid: ChildProcessSpawner.ProcessId(56),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+        },
+        () => ({ stderr: "partial failure" }),
+        awaitStderrDrain(stderrFiber),
+      );
+
+      assert.instanceOf(error, CodexError.CodexAppServerProcessExitedError);
+      assert.equal(error.stderr, "partial failure");
+      assert.isTrue(error.stderrTruncated);
     }),
   );
 

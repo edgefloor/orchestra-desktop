@@ -55,6 +55,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as CodexClient from "effect-codex-app-server/client";
+import { truncateDiagnosticText } from "effect-codex-app-server/diagnostics";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexRpc from "effect-codex-app-server/rpc";
 import * as EffectCodexSchema from "effect-codex-app-server/schema";
@@ -116,14 +117,6 @@ const BENIGN_ERROR_LOG_SNIPPETS = [
 ];
 const CODEX_APP_SERVER_FORCE_KILL_AFTER = "2 seconds" as const;
 const MAX_CODEX_DIAGNOSTIC_CHARS = 4_096;
-
-function truncateCodexDiagnostic(value: string): string {
-  const sliced = value.slice(0, MAX_CODEX_DIAGNOSTIC_CHARS - 1);
-  const lastCodeUnit = sliced.charCodeAt(sliced.length - 1);
-  const completePrefix =
-    lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff ? sliced.slice(0, -1) : sliced;
-  return `${completePrefix}…`;
-}
 const RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS = [
   "not found",
   "missing thread",
@@ -573,10 +566,7 @@ export function redactCodexDiagnostic(rawDiagnostic: string): string {
       /(["']?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|secret)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}]+)/giu,
       "$1[REDACTED]",
     );
-  if (redacted.length <= MAX_CODEX_DIAGNOSTIC_CHARS) {
-    return redacted;
-  }
-  return truncateCodexDiagnostic(redacted);
+  return truncateDiagnosticText(redacted, MAX_CODEX_DIAGNOSTIC_CHARS);
 }
 
 function classifyCodexStderrLine(rawLine: string): { readonly message: string } | null {

@@ -1,5 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Sink from "effect/Sink";
@@ -8,6 +10,7 @@ import * as Stream from "effect/Stream";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import * as CodexError from "../errors.ts";
+import { truncateDiagnosticText } from "../diagnostics.ts";
 
 const encoder = new TextEncoder();
 
@@ -53,12 +56,8 @@ type ChildProcessTerminationHandle = Pick<
 export const CODEX_APP_SERVER_STDERR_MAX_CHARS = 4_096;
 export const CODEX_APP_SERVER_STDERR_DRAIN_TIMEOUT_MS = 250;
 
-function sliceOnCodePointBoundary(value: string, maxCodeUnits: number): string {
-  const sliced = value.slice(0, Math.max(0, maxCodeUnits));
-  if (sliced.length === 0) return sliced;
-  const lastCodeUnit = sliced.charCodeAt(sliced.length - 1);
-  return lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff ? sliced.slice(0, -1) : sliced;
-}
+export const awaitStderrDrain = <E>(fiber: Fiber.Fiber<void, E>): Effect.Effect<boolean> =>
+  Fiber.await(fiber).pipe(Effect.map(Exit.isSuccess));
 
 export function makeBoundedChildStderr(maxChars = CODEX_APP_SERVER_STDERR_MAX_CHARS) {
   const decoder = new TextDecoder();
@@ -72,7 +71,7 @@ export function makeBoundedChildStderr(maxChars = CODEX_APP_SERVER_STDERR_MAX_CH
       return;
     }
     if (maxChars > 0) {
-      stderr = `${sliceOnCodePointBoundary(`${stderr}${decoded}`, maxChars - 1)}…`;
+      stderr = truncateDiagnosticText(`${stderr}${decoded}`, maxChars);
     }
     stderrTruncated = true;
   };
@@ -96,7 +95,7 @@ export function makeBoundedChildStderr(maxChars = CODEX_APP_SERVER_STDERR_MAX_CH
 export const makeTerminationError = (
   handle: ChildProcessTerminationHandle,
   readStderr: () => { readonly stderr?: string; readonly stderrTruncated?: boolean } = () => ({}),
-  awaitStderr: Effect.Effect<void> = Effect.void,
+  awaitStderr: Effect.Effect<boolean> = Effect.succeed(true),
 ): Effect.Effect<CodexError.CodexAppServerError> =>
   Effect.matchEffect(handle.exitCode, {
     onFailure: (cause) =>
@@ -112,11 +111,12 @@ export const makeTerminationError = (
         Effect.timeoutOption(CODEX_APP_SERVER_STDERR_DRAIN_TIMEOUT_MS),
         Effect.map((drainResult) => {
           const diagnostic = readStderr();
+          const drainCompleted = Option.getOrElse(drainResult, () => false);
           return new CodexError.CodexAppServerProcessExitedError({
             code,
             pid: handle.pid,
             ...diagnostic,
-            ...(Option.isNone(drainResult) ? { stderrTruncated: true } : {}),
+            ...(!drainCompleted ? { stderrTruncated: true } : {}),
           });
         }),
       ),
