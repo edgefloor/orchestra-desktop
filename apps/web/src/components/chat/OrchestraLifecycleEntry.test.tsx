@@ -7,6 +7,7 @@ import {
   findRequestedEvidenceReference,
   OrchestraLifecycleEntry,
   readOrchestraReplayEvent,
+  workflowEvidenceObservationAttributes,
 } from "./OrchestraLifecycleEntry";
 import lifecycleSource from "./OrchestraLifecycleEntry.tsx?raw";
 
@@ -93,6 +94,30 @@ describe("OrchestraLifecycleEntry", () => {
     expect(markup).toContain("Evidence identity: baa13f55437f");
     expect(markup).toContain('aria-hidden="true">id baa13f55437f');
     expect(markup).not.toContain("aria-label=");
+  });
+
+  it("renders canonical evidence metadata in the structural observation boundary", () => {
+    const markup = renderToStaticMarkup(
+      <div
+        {...workflowEvidenceObservationAttributes(
+          {
+            evidenceId: "evidence-2",
+            name: "Verification",
+            kind: "check",
+            provenance: "runtime_check",
+            bytes: 42,
+            sha256: "sha-2",
+            availability: "content_too_large",
+          },
+          "collapsed",
+        )}
+      />,
+    );
+
+    expect(markup).toContain('data-workflow-evidence-provenance="runtime_check"');
+    expect(markup).toContain('data-workflow-evidence-availability="content_too_large"');
+    expect(markup).not.toContain('data-workflow-evidence-provenance="runtime check"');
+    expect(markup).not.toContain('data-workflow-evidence-availability="content too large"');
   });
 
   it("emits workspace descriptors only while opening run and evidence disclosures", () => {

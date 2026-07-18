@@ -83,6 +83,19 @@ export function findRequestedEvidenceReference(
   return null;
 }
 
+export function workflowEvidenceObservationAttributes(
+  item: OrchestraEvidenceReference,
+  contentState: string,
+) {
+  return {
+    "data-workflow-evidence-availability": item.availability,
+    "data-workflow-evidence-content-state": contentState,
+    "data-workflow-evidence-kind": item.kind,
+    "data-workflow-evidence-name": item.name,
+    "data-workflow-evidence-provenance": item.provenance,
+  } as const;
+}
+
 export function readOrchestraReplayEvent(value: unknown): OrchestraReplayEvent | null {
   return isReplayEvent(value) ? value : null;
 }
@@ -602,23 +615,18 @@ export const OrchestraLifecycleEntry = memo(function OrchestraLifecycleEntry(pro
                         const contentState = content
                           ? evidenceContentDisplayState(item, content)
                           : null;
+                        const observationState = !itemExpanded
+                          ? "collapsed"
+                          : loading.has(contentKey)
+                            ? "loading"
+                            : error
+                              ? "error"
+                              : (contentState?.kind ?? "pending");
                         return (
                           <div
                             className="rounded border border-border/40 p-2"
-                            data-workflow-evidence-availability={reference.availability}
-                            data-workflow-evidence-content-state={
-                              !itemExpanded
-                                ? "collapsed"
-                                : loading.has(contentKey)
-                                  ? "loading"
-                                  : error
-                                    ? "error"
-                                    : (contentState?.kind ?? "pending")
-                            }
-                            data-workflow-evidence-kind={item.kind}
-                            data-workflow-evidence-name={item.name}
-                            data-workflow-evidence-provenance={reference.provenance}
                             key={item.evidenceId}
+                            {...workflowEvidenceObservationAttributes(item, observationState)}
                           >
                             <button
                               aria-expanded={itemExpanded}
