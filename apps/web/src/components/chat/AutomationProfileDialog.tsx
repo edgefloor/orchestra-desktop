@@ -29,6 +29,7 @@ import {
 } from "~/state/automation";
 import { useAtomCommand } from "~/state/use-atom-command";
 import {
+  automationCoordinationSummary,
   automationLinearRows,
   automationLinearAvailability,
   automationRunStorageKey,
@@ -420,6 +421,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
     run: runResult?.run ?? null,
   });
   const linearAvailability = linearResult ? automationLinearAvailability(linearResult) : null;
+  const coordination = runResult ? automationCoordinationSummary(runResult) : null;
 
   return (
     <section
@@ -689,6 +691,70 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                 {diagnostic.truncated ? "…" : ""}
               </div>
             ))}
+            {coordination ? (
+              <section
+                aria-label="Automation coordination"
+                className="space-y-2 rounded-lg border bg-background p-3 text-xs"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">Coordination</span>
+                  <Badge variant="outline">{coordination.intakeStatus.replace("_", " ")}</Badge>
+                  <span className="text-muted-foreground">cycle {coordination.cycle}</span>
+                  <span className="text-muted-foreground">
+                    scan revision {coordination.scanRevision}
+                  </span>
+                </div>
+                <div className="grid gap-1 text-muted-foreground sm:grid-cols-2">
+                  <div>
+                    Input cursor{" "}
+                    <code className="select-all">{coordination.inputCursor ?? "start"}</code>
+                  </div>
+                  <div>
+                    Output cursor{" "}
+                    <code className="select-all">{coordination.outputCursor ?? "complete"}</code>
+                  </div>
+                </div>
+                {coordination.error ? (
+                  <div className="text-destructive" role="alert">
+                    {coordination.error.text}
+                    {coordination.error.truncated ? "…" : ""}
+                  </div>
+                ) : null}
+                {coordination.dispatchIntent ? (
+                  <div className="space-y-1 rounded-md border bg-muted/25 p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Dispatch intent</span>
+                      <Badge variant="secondary">
+                        {coordination.dispatchIntent.kind.replace("_", " ")}
+                      </Badge>
+                      <Badge variant="outline">{coordination.dispatchIntent.status}</Badge>
+                      <span>attempt {coordination.dispatchIntent.attempt}</span>
+                    </div>
+                    <div className="grid gap-1 text-muted-foreground sm:grid-cols-2">
+                      <div>
+                        Intent{" "}
+                        <code className="select-all">{coordination.dispatchIntent.intentId}</code>
+                      </div>
+                      <div>
+                        Claim{" "}
+                        <code className="select-all">{coordination.dispatchIntent.claimId}</code>
+                      </div>
+                      <div>
+                        Issue{" "}
+                        <code className="select-all">{coordination.dispatchIntent.issueId}</code>
+                      </div>
+                      {coordination.dispatchIntent.readyAtMs !== undefined ? (
+                        <div>ready at {coordination.dispatchIntent.readyAtMs}ms</div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="text-muted-foreground">
+                  {coordination.nextAction.text}
+                  {coordination.nextAction.truncated ? "…" : ""}
+                </div>
+              </section>
+            ) : null}
             <div className="flex flex-wrap gap-1.5">
               {(
                 [
@@ -753,6 +819,14 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                   <Badge variant="secondary">{claim.status}</Badge>
                   <Badge variant="outline">profile r{claim.profileRevision}</Badge>
                   <Badge variant="outline">attempt {claim.attempt}</Badge>
+                  <Badge variant="outline">invocations {claim.workflowInvocations}</Badge>
+                  <Badge variant="outline">turns {claim.turnsInWindow}</Badge>
+                  {claim.continuationCount ? (
+                    <Badge variant="outline">continuations {claim.continuationCount}</Badge>
+                  ) : null}
+                  {claim.retryAttempt ? (
+                    <Badge variant="outline">retry {claim.retryAttempt}</Badge>
+                  ) : null}
                   {claim.status === "claimed" ||
                   claim.status === "running" ||
                   claim.status === "suspended" ? (
@@ -863,6 +937,11 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
                   <div className="text-xs text-muted-foreground">
                     Workflow Run <code className="select-all">{claim.workflowRunId}</code>
                     {claim.workflowStatus ? ` · ${claim.workflowStatus}` : ""}
+                  </div>
+                ) : null}
+                {claim.lastProgressAtMs !== undefined ? (
+                  <div className="text-xs text-muted-foreground">
+                    Last durable progress {claim.lastProgressAtMs}ms
                   </div>
                 ) : null}
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

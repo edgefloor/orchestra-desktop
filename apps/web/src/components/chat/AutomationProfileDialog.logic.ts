@@ -133,6 +133,11 @@ export function automationRunRows(result: AutomationRunResult) {
     trackerState: claim.trackerState,
     priority: claim.priority,
     attempt: claim.attempt,
+    workflowInvocations: claim.workflowInvocations,
+    turnsInWindow: claim.turnsInWindow,
+    continuationCount: claim.continuationCount,
+    retryAttempt: claim.retryAttempt,
+    lastProgressAtMs: claim.lastProgressAtMs,
     status: claim.status,
     profileDigest: claim.profileDigest,
     profileRevision: claim.profileRevision,
@@ -158,6 +163,31 @@ export function automationRunRows(result: AutomationRunResult) {
     })),
     nextAction: claim.nextAction,
   }));
+}
+
+export function automationCoordinationSummary(result: AutomationRunResult) {
+  const coordination = result.run.coordination;
+  const dispatchIntent = coordination.dispatchIntent;
+  return {
+    cycle: coordination.cycle,
+    scanRevision: coordination.scanRevision,
+    intakeStatus: coordination.intakeStatus,
+    inputCursor: coordination.inputCursor,
+    outputCursor: coordination.outputCursor,
+    error: coordination.error,
+    nextAction: coordination.nextAction,
+    dispatchIntent: dispatchIntent
+      ? {
+          intentId: dispatchIntent.intentId,
+          kind: dispatchIntent.kind,
+          status: dispatchIntent.status,
+          claimId: dispatchIntent.claimId,
+          issueId: dispatchIntent.issueId,
+          attempt: dispatchIntent.attempt,
+          readyAtMs: dispatchIntent.readyAtMs,
+        }
+      : undefined,
+  };
 }
 
 export function automationLinearRows(result: AutomationLinearReadResult) {

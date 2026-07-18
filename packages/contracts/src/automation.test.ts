@@ -2,11 +2,13 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
+  AutomationRun,
   AutomationStartInput,
   AutomationSteeringReceipt,
   AutomationSteerIssueInput,
 } from "./automation.ts";
 
+const decodeAutomationRun = Schema.decodeUnknownSync(AutomationRun);
 const decodeAutomationStartInput = Schema.decodeUnknownSync(AutomationStartInput);
 const decodeAutomationSteerIssueInput = Schema.decodeUnknownSync(AutomationSteerIssueInput);
 const decodeAutomationSteeringReceipt = Schema.decodeUnknownSync(AutomationSteeringReceipt);
@@ -72,5 +74,107 @@ describe("production Automation operations", () => {
       targetThreadId: "child-60",
       providerReceipt: "turn-60",
     });
+  });
+
+  it("preserves coordination intent and claim progress counters on reload", () => {
+    const run = {
+      schemaVersion: 1,
+      runId: "automation-root-60",
+      ownerThreadId: "task-60",
+      sourceRevision: "abc123",
+      profileDigest: "profile-60",
+      profileRevision: 2,
+      profileRevisionStatus: "active",
+      profileDiagnostics: [],
+      trackerProjectSlug: "orchestra",
+      leaseEpoch: 1,
+      revision: 8,
+      status: "running",
+      reconciliation: "complete",
+      coordination: {
+        cycle: 3,
+        scanRevision: 7,
+        inputCursor: "cursor-6",
+        outputCursor: "cursor-7",
+        intakeStatus: "ready",
+        pageDigest: "page-7",
+        startedAtMs: 1_768_435_260_000,
+        completedAtMs: 1_768_435_260_100,
+        nextAction: { text: "Dispatch the retained intent.", truncated: false },
+        dispatchIntent: {
+          intentId: "intent-60",
+          claimId: "claim-60",
+          issueId: "issue-60",
+          kind: "continuation",
+          status: "started",
+          attempt: 2,
+          profileDigest: "profile-60",
+          createdAtMs: 1_768_435_260_050,
+          readyAtMs: 1_768_435_260_075,
+        },
+      },
+      queueCounts: {
+        queued: 0,
+        running: 1,
+        blocked: 0,
+        waitingGate: 0,
+        handoff: 0,
+        terminal: 0,
+      },
+      claimsTotal: 1,
+      claims: [
+        {
+          claimId: "claim-60",
+          issueId: "issue-60",
+          issueIdentifier: "ORC-60",
+          issueTitle: { text: "Recover retained work", truncated: false },
+          trackerState: "In Progress",
+          attempt: 2,
+          workflowInvocations: 4,
+          turnsInWindow: 8,
+          continuationCount: 3,
+          retryAttempt: 1,
+          lastProgressAtMs: 1_768_435_260_090,
+          profileDigest: "profile-60",
+          profileRevision: 2,
+          status: "running",
+          worktree: "/tmp/orchestra-60",
+          sourceRevision: "abc123",
+          effects: [],
+          hookReceipts: [],
+          cleanup: { status: "retained", attempts: 0 },
+          nextAction: { text: "Resume the workflow run.", truncated: false },
+        },
+      ],
+      queuePreview: [],
+      queuePreviewTruncated: false,
+      nextAction: { text: "Continue coordination.", truncated: false },
+    } as const;
+
+    expect(decodeAutomationRun(run)).toMatchObject({
+      coordination: {
+        cycle: 3,
+        scanRevision: 7,
+        intakeStatus: "ready",
+        dispatchIntent: {
+          intentId: "intent-60",
+          kind: "continuation",
+          status: "started",
+          attempt: 2,
+        },
+      },
+      claims: [
+        {
+          workflowInvocations: 4,
+          turnsInWindow: 8,
+          continuationCount: 3,
+          retryAttempt: 1,
+          lastProgressAtMs: 1_768_435_260_090,
+        },
+      ],
+    });
+
+    const { coordination: _, ...withoutCoordination } = run;
+    expect(() => decodeAutomationRun(withoutCoordination)).toThrow();
   });
 });

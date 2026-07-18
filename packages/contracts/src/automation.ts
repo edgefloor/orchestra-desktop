@@ -218,6 +218,42 @@ export const AutomationCleanup = Schema.Struct({
   attempts: NonNegativeInt,
   lastFailure: Schema.optional(AutomationBoundedText),
 });
+export const AutomationCoordinationIntakeStatus = Schema.Literals([
+  "not_started",
+  "ready",
+  "skipped",
+]);
+export type AutomationCoordinationIntakeStatus = typeof AutomationCoordinationIntakeStatus.Type;
+export const AutomationDispatchIntentKind = Schema.Literals(["new_claim", "retry", "continuation"]);
+export type AutomationDispatchIntentKind = typeof AutomationDispatchIntentKind.Type;
+export const AutomationDispatchIntentStatus = Schema.Literals(["pending", "started", "completed"]);
+export type AutomationDispatchIntentStatus = typeof AutomationDispatchIntentStatus.Type;
+export const AutomationDispatchIntent = Schema.Struct({
+  intentId: Schema.String,
+  claimId: Schema.String,
+  issueId: Schema.String,
+  kind: AutomationDispatchIntentKind,
+  status: AutomationDispatchIntentStatus,
+  attempt: NonNegativeInt,
+  profileDigest: Schema.String,
+  createdAtMs: NonNegativeInt,
+  readyAtMs: Schema.optional(NonNegativeInt),
+});
+export type AutomationDispatchIntent = typeof AutomationDispatchIntent.Type;
+export const AutomationCoordination = Schema.Struct({
+  cycle: NonNegativeInt,
+  scanRevision: NonNegativeInt,
+  inputCursor: Schema.optional(Schema.String),
+  outputCursor: Schema.optional(Schema.String),
+  intakeStatus: AutomationCoordinationIntakeStatus,
+  pageDigest: Schema.optional(Schema.String),
+  startedAtMs: Schema.optional(NonNegativeInt),
+  completedAtMs: Schema.optional(NonNegativeInt),
+  error: Schema.optional(AutomationBoundedText),
+  nextAction: AutomationBoundedText,
+  dispatchIntent: Schema.optional(AutomationDispatchIntent),
+});
+export type AutomationCoordination = typeof AutomationCoordination.Type;
 export const AutomationIssueClaim = Schema.Struct({
   claimId: Schema.String,
   issueId: Schema.String,
@@ -226,6 +262,11 @@ export const AutomationIssueClaim = Schema.Struct({
   trackerState: Schema.String,
   priority: Schema.optional(Schema.Number),
   attempt: NonNegativeInt,
+  workflowInvocations: NonNegativeInt,
+  turnsInWindow: NonNegativeInt,
+  continuationCount: NonNegativeInt,
+  retryAttempt: NonNegativeInt,
+  lastProgressAtMs: Schema.optional(NonNegativeInt),
   profileDigest: Schema.String,
   profileRevision: NonNegativeInt,
   status: AutomationClaimStatus,
@@ -293,6 +334,7 @@ export const AutomationRun = Schema.Struct({
   revision: NonNegativeInt,
   status: AutomationRootStatus,
   reconciliation: Schema.Literals(["complete", "required", "in_progress", "blocked"]),
+  coordination: AutomationCoordination,
   queueCounts: AutomationQueueCounts,
   claimsTotal: NonNegativeInt,
   claims: Schema.Array(AutomationIssueClaim),

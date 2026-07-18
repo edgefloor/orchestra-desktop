@@ -86,6 +86,12 @@ function automationRun(): AutomationRun {
     revision: 4,
     status: "running",
     reconciliation: "blocked",
+    coordination: {
+      cycle: 1,
+      scanRevision: 1,
+      intakeStatus: "ready",
+      nextAction: { text: "Resolve the active claim", truncated: false },
+    },
     queueCounts: {
       queued: 0,
       running: 1,
@@ -103,6 +109,10 @@ function automationRun(): AutomationRun {
         issueTitle: { text: "Build Attention", truncated: false },
         trackerState: "In Progress",
         attempt: 1,
+        workflowInvocations: 1,
+        turnsInWindow: 1,
+        continuationCount: 0,
+        retryAttempt: 0,
         profileDigest: "profile-digest",
         profileRevision: 1,
         status: "running",

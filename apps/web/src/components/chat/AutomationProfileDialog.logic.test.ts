@@ -2,6 +2,7 @@ import { ThreadId, type AutomationQueueReadResult } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  automationCoordinationSummary,
   automationLinearRows,
   automationLinearAvailability,
   automationRunRows,
@@ -85,6 +86,28 @@ describe("automationRunRows", () => {
         revision: 4,
         status: "running",
         reconciliation: "complete",
+        coordination: {
+          cycle: 3,
+          scanRevision: 7,
+          inputCursor: "cursor-2",
+          outputCursor: "cursor-3",
+          intakeStatus: "ready",
+          pageDigest: "page-digest",
+          startedAtMs: 40,
+          completedAtMs: 41,
+          nextAction: { text: "Dispatch the selected issue", truncated: false },
+          dispatchIntent: {
+            intentId: "intent-33",
+            claimId: "claim-1",
+            issueId: "issue-33",
+            kind: "new_claim",
+            status: "completed",
+            attempt: 1,
+            profileDigest: "claim-profile-digest",
+            createdAtMs: 40,
+            readyAtMs: 41,
+          },
+        },
         queueCounts: {
           queued: 0,
           running: 0,
@@ -106,6 +129,11 @@ describe("automationRunRows", () => {
             trackerState: "Todo",
             priority: 2,
             attempt: 1,
+            workflowInvocations: 2,
+            turnsInWindow: 4,
+            continuationCount: 1,
+            retryAttempt: 0,
+            lastProgressAtMs: 41,
             profileDigest: "claim-profile-digest",
             profileRevision: 1,
             status: "completed",
@@ -187,6 +215,11 @@ describe("automationRunRows", () => {
         trackerState: "Todo",
         priority: 2,
         attempt: 1,
+        workflowInvocations: 2,
+        turnsInWindow: 4,
+        continuationCount: 1,
+        retryAttempt: 0,
+        lastProgressAtMs: 41,
         status: "completed",
         profileDigest: "claim-profile-digest",
         profileRevision: 1,
@@ -265,6 +298,86 @@ describe("automationRunRows", () => {
   });
 });
 
+describe("automationCoordinationSummary", () => {
+  it("projects bounded native coordination and dispatch identity without provider detail", () => {
+    const result = {
+      run: {
+        schemaVersion: 1,
+        runId: "automation-root-1",
+        ownerThreadId: "task-33",
+        sourceRevision: "abc123",
+        profileDigest: "profile-digest",
+        profileRevision: 2,
+        profileRevisionStatus: "active" as const,
+        profileDiagnostics: [],
+        trackerProjectSlug: "orchestra",
+        leaseEpoch: 1,
+        revision: 4,
+        status: "running" as const,
+        reconciliation: "complete" as const,
+        coordination: {
+          cycle: 3,
+          scanRevision: 7,
+          inputCursor: "cursor-2",
+          outputCursor: "cursor-3",
+          intakeStatus: "ready" as const,
+          pageDigest: "page-digest",
+          startedAtMs: 40,
+          completedAtMs: 41,
+          error: { text: "bounded warning", truncated: true },
+          nextAction: { text: "Recover the durable dispatch", truncated: false },
+          dispatchIntent: {
+            intentId: "intent-33",
+            claimId: "claim-1",
+            issueId: "issue-33",
+            kind: "continuation" as const,
+            status: "started" as const,
+            attempt: 2,
+            profileDigest: "profile-digest",
+            createdAtMs: 40,
+            readyAtMs: 45,
+          },
+        },
+        queueCounts: {
+          queued: 0,
+          running: 1,
+          blocked: 0,
+          waitingGate: 0,
+          handoff: 0,
+          terminal: 0,
+        },
+        claimsTotal: 0,
+        queuePreview: [],
+        queuePreviewTruncated: false,
+        claims: [],
+        nextAction: { text: "Continue", truncated: false },
+      },
+    };
+
+    expect(automationCoordinationSummary(result)).toEqual({
+      cycle: 3,
+      scanRevision: 7,
+      intakeStatus: "ready",
+      inputCursor: "cursor-2",
+      outputCursor: "cursor-3",
+      error: { text: "bounded warning", truncated: true },
+      nextAction: { text: "Recover the durable dispatch", truncated: false },
+      dispatchIntent: {
+        intentId: "intent-33",
+        kind: "continuation",
+        status: "started",
+        claimId: "claim-1",
+        issueId: "issue-33",
+        attempt: 2,
+        readyAtMs: 45,
+      },
+    });
+    expect(automationCoordinationSummary(result).dispatchIntent).not.toHaveProperty(
+      "profileDigest",
+    );
+  });
+});
+
 describe("automationLinearRows", () => {
   it("projects a bounded normalized summary without provider-specific detail", () => {
     const issues = Array.from({ length: 26 }, (_, index) => ({
@@ -338,6 +451,12 @@ describe("Automation workspace lifecycle", () => {
     revision: 1,
     status: "running" as const,
     reconciliation: "complete" as const,
+    coordination: {
+      cycle: 0,
+      scanRevision: 0,
+      intakeStatus: "not_started" as const,
+      nextAction: { text: "Start a bounded intake scan", truncated: false },
+    },
     queueCounts: {
       queued: 0,
       running: 1,
