@@ -38,12 +38,16 @@ import {
   buildAutomationValidateInput,
   boundedAutomationFeedbackText,
   deriveAutomationWorkspaceState,
+  resolveAutomationWorkspaceRunCursor,
   staleAutomationRunAction,
   type AutomationRunAction,
   type AutomationRunActionFeedback,
   type AutomationWorkspacePendingAction,
 } from "./AutomationProfileDialog.logic";
-import { AutomationRunWorkspace } from "./AutomationRunWorkspace";
+import {
+  AutomationRunWorkspace,
+  type AutomationIssueTaskNavigationInput,
+} from "./AutomationRunWorkspace";
 import { AutomationRunActionFeedbackNotice } from "./AutomationRunActionFeedback";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -56,12 +60,11 @@ interface AutomationWorkspaceProps {
   readonly threadId: ThreadId;
   readonly threadTitle: string;
   readonly onClose: () => void;
-  readonly onOpenIssueTask: (input: {
-    readonly threadId: ThreadId;
-    readonly automationRunId: string;
-    readonly issueId: string;
-  }) => void;
+  readonly onOpenIssueTask: (input: AutomationIssueTaskNavigationInput) => void;
+  readonly initialAutomationRunId?: string | null;
 }
+
+export type { AutomationIssueTaskNavigationInput };
 
 function readableError(cause: unknown): string {
   return boundedAutomationFeedbackText(
@@ -75,6 +78,7 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   threadTitle,
   onClose,
   onOpenIssueTask,
+  initialAutomationRunId,
 }: AutomationWorkspaceProps) {
   const validate = useAtomCommand(validateAutomationProfile, { reportFailure: false });
   const start = useAtomCommand(startAutomation, { reportFailure: false });
@@ -152,13 +156,23 @@ export const AutomationWorkspace = memo(function AutomationWorkspace({
   );
 
   useEffect(() => {
-    if (runResult) return;
-    const storedRunId = localStorage.getItem(automationRunStorageKey(threadId));
-    if (!storedRunId || restoredRunId.current === storedRunId) return;
-    restoredRunId.current = storedRunId;
-    setRunId(storedRunId);
-    loadRun(storedRunId);
-  }, [loadRun, runResult, threadId]);
+    const candidateRunId = resolveAutomationWorkspaceRunCursor({
+      initialAutomationRunId,
+      storedAutomationRunId: runResult
+        ? null
+        : localStorage.getItem(automationRunStorageKey(threadId)),
+    });
+    if (
+      !candidateRunId ||
+      runResult?.run.runId === candidateRunId ||
+      restoredRunId.current === candidateRunId
+    ) {
+      return;
+    }
+    restoredRunId.current = candidateRunId;
+    setRunId(candidateRunId);
+    loadRun(candidateRunId);
+  }, [initialAutomationRunId, loadRun, runResult, threadId]);
 
   const submit = useCallback(() => {
     const requestId = requestIdRef.current + 1;

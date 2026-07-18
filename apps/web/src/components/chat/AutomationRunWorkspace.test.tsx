@@ -2,7 +2,11 @@ import type { AutomationRunResult } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { AutomationRunWorkspace } from "./AutomationRunWorkspace";
+import {
+  AutomationRunWorkspace,
+  automationIssueTaskNavigationInput,
+} from "./AutomationRunWorkspace";
+import { projectAutomationWorkspace } from "./AutomationWorkspace.logic";
 
 const runResult: AutomationRunResult = {
   run: {
@@ -134,6 +138,18 @@ function render(
 }
 
 describe("AutomationRunWorkspace", () => {
+  it("opens the durable issue task with its bounded identifier and title snapshot", () => {
+    const issue = projectAutomationWorkspace(runResult).issues[0]!;
+
+    expect(automationIssueTaskNavigationInput(issue, runResult.run.runId)).toEqual({
+      threadId: "issue-task-70",
+      automationRunId: "automation-root-70",
+      issueId: "issue-70",
+      issueIdentifier: "ORC-70",
+      issueTitle: "Deliver the Symphony workspace",
+    });
+  });
+
   it("renders an accessible Issues master/detail view by default", () => {
     const markup = render("issues");
 

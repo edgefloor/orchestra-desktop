@@ -17,6 +17,8 @@ import {
 } from "./workspaceSurface";
 
 const WORKSPACE_SURFACE_STORAGE_KEY = "orchestra:workspace-surfaces:v2";
+// Native bounded text may contain the 4,096-byte prefix plus one Unicode ellipsis.
+const MAX_ISSUE_PRESENTATION_CHARS = 4_097;
 
 interface WorkspaceSurfaceStore extends WorkspaceSurfaceState {
   openSurface: (surface: WorkspaceSurface) => void;
@@ -44,6 +46,9 @@ function isWorkspaceSurface(value: unknown): value is WorkspaceSurface {
   }
   const stringFields = (...fields: string[]) =>
     fields.every((field) => typeof value[field] === "string");
+  const optionalBoundedString = (field: string) =>
+    value[field] === undefined ||
+    (typeof value[field] === "string" && value[field].length <= MAX_ISSUE_PRESENTATION_CHARS);
   switch (value.kind) {
     case "project":
       return true;
@@ -61,7 +66,11 @@ function isWorkspaceSurface(value: unknown): value is WorkspaceSurface {
         (value.automationRunId === null || typeof value.automationRunId === "string")
       );
     case "issue":
-      return stringFields("threadId", "automationRunId", "issueId", "issueTaskThreadId");
+      return (
+        stringFields("threadId", "automationRunId", "issueId", "issueTaskThreadId") &&
+        optionalBoundedString("issueIdentifier") &&
+        optionalBoundedString("issueTitle")
+      );
     case "evidence":
       return stringFields("threadId", "runId", "stepId", "evidenceId");
     case "preview":

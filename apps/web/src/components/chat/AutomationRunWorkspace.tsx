@@ -23,6 +23,14 @@ import {
 
 type AutomationWorkspaceView = "issues" | "activity" | "recovery" | "events";
 
+export interface AutomationIssueTaskNavigationInput {
+  readonly threadId: ThreadId;
+  readonly automationRunId: string;
+  readonly issueId: string;
+  readonly issueIdentifier: string;
+  readonly issueTitle: string;
+}
+
 const WORKSPACE_VIEWS = ["issues", "activity", "recovery", "events"] as const;
 const WORKSPACE_VIEW_LABELS: Record<AutomationWorkspaceView, string> = {
   issues: "Issues",
@@ -44,11 +52,7 @@ interface AutomationRunWorkspaceProps {
   readonly onInspectRun: () => void;
   readonly onRefreshRun: () => void;
   readonly onResumeRun: () => void;
-  readonly onOpenIssueTask: (input: {
-    readonly threadId: ThreadId;
-    readonly automationRunId: string;
-    readonly issueId: string;
-  }) => void;
+  readonly onOpenIssueTask: (input: AutomationIssueTaskNavigationInput) => void;
   readonly onCancelClaim: (claimId: string) => void;
   readonly onSteerClaim: (claimId: string) => void;
   readonly onSteeringInputChange: (claimId: string, value: string) => void;
@@ -60,6 +64,21 @@ function formatMoment(value: number | undefined): string {
   if (value === undefined) return "Not recorded";
   if (value < 100_000_000_000) return `${value} ms`;
   return new Date(value).toLocaleString();
+}
+
+export function automationIssueTaskNavigationInput(
+  issue: AutomationWorkspaceIssue,
+  automationRunId: string,
+): AutomationIssueTaskNavigationInput | null {
+  const threadId = issue.claim?.issueTask?.threadId;
+  if (!threadId) return null;
+  return {
+    threadId: ThreadId.make(threadId),
+    automationRunId,
+    issueId: issue.issueId,
+    issueIdentifier: issue.issueIdentifier,
+    issueTitle: issue.issueTitle.text,
+  };
 }
 
 function RootSummary({ runResult }: { readonly runResult: AutomationRunResult }) {
@@ -301,13 +320,10 @@ function IssueInspector({
                 Agent path <code className="select-all">{claim.issueTask.taskPath}</code>
               </div>
               <Button
-                onClick={() =>
-                  onOpenIssueTask({
-                    threadId: ThreadId.make(claim.issueTask!.threadId),
-                    automationRunId: runResult.run.runId,
-                    issueId: claim.issueId,
-                  })
-                }
+                onClick={() => {
+                  const input = automationIssueTaskNavigationInput(issue, runResult.run.runId);
+                  if (input) onOpenIssueTask(input);
+                }}
                 size="xs"
                 variant="outline"
               >
@@ -514,13 +530,11 @@ function RecoveryView({
                 ) : null}
                 {item.actions.includes("open_issue_task") && claim?.issueTask ? (
                   <Button
-                    onClick={() =>
-                      onOpenIssueTask({
-                        threadId: ThreadId.make(claim.issueTask!.threadId),
-                        automationRunId: runResult.run.runId,
-                        issueId: claim.issueId,
-                      })
-                    }
+                    onClick={() => {
+                      if (!issue) return;
+                      const input = automationIssueTaskNavigationInput(issue, runResult.run.runId);
+                      if (input) onOpenIssueTask(input);
+                    }}
                     size="xs"
                     variant="outline"
                   >

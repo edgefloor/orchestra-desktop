@@ -8,6 +8,7 @@ import {
   AutomationRunResult,
   type AutomationRunInput,
   type AutomationStartInput,
+  type AutomationStatusInput,
   AutomationSteerIssueResult,
   type AutomationSteerIssueInput,
   type AutomationCancelInput,
@@ -226,7 +227,7 @@ export interface CodexSessionRuntimeShape {
     input: Omit<AutomationQueueReadInput, "threadId">,
   ) => Effect.Effect<AutomationQueueReadResult, CodexSessionRuntimeError>;
   readonly automationStatus?: (
-    input: Omit<AutomationLifecycleInput, "threadId">,
+    input: Omit<AutomationStatusInput, "threadId">,
   ) => Effect.Effect<AutomationRunResult, CodexSessionRuntimeError>;
   readonly pauseAutomation?: (
     input: Omit<AutomationLifecycleInput, "threadId">,

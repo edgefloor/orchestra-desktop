@@ -267,6 +267,7 @@ export const AutomationIssueClaim = Schema.Struct({
   issueId: Schema.String,
   issueIdentifier: Schema.String,
   issueTitle: AutomationBoundedText,
+  issueUrl: Schema.optional(Schema.String),
   trackerState: Schema.String,
   priority: Schema.optional(Schema.Number),
   attempt: NonNegativeInt,
@@ -432,6 +433,13 @@ export type AutomationCancelIssueInput = typeof AutomationCancelIssueInput.Type;
 
 export const AutomationLifecycleInput = AutomationCancelInput;
 export type AutomationLifecycleInput = typeof AutomationLifecycleInput.Type;
+
+export const AutomationStatusInput = Schema.Struct({
+  threadId: ThreadId,
+  runId: TrimmedNonEmptyString,
+  focusedIssueId: Schema.optional(TrimmedNonEmptyString),
+});
+export type AutomationStatusInput = typeof AutomationStatusInput.Type;
 
 export const AutomationReconcileInput = Schema.Struct({
   threadId: ThreadId,

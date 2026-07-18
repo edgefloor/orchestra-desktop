@@ -38,6 +38,10 @@ export type WorkspaceSurface =
       readonly automationRunId: string;
       readonly issueId: string;
       readonly issueTaskThreadId: ThreadId;
+      /** Bounded presentation snapshot; never part of issue surface identity. */
+      readonly issueIdentifier?: string;
+      /** Bounded presentation snapshot; never part of issue surface identity. */
+      readonly issueTitle?: string;
     })
   | (WorkspaceSurfaceScope & {
       readonly kind: "evidence";
@@ -153,6 +157,12 @@ export function workspaceSurfaceKey(surface: WorkspaceSurface): WorkspaceSurface
   ]) as WorkspaceSurfaceKey;
 }
 
+export function workspaceIssueSurfaceTitle(
+  surface: Extract<WorkspaceSurface, { kind: "issue" }>,
+): string {
+  return surface.issueIdentifier ?? `Issue ${surface.issueId}`;
+}
+
 export function createWorkspaceSurfaceState(): WorkspaceSurfaceState {
   return {
     schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
@@ -184,11 +194,18 @@ export function openWorkspaceSurface(
   const existingIndex = state.entries.findIndex(
     (entry) => workspaceSurfaceKey(entry.surface) === key,
   );
+  const existingSurface = state.entries[existingIndex]?.surface;
+  const presentationUnchanged =
+    surface.kind !== "issue" ||
+    (existingSurface?.kind === "issue" &&
+      existingSurface.issueIdentifier === surface.issueIdentifier &&
+      existingSurface.issueTitle === surface.issueTitle);
   if (
     existingIndex >= 0 &&
     state.entries[existingIndex]?.availability === "available" &&
     state.activeSurfaceKey === key &&
-    state.focusOrder.at(-1) === key
+    state.focusOrder.at(-1) === key &&
+    presentationUnchanged
   ) {
     return state;
   }

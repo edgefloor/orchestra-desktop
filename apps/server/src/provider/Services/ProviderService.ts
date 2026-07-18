@@ -21,6 +21,7 @@ import type {
   AutomationRunInput,
   AutomationRunResult,
   AutomationStartInput,
+  AutomationStatusInput,
   AutomationSteerIssueInput,
   AutomationSteerIssueResult,
   AutomationCancelInput,
@@ -144,7 +145,7 @@ export interface ProviderServiceShape {
     input: AutomationQueueReadInput,
   ) => Effect.Effect<AutomationQueueReadResult, ProviderServiceError>;
   readonly automationStatus?: (
-    input: AutomationLifecycleInput,
+    input: AutomationStatusInput,
   ) => Effect.Effect<AutomationRunResult, ProviderServiceError>;
   readonly pauseAutomation?: (
     input: AutomationLifecycleInput,

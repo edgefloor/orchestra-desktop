@@ -4,12 +4,14 @@ import * as Schema from "effect/Schema";
 import {
   AutomationRun,
   AutomationStartInput,
+  AutomationStatusInput,
   AutomationSteeringReceipt,
   AutomationSteerIssueInput,
 } from "./automation.ts";
 
 const decodeAutomationRun = Schema.decodeUnknownSync(AutomationRun);
 const decodeAutomationStartInput = Schema.decodeUnknownSync(AutomationStartInput);
+const decodeAutomationStatusInput = Schema.decodeUnknownSync(AutomationStatusInput);
 const decodeAutomationSteerIssueInput = Schema.decodeUnknownSync(AutomationSteerIssueInput);
 const decodeAutomationSteeringReceipt = Schema.decodeUnknownSync(AutomationSteeringReceipt);
 
@@ -26,6 +28,33 @@ describe("production Automation operations", () => {
       decodeAutomationStartInput({
         threadId: "task-60",
         profilePath: "",
+      }),
+    ).toThrow();
+  });
+
+  it("keeps focused issue context exclusive to status inspection", () => {
+    expect(
+      decodeAutomationStatusInput({
+        threadId: "task-60",
+        runId: "automation-root-60",
+        focusedIssueId: "issue-60",
+      }),
+    ).toEqual({
+      threadId: "task-60",
+      runId: "automation-root-60",
+      focusedIssueId: "issue-60",
+    });
+    expect(
+      decodeAutomationStatusInput({
+        threadId: "task-60",
+        runId: "automation-root-60",
+      }),
+    ).toEqual({ threadId: "task-60", runId: "automation-root-60" });
+    expect(() =>
+      decodeAutomationStatusInput({
+        threadId: "task-60",
+        runId: "automation-root-60",
+        focusedIssueId: " ",
       }),
     ).toThrow();
   });
@@ -128,6 +157,7 @@ describe("production Automation operations", () => {
           issueId: "issue-60",
           issueIdentifier: "ORC-60",
           issueTitle: { text: "Recover retained work", truncated: false },
+          issueUrl: "https://linear.app/orchestra/issue/ORC-60",
           trackerState: "In Progress",
           attempt: 2,
           workflowInvocations: 4,
@@ -196,6 +226,7 @@ describe("production Automation operations", () => {
             resetTurnWindow: true,
           },
           lastProgressAtMs: 1_768_435_260_090,
+          issueUrl: "https://linear.app/orchestra/issue/ORC-60",
         },
       ],
       queuePreview: [

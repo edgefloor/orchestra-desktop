@@ -74,4 +74,46 @@ describe("workspace surface store", () => {
       focusOrder: [key],
     });
   });
+
+  it("hydrates backward-compatible bounded issue presentation metadata", () => {
+    const issueSurface: WorkspaceSurface = {
+      schemaVersion: 2,
+      kind: "issue",
+      environmentId: EnvironmentId.make("local"),
+      projectId: ProjectId.make("orchestra"),
+      threadId: ThreadId.make("symphony-task"),
+      automationRunId: "automation-70",
+      issueId: "issue-70",
+      issueTaskThreadId: ThreadId.make("issue-task-70"),
+      issueIdentifier: "ORC-70",
+      issueTitle: "Deliver the Symphony workspace",
+    };
+    const legacyIssueSurface = {
+      ...issueSurface,
+      issueId: "issue-69",
+      issueTaskThreadId: ThreadId.make("issue-task-69"),
+      issueIdentifier: undefined,
+      issueTitle: undefined,
+    };
+    const invalidIssueSurface = {
+      ...issueSurface,
+      issueId: "issue-oversized",
+      issueTaskThreadId: ThreadId.make("issue-task-oversized"),
+      issueTitle: "x".repeat(4_098),
+    };
+
+    const normalized = normalizePersistedWorkspaceSurfaceState({
+      schemaVersion: 2,
+      entries: [
+        { surface: issueSurface, availability: "available" },
+        { surface: legacyIssueSurface, availability: "available" },
+        { surface: invalidIssueSurface, availability: "available" },
+      ],
+    });
+
+    expect(normalized.entries.map((entry) => entry.surface)).toEqual([
+      issueSurface,
+      legacyIssueSurface,
+    ]);
+  });
 });

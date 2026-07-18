@@ -96,6 +96,16 @@ export function automationRunStorageKey(threadId: ThreadId): string {
   return `t3code:automation-run:${threadId}`;
 }
 
+export function resolveAutomationWorkspaceRunCursor(input: {
+  readonly initialAutomationRunId?: string | null | undefined;
+  readonly storedAutomationRunId?: string | null | undefined;
+}): string | null {
+  const initial = input.initialAutomationRunId?.trim();
+  if (initial) return initial;
+  const stored = input.storedAutomationRunId?.trim();
+  return stored || null;
+}
+
 export function deriveAutomationWorkspaceState(input: {
   readonly pendingAction: AutomationWorkspacePendingAction | null;
   readonly validation: AutomationValidateResult | null;

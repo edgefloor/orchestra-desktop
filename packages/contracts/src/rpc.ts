@@ -155,6 +155,7 @@ import {
   AutomationRunError,
   AutomationRunResult,
   AutomationStartInput,
+  AutomationStatusInput,
   AutomationSteerIssueInput,
   AutomationSteerIssueResult,
   AutomationValidateError,
@@ -348,7 +349,7 @@ export const WsAutomationQueueReadRpc = Rpc.make(WS_METHODS.automationQueueRead,
 });
 
 export const WsAutomationStatusRpc = Rpc.make(WS_METHODS.automationStatus, {
-  payload: AutomationLifecycleInput,
+  payload: AutomationStatusInput,
   success: AutomationRunResult,
   error: Schema.Union([AutomationRunError, EnvironmentAuthorizationError]),
 });

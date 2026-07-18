@@ -18,6 +18,7 @@ import {
   AutomationReconcileInput,
   AutomationRunInput,
   AutomationStartInput,
+  AutomationStatusInput,
   AutomationSteerIssueInput,
   AutomationValidateInput,
   OrchestraQueryInput,
@@ -1225,11 +1226,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   });
 
   const automationStatus = Effect.fn("automationStatus")(function* (
-    rawInput: AutomationLifecycleInput,
+    rawInput: AutomationStatusInput,
   ) {
     const input = yield* decodeInputOrValidationError({
       operation: "ProviderService.automationStatus",
-      schema: AutomationLifecycleInput,
+      schema: AutomationStatusInput,
       payload: rawInput,
     });
     const routed = yield* resolveRoutableSession({

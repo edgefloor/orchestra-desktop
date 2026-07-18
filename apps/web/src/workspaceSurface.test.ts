@@ -8,6 +8,7 @@ import {
   MAX_OPEN_WORKSPACE_SURFACES,
   openWorkspaceSurface,
   reconcileWorkspaceSurfaces,
+  workspaceIssueSurfaceTitle,
   workspaceSurfaceKey,
   WORKSPACE_SURFACE_SCHEMA_VERSION,
   type WorkspaceSurface,
@@ -164,6 +165,23 @@ describe("workspace surface identity", () => {
     expect(
       workspaceSurfaceKey({ ...issue, issueTaskThreadId: ThreadId.make("other-issue-task") }),
     ).not.toBe(workspaceSurfaceKey(issue));
+    expect(
+      workspaceSurfaceKey({
+        ...issue,
+        issueIdentifier: "ORC-70",
+        issueTitle: "Deliver the Symphony workspace",
+      }),
+    ).toBe(workspaceSurfaceKey(issue));
+  });
+
+  it("prefers the persisted issue identifier for tab presentation", () => {
+    const issue = everySurfaceKind.find(
+      (surface): surface is Extract<WorkspaceSurface, { kind: "issue" }> =>
+        surface.kind === "issue",
+    )!;
+
+    expect(workspaceIssueSurfaceTitle({ ...issue, issueIdentifier: "ORC-70" })).toBe("ORC-70");
+    expect(workspaceIssueSurfaceTitle(issue)).toBe("Issue issue");
   });
 
   it("includes the native step in Evidence identity for cold lazy restoration", () => {
@@ -187,6 +205,25 @@ describe("workspace surface reducer", () => {
     expect(duplicate.activeSurfaceKey).toBe(workspaceSurfaceKey(surface));
     expect(duplicate.focusOrder).toEqual([workspaceSurfaceKey(surface)]);
     expect(openWorkspaceSurface(duplicate, surface)).toBe(duplicate);
+  });
+
+  it("refreshes issue presentation metadata without opening a duplicate identity", () => {
+    const issue = everySurfaceKind.find(
+      (surface): surface is Extract<WorkspaceSurface, { kind: "issue" }> =>
+        surface.kind === "issue",
+    )!;
+    const first = openWorkspaceSurface(createWorkspaceSurfaceState(), issue);
+    const refreshed = openWorkspaceSurface(first, {
+      ...issue,
+      issueIdentifier: "ORC-70",
+      issueTitle: "Deliver the Symphony workspace",
+    });
+
+    expect(refreshed.entries).toHaveLength(1);
+    expect(refreshed.entries[0]?.surface).toMatchObject({
+      issueIdentifier: "ORC-70",
+      issueTitle: "Deliver the Symphony workspace",
+    });
   });
 
   it("focuses without changing visible order and tracks LRU independently", () => {

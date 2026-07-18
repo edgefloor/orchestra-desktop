@@ -11,8 +11,23 @@ import {
   buildAutomationStartInput,
   buildAutomationValidateInput,
   deriveAutomationWorkspaceState,
+  resolveAutomationWorkspaceRunCursor,
   staleAutomationRunAction,
 } from "./AutomationProfileDialog.logic";
+
+describe("Automation workspace Run cursor", () => {
+  it("prefers the exact persisted Symphony surface over a different local cursor", () => {
+    expect(
+      resolveAutomationWorkspaceRunCursor({
+        initialAutomationRunId: " run-from-surface ",
+        storedAutomationRunId: "different-local-run",
+      }),
+    ).toBe("run-from-surface");
+    expect(resolveAutomationWorkspaceRunCursor({ storedAutomationRunId: " local-run " })).toBe(
+      "local-run",
+    );
+  });
+});
 
 describe("Automation lifecycle action feedback", () => {
   const run = {

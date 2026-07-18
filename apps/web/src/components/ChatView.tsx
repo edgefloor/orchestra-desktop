@@ -209,7 +209,11 @@ import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
 import { NativeSubagentsPanel } from "./chat/NativeSubagentsPanel";
-import { AutomationWorkspace } from "./chat/AutomationProfileDialog";
+import { AutomationIssueWorkspace } from "./chat/AutomationIssueWorkspace";
+import {
+  AutomationWorkspace,
+  type AutomationIssueTaskNavigationInput,
+} from "./chat/AutomationProfileDialog";
 import { TaskAttentionView } from "./chat/TaskAttentionView";
 import { WorkflowRunsView } from "./chat/WorkflowRunsView";
 import { deriveWorkspaceWorkflowRuns } from "./chat/WorkflowRunsView.logic";
@@ -219,6 +223,7 @@ import {
   type WorkspaceTaskTabSource,
 } from "./WorkspaceTaskTabs.logic";
 import {
+  workspaceIssueSurfaceTitle,
   workspaceSurfaceKey,
   WORKSPACE_SURFACE_SCHEMA_VERSION,
   type WorkspaceSurface,
@@ -1360,7 +1365,7 @@ function ChatViewContent(props: ChatViewProps) {
     setAutomationWorkspaceThreadId(activeThreadId);
   }, [activeThread, activeThreadId, automationWorkspaceSurface, shouldUseWorkspaceContextSheet]);
   const openAutomationIssueTask = useCallback(
-    (input: { threadId: ThreadId; automationRunId: string; issueId: string }) => {
+    (input: AutomationIssueTaskNavigationInput) => {
       if (!activeThread) return;
       useWorkspaceSurfaceStore.getState().openSurface({
         schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
@@ -1371,6 +1376,8 @@ function ChatViewContent(props: ChatViewProps) {
         automationRunId: input.automationRunId,
         issueId: input.issueId,
         issueTaskThreadId: input.threadId,
+        issueIdentifier: input.issueIdentifier,
+        issueTitle: input.issueTitle,
       });
       setAutomationWorkspaceThreadId(null);
       const issueTaskRef = scopeThreadRef(activeThread.environmentId, input.threadId);
@@ -1577,6 +1584,24 @@ function ChatViewContent(props: ChatViewProps) {
       ) ?? null,
     [activeWorkspaceSurfaceKey, workspaceEntries],
   );
+  const activeAutomationIssueEntry = useMemo(() => {
+    const entry = activeWorkspaceEntry;
+    const surface = entry?.surface;
+    if (
+      !entry ||
+      !activeThread ||
+      surface?.kind !== "issue" ||
+      surface.environmentId !== activeThread.environmentId ||
+      surface.projectId !== activeThread.projectId ||
+      surface.issueTaskThreadId !== activeThread.id
+    ) {
+      return null;
+    }
+    return {
+      surface,
+      availability: entry.availability,
+    };
+  }, [activeThread, activeWorkspaceEntry]);
   useEffect(() => {
     if (!activeTaskSurface) return;
     if (activeRightPanelWorkspaceSurface) {
@@ -1985,6 +2010,20 @@ function ChatViewContent(props: ChatViewProps) {
       workspaceTaskSources,
     ],
   );
+  const openIssueParentSymphony = useCallback(() => {
+    const issueSurface = activeAutomationIssueEntry?.surface;
+    if (!issueSurface) return;
+    const symphonySurface: Extract<WorkspaceSurface, { kind: "symphony" }> = {
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+      kind: "symphony",
+      environmentId: issueSurface.environmentId,
+      projectId: issueSurface.projectId,
+      threadId: issueSurface.threadId,
+      automationRunId: issueSurface.automationRunId,
+    };
+    useWorkspaceSurfaceStore.getState().openSurface(symphonySurface);
+    activateWorkspaceSurface(workspaceSurfaceKey(symphonySurface));
+  }, [activateWorkspaceSurface, activeAutomationIssueEntry]);
   const closeWorkspaceSurface = useCallback(
     (key: WorkspaceSurfaceKey) => {
       const wasActive = useWorkspaceSurfaceStore.getState().activeSurfaceKey === key;
@@ -2109,7 +2148,7 @@ function ChatViewContent(props: ChatViewProps) {
               return [
                 {
                   key,
-                  title: `Issue ${issueSurface.issueId}`,
+                  title: workspaceIssueSurfaceTitle(issueSurface),
                   active: key === activeWorkspaceSurfaceKey,
                   availability: entry.availability,
                   onSelect: () => activateWorkspaceSurface(key),
@@ -3008,6 +3047,11 @@ function ChatViewContent(props: ChatViewProps) {
     if (activeThreadRef) {
       useRightPanelStore.getState().toggle(activeThreadRef, "diff");
     }
+  }, [activeThreadRef, diffOpen, isServerThread, onDiffPanelOpen]);
+  const onOpenIssueDiff = useCallback(() => {
+    if (!isServerThread || !activeThreadRef) return;
+    if (!diffOpen) onDiffPanelOpen?.();
+    useRightPanelStore.getState().open(activeThreadRef, "diff");
   }, [activeThreadRef, diffOpen, isServerThread, onDiffPanelOpen]);
 
   const envLocked = Boolean(
@@ -5908,10 +5952,31 @@ function ChatViewContent(props: ChatViewProps) {
           <AutomationWorkspace
             key={`${activeThread.environmentId}:${activeThread.id}`}
             environmentId={activeThread.environmentId}
+            initialAutomationRunId={
+              activeWorkspaceEntry?.surface.kind === "symphony" &&
+              activeWorkspaceEntry.surface.threadId === activeThread.id
+                ? activeWorkspaceEntry.surface.automationRunId
+                : null
+            }
             threadId={activeThread.id}
             threadTitle={activeThread.title}
             onClose={closeAutomationWorkspace}
             onOpenIssueTask={openAutomationIssueTask}
+          />
+        ) : null}
+        {activeAutomationIssueEntry ? (
+          <AutomationIssueWorkspace
+            key={workspaceSurfaceKey(activeAutomationIssueEntry.surface)}
+            automationRunId={activeAutomationIssueEntry.surface.automationRunId}
+            availability={activeAutomationIssueEntry.availability}
+            environmentId={activeAutomationIssueEntry.surface.environmentId}
+            issueId={activeAutomationIssueEntry.surface.issueId}
+            issueIdentifier={activeAutomationIssueEntry.surface.issueIdentifier}
+            issueTaskThreadId={activeAutomationIssueEntry.surface.issueTaskThreadId}
+            issueTitle={activeAutomationIssueEntry.surface.issueTitle}
+            onOpenDiff={onOpenIssueDiff}
+            onOpenSymphony={openIssueParentSymphony}
+            ownerThreadId={activeAutomationIssueEntry.surface.threadId}
           />
         ) : null}
         {/* Main content area with optional plan sidebar */}
@@ -5920,6 +5985,11 @@ function ChatViewContent(props: ChatViewProps) {
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {/* Messages Wrapper */}
             <div className="relative flex min-h-0 flex-1 flex-col">
+              {activeAutomationIssueEntry ? (
+                <div className="border-b border-border px-4 py-2 text-xs font-medium text-muted-foreground sm:px-6">
+                  Issue activity
+                </div>
+              ) : null}
               {/* Messages — LegendList handles virtualization and scrolling internally */}
               <MessagesTimeline
                 key={activeThread.id}

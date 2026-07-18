@@ -17,6 +17,7 @@ import type {
   AutomationRunInput,
   AutomationRunResult,
   AutomationStartInput,
+  AutomationStatusInput,
   AutomationSteerIssueInput,
   AutomationSteerIssueResult,
   AutomationCancelInput,
@@ -161,7 +162,7 @@ export interface ProviderAdapterShape<TError> {
   ) => Effect.Effect<AutomationQueueReadResult, TError>;
   readonly automationStatus?: (
     threadId: ThreadId,
-    input: Omit<AutomationLifecycleInput, "threadId">,
+    input: Omit<AutomationStatusInput, "threadId">,
   ) => Effect.Effect<AutomationRunResult, TError>;
   readonly pauseAutomation?: (
     threadId: ThreadId,
