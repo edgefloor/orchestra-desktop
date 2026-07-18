@@ -1,9 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off - Standalone evidence verifiers share filesystem and Git checks.
-import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
-import { readPngDimensions, sha256 } from "./orchestra-evidence-primitives.mjs";
+import { readPngDimensions, runGit, sha256 } from "./orchestra-evidence-primitives.mjs";
 
 export { readPngDimensions, sha256 };
 
@@ -55,14 +54,6 @@ export function requireSafeRelativePath(value: unknown, context: string): assert
   ) {
     throw new Error(`${context} must be a safe repository-relative path`);
   }
-}
-
-export function runGit(rootDir: string, args: ReadonlyArray<string>): string {
-  return NodeChildProcess.execFileSync("git", args, {
-    cwd: rootDir,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
 }
 
 export async function verifyDesktopSourceIdentity(input: {
