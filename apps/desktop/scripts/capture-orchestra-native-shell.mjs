@@ -367,9 +367,14 @@ async function waitFor(predicate, context, timeoutMs = 30_000) {
   });
 }
 
-export async function executeNativeShellRendererStep(renderer, source, context) {
+export async function executeNativeShellRendererStep(
+  renderer,
+  source,
+  context,
+  userGesture = true,
+) {
   try {
-    return await renderer.executeJavaScript(source, true);
+    return await renderer.executeJavaScript(source, userGesture);
   } catch (error) {
     const bound = (value, maxChars) => {
       const normalized = String(value);
@@ -378,8 +383,39 @@ export async function executeNativeShellRendererStep(renderer, source, context) 
     const boundedContext = bound(context, 160);
     const rendererUrl = bound(renderer.getURL(), 256);
     const message = bound(error instanceof Error ? error.message : error, 512);
-    throw new Error(`${boundedContext} renderer script failed at ${rendererUrl}: ${message}`);
+    throw new Error(`${boundedContext} renderer script failed at ${rendererUrl}: ${message}`, {
+      cause: error,
+    });
   }
+}
+
+export function withNativeShellRendererDiagnostics(renderer) {
+  let scriptSequence = 0;
+  return new Proxy(renderer, {
+    get(target, property) {
+      if (property === "executeJavaScript") {
+        return async (source, userGesture) => {
+          scriptSequence += 1;
+          const sourceLabel = String(source).replace(/\s+/g, " ").trim().slice(0, 120);
+          return executeNativeShellRendererStep(
+            target,
+            source,
+            `renderer script ${scriptSequence}${sourceLabel ? ` ${sourceLabel}` : ""}`,
+            userGesture,
+          );
+        };
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+export async function destroyNativeShellWindow(mainWindow) {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  mainWindow.destroy();
+  await new Promise((resolve) => setImmediate(resolve));
+  return true;
 }
 
 export function createNativeShellResponsesRequestJournal({
@@ -1515,9 +1551,10 @@ async function runElectronChild() {
   });
 
   let manifestWritten = false;
+  let mainWindow = null;
   try {
     await import(NodeURL.pathToFileURL(mainBundle).href);
-    const mainWindow = await waitFor(
+    mainWindow = await waitFor(
       () =>
         BrowserWindow.getAllWindows().find(
           (candidate) =>
@@ -1528,7 +1565,7 @@ async function runElectronChild() {
     );
     mainWindow.show();
     mainWindow.focus();
-    const renderer = mainWindow.webContents;
+    const renderer = withNativeShellRendererDiagnostics(mainWindow.webContents);
     let attachmentObservation = null;
     let rejectedAttachmentObservation = null;
     renderer.on("will-attach-webview", (event, webPreferences, params) => {
@@ -2993,6 +3030,7 @@ async function runElectronChild() {
       }),
     );
   } finally {
+    await destroyNativeShellWindow(mainWindow);
     await Promise.all([
       new Promise((resolve) => guestServer.close(() => resolve())),
       new Promise((resolve) => responsesServer.close(() => resolve())),

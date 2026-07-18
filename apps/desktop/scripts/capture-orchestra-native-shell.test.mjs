@@ -18,11 +18,13 @@ import {
   NATIVE_SHELL_ASSISTANT_MAX_TOTAL_CHARS,
   boundedThreadSessionObservation,
   createNativeShellResponsesRequestJournal,
+  destroyNativeShellWindow,
   executeNativeShellRendererStep,
   prepareNativeShellGitFixture,
   readNativeDogfoodRunStateSummaries,
   withNativeShellDiagnosticDeadline,
   withNativeShellEventTimeout,
+  withNativeShellRendererDiagnostics,
 } from "./capture-orchestra-native-shell.mjs";
 
 import {
@@ -166,6 +168,33 @@ describe("native-shell acceptance capture contract", () => {
     expect(failure.message).not.toContain("x".repeat(300));
     expect(failure.message).not.toContain("y".repeat(1_000));
     expect(failure.message.length).toBeLessThanOrEqual(160 + 27 + 256 + 2 + 512);
+  });
+
+  it("attributes otherwise raw renderer failures to their sequence and bounded source", async () => {
+    const renderer = withNativeShellRendererDiagnostics({
+      executeJavaScript: () => Promise.reject(new Error("Script failed to execute")),
+      getURL: () => "t3code://app/",
+    });
+
+    const failure = await renderer
+      .executeJavaScript(`window.fixture(${"x".repeat(300)})`, true)
+      .catch((error) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toContain("renderer script 1 window.fixture(");
+    expect(failure.message).not.toContain("x".repeat(300));
+    expect(failure.message).toContain("Script failed to execute");
+  });
+
+  it("destroys the renderer window before the native child quits", async () => {
+    const calls = [];
+    const destroyed = await destroyNativeShellWindow({
+      isDestroyed: () => false,
+      destroy: () => calls.push("destroy"),
+    });
+
+    expect(destroyed).toBe(true);
+    expect(calls).toEqual(["destroy"]);
   });
 
   it("accepts assistant text only after typed deltas reach the matching terminal event", () => {
