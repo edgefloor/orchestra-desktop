@@ -37,12 +37,23 @@ export function AutomationIssueActivityPresentation({
   error,
   onRetry,
 }: AutomationIssueActivityPresentationProps) {
+  const retainedAfterFailure = detail !== null && error !== null;
   return (
     <div
       aria-label="Native Issue task activity"
       className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-3 sm:px-6"
       data-automation-issue-native-activity={
-        detail ? "ready" : loading ? "loading" : error ? "error" : "empty"
+        retainedAfterFailure
+          ? "stale"
+          : detail
+            ? loading
+              ? "refreshing"
+              : "ready"
+            : loading
+              ? "loading"
+              : error
+                ? "error"
+                : "empty"
       }
     >
       <div className="mx-auto max-w-3xl space-y-3">
@@ -61,6 +72,11 @@ export function AutomationIssueActivityPresentation({
         {error ? (
           <div className="space-y-2 rounded-lg border border-destructive/40 p-3" role="alert">
             <p className="text-sm text-destructive">{error}</p>
+            {retainedAfterFailure ? (
+              <p className="text-xs text-muted-foreground">
+                Showing stale native activity retained from the last successful exact read.
+              </p>
+            ) : null}
             <Button onClick={onRetry} size="sm" variant="outline">
               Retry Issue activity
             </Button>
@@ -147,10 +163,15 @@ export function AutomationIssueActivityController({
     };
   }, [load]);
 
+  const exactDetail =
+    detail && isExactNativeIssueActivityDetail(detail, ownerThreadId, agentThreadId)
+      ? detail
+      : null;
+
   return (
     <AutomationIssueActivityPresentation
       agentThreadId={agentThreadId}
-      detail={detail}
+      detail={exactDetail}
       error={error}
       loading={loading}
       onRetry={load}

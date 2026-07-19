@@ -72,8 +72,10 @@ describe("AutomationIssueActivity", () => {
     );
 
     expect(markup).toContain('role="alert"');
+    expect(markup).toContain('data-automation-issue-native-activity="stale"');
     expect(markup).toContain("native read unavailable");
     expect(markup).toContain("Retry Issue activity");
+    expect(markup).toContain("Showing stale native activity retained");
     expect(markup).toContain("Verified the native child boundary.");
   });
 });

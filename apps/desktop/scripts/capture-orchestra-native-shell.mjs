@@ -2282,8 +2282,11 @@ async function runElectronChild() {
       true,
     );
 
+    const selectedIssueReloadFinished = new Promise((resolve) =>
+      renderer.once("did-finish-load", resolve),
+    );
     renderer.reload();
-    await new Promise((resolve) => renderer.once("did-finish-load", resolve));
+    await selectedIssueReloadFinished;
     const reloadState = await waitFor(
       () =>
         renderer
@@ -2589,14 +2592,14 @@ async function runElectronChild() {
       "selected-Issue task navigation",
     );
     const selectedIssueWorkspaceSelector = `[data-automation-issue-workspace]`;
-    let lastSelectedIssueNavigation = null;
-    let selectedIssueNavigation;
-    try {
-      selectedIssueNavigation = await waitFor(
-        () =>
-          renderer
-            .executeJavaScript(
-              `(() => {
+    const observeSelectedIssueSurface = async (context) => {
+      let lastProjection = null;
+      try {
+        return await waitFor(
+          () =>
+            renderer
+              .executeJavaScript(
+                `(() => {
               const expectedEnvironmentId = ${JSON.stringify(bootstrap.bootstrap.id)};
               const expectedOwnerThreadId = ${JSON.stringify(threadId)};
               const expectedIssueTaskThreadId = ${JSON.stringify(selectedIssueClaim.issueTask.threadId)};
@@ -2625,8 +2628,11 @@ async function runElectronChild() {
                 return key === persisted.activeSurfaceKey;
               }) ?? null;
               const activeSurface = activeEntry?.surface;
+              const nativeActivity = document.querySelector('[data-automation-issue-native-activity="ready"]');
               return {
                 route: location.hash,
+                routeEnvironmentId: routeSegments[0] ?? null,
+                routeOwnerThreadId: routeSegments[1] ?? null,
                 routeExact:
                   routeSegments.length === 2
                   && routeSegments[0] === expectedEnvironmentId
@@ -2640,24 +2646,46 @@ async function runElectronChild() {
                   && activeSurface.automationRunId === expectedRunId
                   && activeSurface.issueId === expectedIssueId
                   && activeSurface.issueTaskThreadId === expectedIssueTaskThreadId,
-                ready: document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)})?.innerText.includes('ready') === true,
+                surface: activeSurface ? {
+                  environmentId: activeSurface.environmentId ?? null,
+                  projectId: activeSurface.projectId ?? null,
+                  threadId: activeSurface.threadId ?? null,
+                  automationRunId: activeSurface.automationRunId ?? null,
+                  issueId: activeSurface.issueId ?? null,
+                  issueTaskThreadId: activeSurface.issueTaskThreadId ?? null,
+                } : null,
+                nativeActivityExact:
+                  nativeActivity instanceof HTMLElement
+                  && nativeActivity.innerText.includes(expectedIssueTaskThreadId),
+                ready:
+                  document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)})?.innerText.includes('ready') === true
+                  && nativeActivity instanceof HTMLElement,
               };
             })()`,
-              true,
-            )
-            .then((value) => {
-              lastSelectedIssueNavigation = value;
-              return value.ready && value.routeExact && value.surfaceExact ? value : null;
-            }),
-        "actual selected-Issue task surface",
-        45_000,
-      );
-    } catch (cause) {
-      throw new Error(
-        `actual selected-Issue task surface failed with last bounded projection: ${JSON.stringify(lastSelectedIssueNavigation)}`,
-        { cause },
-      );
-    }
+                true,
+              )
+              .then((value) => {
+                lastProjection = value;
+                return value.ready &&
+                  value.routeExact &&
+                  value.surfaceExact &&
+                  value.nativeActivityExact
+                  ? value
+                  : null;
+              }),
+          context,
+          45_000,
+        );
+      } catch (cause) {
+        throw new Error(
+          `${context} failed with last bounded projection: ${JSON.stringify(lastProjection)}`,
+          { cause },
+        );
+      }
+    };
+    const selectedIssueNavigation = await observeSelectedIssueSurface(
+      "actual selected-Issue task surface",
+    );
 
     await mainWindow.setContentSize(1024, 768, false);
     await waitFor(
@@ -2793,6 +2821,53 @@ async function runElectronChild() {
         `selected-Issue steering was not durable through focused status: ${JSON.stringify(selectedIssueSteered)}`,
       );
     }
+    const observeSelectedIssueStatus = async (context) => {
+      const status = await readNativeShellAutomationStatus({
+        baseUrl: bootstrap.bootstrap.httpBaseUrl,
+        token: bootstrap.token,
+        threadId,
+        runId: selectedIssueStarted.run.runId,
+        focusedIssueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+      });
+      const claim = status.run.claims.find(
+        (candidate) => candidate.claimId === selectedIssueClaim.claimId,
+      );
+      const providerChild = await runWithNativeShellRpcClient(
+        bootstrap.bootstrap.httpBaseUrl,
+        bootstrap.token,
+        (client) =>
+          client[WS_METHODS.nativeSubagentRead]({
+            threadId,
+            agentThreadId: selectedIssueClaim.issueTask.threadId,
+          }),
+      );
+      const observation = {
+        runId: status.run.runId,
+        claimCount: status.run.claims.length,
+        claimId: claim?.claimId ?? null,
+        issueId: claim?.issueId ?? null,
+        issueTaskThreadId: claim?.issueTask?.threadId ?? null,
+        providerChild: {
+          parentTaskId: providerChild.parentTaskId,
+          agentThreadId: providerChild.agentThreadId,
+          status: providerChild.status,
+        },
+      };
+      if (
+        observation.runId !== selectedIssueStarted.run.runId ||
+        status.run.claims.length !== 1 ||
+        observation.claimId !== selectedIssueClaim.claimId ||
+        observation.issueId !== ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id ||
+        observation.issueTaskThreadId !== selectedIssueClaim.issueTask.threadId ||
+        observation.providerChild.parentTaskId !== threadId ||
+        observation.providerChild.agentThreadId !== selectedIssueClaim.issueTask.threadId
+      ) {
+        throw new Error(
+          `${context} returned the wrong selected-Issue identity: ${JSON.stringify(status)}`,
+        );
+      }
+      return observation;
+    };
 
     await clickButtonByText(selectedIssueWorkspaceSelector, "Open in Linear", "safe tracker URL");
     await waitFor(
@@ -2846,6 +2921,96 @@ async function runElectronChild() {
       selectedIssueImageBytes,
     );
 
+    renderer.reload();
+    await new Promise((resolve) => renderer.once("did-finish-load", resolve));
+    await waitFor(
+      () =>
+        renderer
+          .executeJavaScript(
+            `document.body.innerText.includes(${JSON.stringify(threadTitle)})`,
+            true,
+          )
+          .then((visible) => (visible ? true : null)),
+      "selected-Issue owner route after renderer reload",
+    );
+    const selectedIssueReloadNavigation = await observeSelectedIssueSurface(
+      "same selected-Issue surface after renderer reload",
+    );
+    const selectedIssueReloadStatus = await observeSelectedIssueStatus(
+      "selected-Issue status after renderer reload",
+    );
+    const selectedIssueReload = {
+      navigation: selectedIssueReloadNavigation,
+      identity: selectedIssueReloadStatus,
+    };
+
+    const selectedIssueProviderStopCommand = {
+      type: "thread.session.stop",
+      commandId: "cmd-native-selected-issue-provider-restart-stop",
+      threadId,
+      createdAt: new Date().toISOString(),
+    };
+    const selectedIssueProviderStopReceipt = await dispatchCommand(
+      bootstrap.bootstrap.httpBaseUrl,
+      bootstrap.token,
+      selectedIssueProviderStopCommand,
+    );
+    if (!Number.isInteger(selectedIssueProviderStopReceipt?.sequence)) {
+      throw new Error("selected-Issue provider stop did not return a typed receipt sequence");
+    }
+    const selectedIssueStoppedEvent = await awaitNativeShellSessionEvent({
+      baseUrl: bootstrap.bootstrap.httpBaseUrl,
+      token: bootstrap.token,
+      threadId,
+      afterSequence: selectedIssueProviderStopReceipt.sequence,
+      status: "stopped",
+    });
+    const selectedIssueStoppedThread = boundedThreadSessionObservation(
+      await fetchThreadSnapshot(bootstrap.bootstrap.httpBaseUrl, bootstrap.token, threadId),
+    );
+    if (selectedIssueStoppedThread.session?.status !== "stopped") {
+      throw new Error("selected-Issue provider stop did not reach the exact owner task");
+    }
+    await clickButtonByText(
+      selectedIssueWorkspaceSelector,
+      "Refresh",
+      "selected-Issue provider recovery",
+    );
+    const selectedIssueReadyEvent = await awaitNativeShellSessionEvent({
+      baseUrl: bootstrap.bootstrap.httpBaseUrl,
+      token: bootstrap.token,
+      threadId,
+      afterSequence: selectedIssueStoppedEvent.event.sequence,
+      status: "ready",
+    });
+    const selectedIssueReadyThread = boundedThreadSessionObservation(
+      await fetchThreadSnapshot(bootstrap.bootstrap.httpBaseUrl, bootstrap.token, threadId),
+    );
+    if (selectedIssueReadyThread.session?.status !== "ready") {
+      throw new Error("selected-Issue provider recovery did not restore the exact owner task");
+    }
+    const selectedIssueRestartNavigation = await observeSelectedIssueSurface(
+      "same selected-Issue surface after provider restart",
+    );
+    const selectedIssueRestartStatus = await observeSelectedIssueStatus(
+      "selected-Issue status after provider restart",
+    );
+    assertNativeDogfoodResponsesComplete(responsesRequestCounter.count);
+    const selectedIssueRestart = {
+      stop: {
+        receiptSequence: selectedIssueProviderStopReceipt.sequence,
+        sessionEventSequence: selectedIssueStoppedEvent.event.sequence,
+        thread: selectedIssueStoppedThread,
+      },
+      recovery: {
+        sessionEventSequence: selectedIssueReadyEvent.event.sequence,
+        thread: selectedIssueReadyThread,
+        navigation: selectedIssueRestartNavigation,
+        identity: selectedIssueRestartStatus,
+      },
+      responsesRequestCount: responsesRequestCounter.count,
+    };
+
     await clickButtonByText(
       selectedIssueWorkspaceSelector,
       "Open Symphony",
@@ -2857,6 +3022,8 @@ async function runElectronChild() {
       "selected-Issue exact Parent Symphony",
     );
     const selectedIssueObservation = {
+      environmentId: bootstrap.bootstrap.id,
+      projectId,
       runId: selectedIssueStarted.run.runId,
       ownerThreadId: threadId,
       issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
@@ -2869,6 +3036,8 @@ async function runElectronChild() {
       externalUrls: openedExternalUrls,
       diff: selectedIssueDiff,
       parent: selectedIssueParent,
+      reload: selectedIssueReload,
+      restart: selectedIssueRestart,
     };
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Close Symphony workspace"]')?.click()`,
@@ -3295,6 +3464,36 @@ async function runElectronChild() {
             ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title,
           ) &&
           selectedIssueObservation.initial.text.includes("Parent: Symphony"),
+      ),
+      nativeSelectedIssueReloadRecovered: makeNativeShellAssertion(
+        selectedIssueObservation.reload,
+        selectedIssueObservation.reload.navigation.routeExact === true &&
+          selectedIssueObservation.reload.navigation.surfaceExact === true &&
+          selectedIssueObservation.reload.navigation.nativeActivityExact === true &&
+          selectedIssueObservation.reload.identity.runId === selectedIssueStarted.run.runId &&
+          selectedIssueObservation.reload.identity.claimId === selectedIssueClaim.claimId &&
+          selectedIssueObservation.reload.identity.issueId ===
+            ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id &&
+          selectedIssueObservation.reload.identity.issueTaskThreadId ===
+            selectedIssueClaim.issueTask.threadId,
+      ),
+      nativeSelectedIssueProviderRestartRecovered: makeNativeShellAssertion(
+        selectedIssueObservation.restart,
+        selectedIssueObservation.restart.stop.thread.session?.status === "stopped" &&
+          selectedIssueObservation.restart.recovery.thread.session?.status === "ready" &&
+          selectedIssueObservation.restart.recovery.navigation.routeExact === true &&
+          selectedIssueObservation.restart.recovery.navigation.surfaceExact === true &&
+          selectedIssueObservation.restart.recovery.navigation.nativeActivityExact === true &&
+          selectedIssueObservation.restart.recovery.identity.runId ===
+            selectedIssueStarted.run.runId &&
+          selectedIssueObservation.restart.recovery.identity.claimId ===
+            selectedIssueClaim.claimId &&
+          selectedIssueObservation.restart.recovery.identity.issueId ===
+            ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id &&
+          selectedIssueObservation.restart.recovery.identity.issueTaskThreadId ===
+            selectedIssueClaim.issueTask.threadId &&
+          selectedIssueObservation.restart.responsesRequestCount ===
+            ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
       ),
       nativeSelectedIssueFocusedStatus: makeNativeShellAssertion(
         {

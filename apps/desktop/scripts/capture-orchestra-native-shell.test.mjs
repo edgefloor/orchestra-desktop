@@ -812,6 +812,24 @@ describe("native-shell acceptance capture contract", () => {
     expect(semanticChecksSource.indexOf('"enabled selected-Issue guidance action"')).toBeLessThan(
       semanticChecksSource.indexOf("await clickButtonByText("),
     );
+
+    const reloadContinuity = captureSource.indexOf("const selectedIssueReloadNavigation =");
+    const restartContinuity = captureSource.indexOf("const selectedIssueProviderStopCommand =");
+    const parentNavigation = captureSource.indexOf('"selected-Issue Parent"', restartContinuity);
+    const continuitySource = captureSource.slice(reloadContinuity, parentNavigation);
+    expect(reloadContinuity).toBeGreaterThan(semanticChecksStart);
+    expect(restartContinuity).toBeGreaterThan(reloadContinuity);
+    expect(parentNavigation).toBeGreaterThan(restartContinuity);
+    expect(continuitySource).toContain("observeSelectedIssueSurface(");
+    expect(continuitySource).toContain("observeSelectedIssueStatus(");
+    expect(continuitySource).toContain("cmd-native-selected-issue-provider-restart-stop");
+    expect(continuitySource).toContain('status: "stopped"');
+    expect(continuitySource).toContain('status: "ready"');
+    expect(captureSource).toContain("client[WS_METHODS.nativeSubagentRead]");
+    expect(captureSource).toContain("providerChild.parentTaskId !== threadId");
+    expect(captureSource).toContain(
+      "providerChild.agentThreadId !== selectedIssueClaim.issueTask.threadId",
+    );
   });
 
   it("opens the retained Git menu accessibly and reads only its visible structured items", async () => {

@@ -99,9 +99,9 @@ const detail: NativeSubagentDetail = {
 
 type PresentationElement = ReactElement<AutomationIssueActivityPresentationProps>;
 
-function renderController(): PresentationElement {
+function renderController(nextProps: AutomationIssueActivityProps = props): PresentationElement {
   hooks.beginRender();
-  return AutomationIssueActivityController(props) as PresentationElement;
+  return AutomationIssueActivityController(nextProps) as PresentationElement;
 }
 
 async function flushPromises(): Promise<void> {
@@ -156,5 +156,18 @@ describe("AutomationIssueActivityController", () => {
 
     expect(presentation.props.detail).toEqual(detail);
     expect(presentation.props.error).toBe("native read unavailable");
+  });
+
+  it("never presents retained detail across an Issue identity transition", async () => {
+    testState.readDetail.mockResolvedValueOnce({ _tag: "Success", value: detail });
+
+    let presentation = renderController();
+    hooks.runMountEffects();
+    await flushPromises();
+    presentation = renderController();
+    expect(presentation.props.detail).toEqual(detail);
+
+    presentation = renderController({ ...props, agentThreadId: "provider-other-issue-task" });
+    expect(presentation.props.detail).toBeNull();
   });
 });

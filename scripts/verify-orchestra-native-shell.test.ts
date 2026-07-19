@@ -430,6 +430,8 @@ async function makeFixture(
     sameSymphonyStatus: true,
   };
   const selectedIssue = {
+    environmentId: "native-shell",
+    projectId: "project-native-shell-acceptance",
     runId: "automation-cycle9",
     ownerThreadId: "thread-native-shell-acceptance",
     issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
@@ -438,9 +440,20 @@ async function makeFixture(
     trackerUrl: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url,
     navigation: {
       route: "#/native-shell/thread-native-shell-acceptance",
+      routeEnvironmentId: "native-shell",
+      routeOwnerThreadId: "thread-native-shell-acceptance",
       routeExact: true,
       surfaceExact: true,
       ready: true,
+      nativeActivityExact: true,
+      surface: {
+        environmentId: "native-shell",
+        projectId: "project-native-shell-acceptance",
+        threadId: "thread-native-shell-acceptance",
+        automationRunId: "automation-cycle9",
+        issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+        issueTaskThreadId: "019f-native-selected-issue",
+      },
     },
     initial: {
       text: `${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title}\nParent: Symphony`,
@@ -472,6 +485,69 @@ async function makeFixture(
     externalUrls: [ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url],
     diff: { title: "Diff", panelVisible: true },
     parent: { runId: "automation-cycle9", instanceCount: 1, totalRootCount: 1 },
+    reload: {
+      navigation: {
+        routeEnvironmentId: "native-shell",
+        routeOwnerThreadId: "thread-native-shell-acceptance",
+        routeExact: true,
+        surfaceExact: true,
+        nativeActivityExact: true,
+        surface: {
+          environmentId: "native-shell",
+          projectId: "project-native-shell-acceptance",
+          threadId: "thread-native-shell-acceptance",
+          automationRunId: "automation-cycle9",
+          issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+          issueTaskThreadId: "019f-native-selected-issue",
+        },
+      },
+      identity: {
+        runId: "automation-cycle9",
+        claimCount: 1,
+        claimId: "claim-orc-70",
+        issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+        issueTaskThreadId: "019f-native-selected-issue",
+        providerChild: {
+          parentTaskId: "thread-native-shell-acceptance",
+          agentThreadId: "019f-native-selected-issue",
+          status: "running",
+        },
+      },
+    },
+    restart: {
+      stop: { thread: { session: { status: "stopped" } } },
+      recovery: {
+        thread: { session: { status: "ready" } },
+        navigation: {
+          routeEnvironmentId: "native-shell",
+          routeOwnerThreadId: "thread-native-shell-acceptance",
+          routeExact: true,
+          surfaceExact: true,
+          nativeActivityExact: true,
+          surface: {
+            environmentId: "native-shell",
+            projectId: "project-native-shell-acceptance",
+            threadId: "thread-native-shell-acceptance",
+            automationRunId: "automation-cycle9",
+            issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+            issueTaskThreadId: "019f-native-selected-issue",
+          },
+        },
+        identity: {
+          runId: "automation-cycle9",
+          claimCount: 1,
+          claimId: "claim-orc-70",
+          issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+          issueTaskThreadId: "019f-native-selected-issue",
+          providerChild: {
+            parentTaskId: "thread-native-shell-acceptance",
+            agentThreadId: "019f-native-selected-issue",
+            status: "running",
+          },
+        },
+      },
+      responsesRequestCount: ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
+    },
   };
   const nativeDogfood = {
     responsesRequestCount: ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
@@ -529,6 +605,14 @@ async function makeFixture(
   );
   assertions.nativeDogfoodProviderRestartRecovered = makeNativeShellAssertion(restart, true);
   assertions.nativeSelectedIssueRendered = makeNativeShellAssertion(selectedIssue, true);
+  assertions.nativeSelectedIssueReloadRecovered = makeNativeShellAssertion(
+    selectedIssue.reload,
+    true,
+  );
+  assertions.nativeSelectedIssueProviderRestartRecovered = makeNativeShellAssertion(
+    selectedIssue.restart,
+    true,
+  );
   const drawerObservations = [
     { opened: true, closed: true, focusRestored: true },
     { opened: true, closed: true, focusRestored: true },
@@ -768,6 +852,46 @@ describe("Orchestra native-shell evidence verifier", () => {
         },
         message:
           "manifest.runtime.nativeDogfood.selectedIssue.steeringReceipt must prove enabled guidance was delivered",
+      },
+      {
+        mutate: (selectedIssue) => {
+          const reload = selectedIssue.reload as {
+            navigation: { surface: Record<string, unknown> };
+          };
+          reload.navigation.surface.issueTaskThreadId = "different-provider-child";
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.reload must recover the exact owner route, surface, Root, claim, Issue, and provider child",
+      },
+      {
+        mutate: (selectedIssue) => {
+          const reload = selectedIssue.reload as {
+            identity: { providerChild: Record<string, unknown> };
+          };
+          reload.identity.providerChild.parentTaskId = "different-owner";
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.reload must recover the exact owner route, surface, Root, claim, Issue, and provider child",
+      },
+      {
+        mutate: (selectedIssue) => {
+          const restart = selectedIssue.restart as {
+            recovery: { thread: { session: Record<string, unknown> } };
+          };
+          restart.recovery.thread.session.status = "stopped";
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.restart must recover the exact owner route, surface, Root, claim, Issue, and provider child after a stopped/ready cycle",
+      },
+      {
+        mutate: (selectedIssue) => {
+          const restart = selectedIssue.restart as {
+            recovery: { identity: Record<string, unknown> };
+          };
+          restart.recovery.identity.claimId = "different-claim";
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.restart must recover the exact owner route, surface, Root, claim, Issue, and provider child after a stopped/ready cycle",
       },
     ];
 

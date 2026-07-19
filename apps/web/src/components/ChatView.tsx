@@ -5981,6 +5981,7 @@ function ChatViewContent(props: ChatViewProps) {
                     ownerThreadId={activeAutomationIssueEntry.surface.threadId}
                   />
                   <AutomationIssueActivity
+                    key={workspaceSurfaceKey(activeAutomationIssueEntry.surface)}
                     agentThreadId={activeAutomationIssueEntry.surface.issueTaskThreadId}
                     environmentId={activeAutomationIssueEntry.surface.environmentId}
                     ownerThreadId={activeAutomationIssueEntry.surface.threadId}

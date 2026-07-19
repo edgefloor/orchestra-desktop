@@ -65,6 +65,8 @@ export const ORCHESTRA_NATIVE_SHELL_ASSERTIONS = Object.freeze(
     "nativeDogfoodIdentityRecovered",
     "nativeDogfoodProviderRestartRecovered",
     "nativeSelectedIssueRendered",
+    "nativeSelectedIssueReloadRecovered",
+    "nativeSelectedIssueProviderRestartRecovered",
     "nativeSelectedIssueFocusedStatus",
     "nativeSelectedIssueSteeringDelivered",
     "nativeSelectedIssueTrackerBoundary",

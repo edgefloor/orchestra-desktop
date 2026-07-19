@@ -380,6 +380,103 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
       "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact owner route and persisted provider-child surface",
     );
   }
+  const selectedReload = record(
+    selectedIssue.reload,
+    "manifest.runtime.nativeDogfood.selectedIssue.reload",
+  );
+  const selectedReloadNavigation = record(
+    selectedReload.navigation,
+    "manifest.runtime.nativeDogfood.selectedIssue.reload.navigation",
+  );
+  const selectedReloadIdentity = record(
+    selectedReload.identity,
+    "manifest.runtime.nativeDogfood.selectedIssue.reload.identity",
+  );
+  const selectedRestart = record(
+    selectedIssue.restart,
+    "manifest.runtime.nativeDogfood.selectedIssue.restart",
+  );
+  const selectedRestartStop = record(
+    selectedRestart.stop,
+    "manifest.runtime.nativeDogfood.selectedIssue.restart.stop",
+  );
+  const selectedRestartStoppedThread = record(
+    selectedRestartStop.thread,
+    "manifest.runtime.nativeDogfood.selectedIssue.restart.stop.thread",
+  );
+  const selectedRestartStoppedSession = record(
+    selectedRestartStoppedThread.session,
+    "manifest.runtime.nativeDogfood.selectedIssue.restart.stop.thread.session",
+  );
+  const selectedRestartRecovery = record(
+    selectedRestart.recovery,
+    "manifest.runtime.nativeDogfood.selectedIssue.restart.recovery",
+  );
+  const selectedRestartReadyThread = record(
+    selectedRestartRecovery.thread,
+    "manifest.runtime.nativeDogfood.selectedIssue.restart.recovery.thread",
+  );
+  const selectedRestartReadySession = record(
+    selectedRestartReadyThread.session,
+    "manifest.runtime.nativeDogfood.selectedIssue.restart.recovery.thread.session",
+  );
+  const selectedRestartNavigation = record(
+    selectedRestartRecovery.navigation,
+    "manifest.runtime.nativeDogfood.selectedIssue.restart.recovery.navigation",
+  );
+  const selectedRestartIdentity = record(
+    selectedRestartRecovery.identity,
+    "manifest.runtime.nativeDogfood.selectedIssue.restart.recovery.identity",
+  );
+  const exactSelectedIssueRecovery = (
+    navigation: Record<string, unknown>,
+    identity: Record<string, unknown>,
+  ): boolean => {
+    const surface = record(
+      navigation.surface,
+      "manifest.runtime.nativeDogfood.selectedIssue.recovery.navigation.surface",
+    );
+    const providerChild = record(
+      identity.providerChild,
+      "manifest.runtime.nativeDogfood.selectedIssue.recovery.identity.providerChild",
+    );
+    return (
+      navigation.routeEnvironmentId === selectedIssue.environmentId &&
+      navigation.routeOwnerThreadId === selectedIssue.ownerThreadId &&
+      navigation.routeExact === true &&
+      navigation.surfaceExact === true &&
+      navigation.nativeActivityExact === true &&
+      surface.environmentId === selectedIssue.environmentId &&
+      surface.projectId === selectedIssue.projectId &&
+      surface.threadId === selectedIssue.ownerThreadId &&
+      surface.automationRunId === selectedIssue.runId &&
+      surface.issueId === selectedIssue.issueId &&
+      surface.issueTaskThreadId === selectedIssue.issueTaskThreadId &&
+      identity.runId === selectedIssue.runId &&
+      identity.claimCount === 1 &&
+      identity.claimId === selectedIssue.claimId &&
+      identity.issueId === selectedIssue.issueId &&
+      identity.issueTaskThreadId === selectedIssue.issueTaskThreadId &&
+      providerChild.parentTaskId === selectedIssue.ownerThreadId &&
+      providerChild.agentThreadId === selectedIssue.issueTaskThreadId
+    );
+  };
+  if (!exactSelectedIssueRecovery(selectedReloadNavigation, selectedReloadIdentity)) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.selectedIssue.reload must recover the exact owner route, surface, Root, claim, Issue, and provider child",
+    );
+  }
+  if (
+    selectedRestartStoppedSession.status !== "stopped" ||
+    selectedRestartReadySession.status !== "ready" ||
+    Number(selectedRestart.responsesRequestCount) !==
+      ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT ||
+    !exactSelectedIssueRecovery(selectedRestartNavigation, selectedRestartIdentity)
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.selectedIssue.restart must recover the exact owner route, surface, Root, claim, Issue, and provider child after a stopped/ready cycle",
+    );
+  }
   if (!Array.isArray(selectedInitial.namedActions)) {
     throw new Error(
       "manifest.runtime.nativeDogfood.selectedIssue.initial.namedActions must be an array",
@@ -441,6 +538,8 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
   if (
     selectedIssue.issueId !== ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id ||
     selectedIssue.trackerUrl !== ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url ||
+    typeof selectedIssue.environmentId !== "string" ||
+    typeof selectedIssue.projectId !== "string" ||
     typeof selectedIssue.runId !== "string" ||
     typeof selectedIssue.ownerThreadId !== "string" ||
     typeof selectedIssue.issueTaskThreadId !== "string" ||
@@ -1262,6 +1361,14 @@ export async function verifyOrchestraNativeShell(
   });
   requireSameObservation("nativeDogfoodProviderRestartRecovered", nativeDogfood.restart);
   requireSameObservation("nativeSelectedIssueRendered", nativeDogfood.selectedIssue);
+  requireSameObservation(
+    "nativeSelectedIssueReloadRecovered",
+    record(nativeDogfood.selectedIssue, "manifest.runtime.nativeDogfood.selectedIssue").reload,
+  );
+  requireSameObservation(
+    "nativeSelectedIssueProviderRestartRecovered",
+    record(nativeDogfood.selectedIssue, "manifest.runtime.nativeDogfood.selectedIssue").restart,
+  );
 
   const narrowOpened = assertionObservation("narrowDrawerOpened");
   if (!isNarrowDrawerOpenedObservation(narrowOpened)) {
