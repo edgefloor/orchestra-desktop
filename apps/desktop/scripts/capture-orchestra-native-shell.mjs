@@ -1960,6 +1960,16 @@ async function runElectronChild() {
       console.error("native route diagnostic", JSON.stringify(diagnostic));
       throw error;
     }
+    const environmentId = await renderer.executeJavaScript(
+      `(() => {
+        const segments = location.hash.slice(1).split('/').filter(Boolean).map(decodeURIComponent);
+        if (segments.length !== 2 || segments[1] !== ${JSON.stringify(threadId)}) {
+          throw new Error('native owner task route did not expose the exact environment identity');
+        }
+        return segments[0];
+      })()`,
+      true,
+    );
 
     const clickButtonByText = async (scopeSelector, label, context) => {
       const clicked = await waitFor(
@@ -2600,7 +2610,7 @@ async function runElectronChild() {
             renderer
               .executeJavaScript(
                 `(() => {
-              const expectedEnvironmentId = ${JSON.stringify(bootstrap.bootstrap.id)};
+              const expectedEnvironmentId = ${JSON.stringify(environmentId)};
               const expectedOwnerThreadId = ${JSON.stringify(threadId)};
               const expectedIssueTaskThreadId = ${JSON.stringify(selectedIssueClaim.issueTask.threadId)};
               const expectedRunId = ${JSON.stringify(selectedIssueStarted.run.runId)};
@@ -3026,7 +3036,7 @@ async function runElectronChild() {
       "selected-Issue exact Parent Symphony",
     );
     const selectedIssueObservation = {
-      environmentId: bootstrap.bootstrap.id,
+      environmentId,
       projectId,
       runId: selectedIssueStarted.run.runId,
       ownerThreadId: threadId,

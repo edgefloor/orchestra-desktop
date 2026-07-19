@@ -790,6 +790,9 @@ describe("native-shell acceptance capture contract", () => {
     expect(selectedIssueReattachSource).not.toContain("selected-Issue Symphony inspection");
     expect(taskNavigationSource).toContain("routeSegments.length === 2");
     expect(taskNavigationSource).toContain("routeSegments[1] === expectedOwnerThreadId");
+    expect(taskNavigationSource).toContain("JSON.stringify(environmentId)");
+    expect(taskNavigationSource).not.toContain("bootstrap.bootstrap.id");
+    expect(captureSource).toContain("const environmentId = await renderer.executeJavaScript(");
     expect(taskNavigationSource).toContain("persisted.activeSurfaceKey");
     expect(taskNavigationSource).toContain(
       "activeSurface.issueTaskThreadId === expectedIssueTaskThreadId",
