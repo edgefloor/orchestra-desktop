@@ -2638,6 +2638,7 @@ async function runElectronChild() {
                 return key === persisted.activeSurfaceKey;
               }) ?? null;
               const activeSurface = activeEntry?.surface;
+              const issueWorkspace = document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)});
               const nativeActivity = document.querySelector('[data-automation-issue-native-activity="ready"]');
               return {
                 route: location.hash,
@@ -2667,7 +2668,10 @@ async function runElectronChild() {
                 nativeActivityExact:
                   nativeActivity instanceof HTMLElement
                   && nativeActivity.innerText.includes(expectedIssueTaskThreadId),
-                ready: nativeActivity instanceof HTMLElement,
+                ready:
+                  issueWorkspace instanceof HTMLElement
+                  && issueWorkspace.dataset.automationIssueWorkspace === 'ready'
+                  && nativeActivity instanceof HTMLElement,
               };
             })()`,
                 true,

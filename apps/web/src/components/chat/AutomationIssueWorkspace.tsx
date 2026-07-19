@@ -83,7 +83,7 @@ export function AutomationIssueWorkspacePresentation({
     <section
       aria-label={`${identifier} issue workspace`}
       className="max-h-[45vh] min-w-0 shrink-0 space-y-3 overflow-x-hidden overflow-y-auto border-b border-border bg-card/55 px-4 py-3 sm:px-6"
-      data-automation-issue-workspace=""
+      data-automation-issue-workspace={runtimeState}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">

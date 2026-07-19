@@ -245,6 +245,7 @@ describe("AutomationIssueWorkspacePresentation", () => {
     );
 
     expect(markup).toContain('aria-label="LIN-42 issue workspace"');
+    expect(markup).toContain('data-automation-issue-workspace="ready"');
     expect(markup).toContain("execution running");
     expect(markup).toContain("claim running");
     expect(markup).toContain("tracker In Progress");

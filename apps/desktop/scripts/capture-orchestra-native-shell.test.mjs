@@ -797,7 +797,10 @@ describe("native-shell acceptance capture contract", () => {
     expect(taskNavigationSource).toContain(
       "activeSurface.issueTaskThreadId === expectedIssueTaskThreadId",
     );
-    expect(taskNavigationSource).toContain("ready: nativeActivity instanceof HTMLElement");
+    expect(taskNavigationSource).toContain(
+      "issueWorkspace.dataset.automationIssueWorkspace === 'ready'",
+    );
+    expect(taskNavigationSource).toContain("&& nativeActivity instanceof HTMLElement");
     expect(taskNavigationSource).not.toContain(".innerText.includes('ready')");
     expect(taskNavigationSource).not.toContain("document.body.innerText.includes");
 
