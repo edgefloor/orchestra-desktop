@@ -20,6 +20,7 @@ export interface AutomationIssueActivityProps {
   readonly environmentId: EnvironmentId;
   readonly ownerThreadId: ThreadId;
   readonly agentThreadId: string;
+  readonly refreshGeneration?: number;
 }
 
 export interface AutomationIssueActivityPresentationProps {
@@ -124,6 +125,7 @@ export function AutomationIssueActivityController({
   environmentId,
   ownerThreadId,
   agentThreadId,
+  refreshGeneration = 0,
 }: AutomationIssueActivityProps) {
   const readDetail = useAtomCommand(readNativeSubagent, { reportFailure: false });
   const [detail, setDetail] = useState<NativeSubagentDetail | null>(null);
@@ -161,7 +163,7 @@ export function AutomationIssueActivityController({
     return () => {
       requestIdRef.current += 1;
     };
-  }, [load]);
+  }, [load, refreshGeneration]);
 
   const exactDetail =
     detail && isExactNativeIssueActivityDetail(detail, ownerThreadId, agentThreadId)

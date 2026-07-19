@@ -1201,6 +1201,12 @@ function ChatViewContent(props: ChatViewProps) {
   const legendListRef = useRef<LegendListRef | null>(null);
   const [composerOverlayElement, setComposerOverlayElement] = useState<HTMLDivElement | null>(null);
   const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
+  const [automationIssueActivityRefreshGeneration, setAutomationIssueActivityRefreshGeneration] =
+    useState(0);
+  const refreshAutomationIssueActivity = useCallback(
+    () => setAutomationIssueActivityRefreshGeneration((generation) => generation + 1),
+    [],
+  );
   const isAtEndRef = useRef(true);
   const attachmentPreviewHandoffByMessageIdRef = useRef<Record<string, string[]>>({});
   const attachmentPreviewPromotionInFlightByMessageIdRef = useRef<Record<string, true>>({});
@@ -5966,9 +5972,11 @@ function ChatViewContent(props: ChatViewProps) {
             issueActive={activeAutomationIssueEntry !== null}
             issueActivity={
               activeAutomationIssueEntry ? (
-                <div className="flex min-h-0 flex-1 flex-col">
+                <div
+                  className="flex min-h-0 flex-1 flex-col"
+                  key={workspaceSurfaceKey(activeAutomationIssueEntry.surface)}
+                >
                   <AutomationIssueWorkspace
-                    key={workspaceSurfaceKey(activeAutomationIssueEntry.surface)}
                     automationRunId={activeAutomationIssueEntry.surface.automationRunId}
                     availability={activeAutomationIssueEntry.availability}
                     environmentId={activeAutomationIssueEntry.surface.environmentId}
@@ -5977,14 +5985,15 @@ function ChatViewContent(props: ChatViewProps) {
                     issueTaskThreadId={activeAutomationIssueEntry.surface.issueTaskThreadId}
                     issueTitle={activeAutomationIssueEntry.surface.issueTitle}
                     onOpenDiff={onOpenIssueDiff}
+                    onNativeActivityRefresh={refreshAutomationIssueActivity}
                     onOpenSymphony={openIssueParentSymphony}
                     ownerThreadId={activeAutomationIssueEntry.surface.threadId}
                   />
                   <AutomationIssueActivity
-                    key={workspaceSurfaceKey(activeAutomationIssueEntry.surface)}
                     agentThreadId={activeAutomationIssueEntry.surface.issueTaskThreadId}
                     environmentId={activeAutomationIssueEntry.surface.environmentId}
                     ownerThreadId={activeAutomationIssueEntry.surface.threadId}
+                    refreshGeneration={automationIssueActivityRefreshGeneration}
                   />
                 </div>
               ) : null

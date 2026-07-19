@@ -19,6 +19,9 @@ const hooks = vi.hoisted(() => {
       slots = [];
       effects = [];
     },
+    discardEffects() {
+      effects = [];
+    },
     runMountEffects() {
       const mounted = [...effects];
       effects = [];
@@ -169,5 +172,31 @@ describe("AutomationIssueActivityController", () => {
 
     presentation = renderController({ ...props, agentThreadId: "provider-other-issue-task" });
     expect(presentation.props.detail).toBeNull();
+  });
+
+  it("refetches exact native activity when the shared Issue refresh generation advances", async () => {
+    const refreshedDetail = { ...detail, preview: "Refreshed exact native activity" };
+    testState.readDetail
+      .mockResolvedValueOnce({ _tag: "Success", value: detail })
+      .mockResolvedValueOnce({ _tag: "Success", value: refreshedDetail });
+
+    let presentation = renderController({ ...props, refreshGeneration: 0 });
+    hooks.runMountEffects();
+    await flushPromises();
+    presentation = renderController({ ...props, refreshGeneration: 0 });
+    expect(presentation.props.detail).toEqual(detail);
+    hooks.discardEffects();
+
+    renderController({ ...props, refreshGeneration: 1 });
+    hooks.runMountEffects();
+    await flushPromises();
+    presentation = renderController({ ...props, refreshGeneration: 1 });
+
+    expect(testState.readDetail).toHaveBeenCalledTimes(2);
+    expect(testState.readDetail).toHaveBeenLastCalledWith({
+      environmentId: "local",
+      input: { threadId: "automation-owner", agentThreadId: "provider-issue-task" },
+    });
+    expect(presentation.props.detail).toEqual(refreshedDetail);
   });
 });

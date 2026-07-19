@@ -2995,7 +2995,11 @@ async function runElectronChild() {
     const selectedIssueRestartStatus = await observeSelectedIssueStatus(
       "selected-Issue status after provider restart",
     );
-    assertNativeDogfoodResponsesComplete(responsesRequestCounter.count);
+    if (responsesRequestCounter.count !== ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT) {
+      throw new Error(
+        `selected-Issue provider recovery changed the deterministic Responses count: ${responsesRequestCounter.count}`,
+      );
+    }
     const selectedIssueRestart = {
       stop: {
         receiptSequence: selectedIssueProviderStopReceipt.sequence,

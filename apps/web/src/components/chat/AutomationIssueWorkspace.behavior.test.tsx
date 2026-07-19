@@ -124,6 +124,7 @@ const locatorProps: AutomationIssueWorkspaceProps = {
   issueTitle: "Complete selected issue context",
   onOpenSymphony: vi.fn(),
   onOpenDiff: vi.fn(),
+  onNativeActivityRefresh: vi.fn(),
 };
 
 const exactClaim: AutomationIssueClaim = {
@@ -254,6 +255,7 @@ describe("AutomationIssueWorkspaceController", () => {
     testState.openExternal.mockResolvedValue(undefined);
     vi.mocked(locatorProps.onOpenSymphony).mockReset();
     vi.mocked(locatorProps.onOpenDiff).mockReset();
+    vi.mocked(locatorProps.onNativeActivityRefresh!).mockReset();
   });
 
   it("loads the exact identity and exercises parent, Diff, tracker, effects, and steering actions", async () => {
@@ -340,12 +342,14 @@ describe("AutomationIssueWorkspaceController", () => {
 
     presentation.props.onRefresh();
     await flushPromises();
+    expect(locatorProps.onNativeActivityRefresh).toHaveBeenCalledTimes(1);
     presentation = renderController();
     expect(presentation.props.runtimeState).toBe("ready");
     expect(presentation.props.snapshot?.runResult.run.runId).toBe("automation-42");
 
     presentation.props.onRefresh();
     await flushPromises();
+    expect(locatorProps.onNativeActivityRefresh).toHaveBeenCalledTimes(2);
     presentation = renderController();
     expect(presentation.props.runtimeState).toBe("stale");
     expect(presentation.props.snapshot?.issue.issueId).toBe("linear-issue-42");

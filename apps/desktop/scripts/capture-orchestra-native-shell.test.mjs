@@ -825,6 +825,10 @@ describe("native-shell acceptance capture contract", () => {
     expect(continuitySource).toContain("cmd-native-selected-issue-provider-restart-stop");
     expect(continuitySource).toContain('status: "stopped"');
     expect(continuitySource).toContain('status: "ready"');
+    expect(continuitySource).toContain(
+      "responsesRequestCounter.count !== ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT",
+    );
+    expect(continuitySource).not.toContain("assertNativeDogfoodResponsesComplete(");
     expect(captureSource).toContain("client[WS_METHODS.nativeSubagentRead]");
     expect(captureSource).toContain("providerChild.parentTaskId !== threadId");
     expect(captureSource).toContain(

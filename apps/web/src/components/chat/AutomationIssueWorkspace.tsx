@@ -34,6 +34,7 @@ export interface AutomationIssueWorkspaceProps extends AutomationIssueWorkspaceL
   readonly issueTitle: string | undefined;
   readonly onOpenSymphony: () => void;
   readonly onOpenDiff: () => void;
+  readonly onNativeActivityRefresh?: () => void;
 }
 
 export interface AutomationIssueWorkspacePresentationProps {
@@ -280,6 +281,7 @@ export function AutomationIssueWorkspaceController({
   issueTitle,
   onOpenSymphony,
   onOpenDiff,
+  onNativeActivityRefresh,
 }: AutomationIssueWorkspaceProps) {
   const readStatus = useAtomCommand(readAutomationStatus, { reportFailure: false });
   const steerIssue = useAtomCommand(steerAutomationIssue, { reportFailure: false });
@@ -311,25 +313,27 @@ export function AutomationIssueWorkspaceController({
     [locator],
   );
 
-  const load = useCallback(() => {
-    const requestId = beginAutomationIssueRequest(statusRequestIdRef);
-    setLoading(true);
-    setError(null);
-    void readStatus({
-      environmentId,
-      input: exactAutomationStatusInput(locator),
-    }).then((result) => {
-      if (!isCurrentAutomationIssueRequest(statusRequestIdRef, requestId)) return;
-      setLoading(false);
-      if (result._tag === "Success") {
-        acceptRunResult(result.value);
-        return;
-      }
-      if (!isAtomCommandInterrupted(result)) {
-        setError(readableAutomationError(squashAtomCommandFailure(result), 1_024));
-      }
-    });
-  }, [acceptRunResult, environmentId, locator, readStatus]);
+  const load = useCallback(
+    (onSettled?: () => void) => {
+      const requestId = beginAutomationIssueRequest(statusRequestIdRef);
+      setLoading(true);
+      setError(null);
+      void readStatus({
+        environmentId,
+        input: exactAutomationStatusInput(locator),
+      }).then((result) => {
+        if (!isCurrentAutomationIssueRequest(statusRequestIdRef, requestId)) return;
+        setLoading(false);
+        if (result._tag === "Success") {
+          acceptRunResult(result.value);
+        } else if (!isAtomCommandInterrupted(result)) {
+          setError(readableAutomationError(squashAtomCommandFailure(result), 1_024));
+        }
+        onSettled?.();
+      });
+    },
+    [acceptRunResult, environmentId, locator, readStatus],
+  );
 
   useEffect(() => {
     load();
@@ -338,6 +342,10 @@ export function AutomationIssueWorkspaceController({
       steeringRequestIdRef.current += 1;
     };
   }, [load]);
+
+  const refresh = useCallback(() => {
+    load(onNativeActivityRefresh);
+  }, [load, onNativeActivityRefresh]);
 
   const sendGuidance = useCallback(() => {
     const claim = snapshot?.issue.claim;
@@ -399,7 +407,7 @@ export function AutomationIssueWorkspaceController({
       onOpenDiff={onOpenDiff}
       onOpenSymphony={onOpenSymphony}
       onOpenTracker={openTracker}
-      onRefresh={load}
+      onRefresh={refresh}
       onSendGuidance={sendGuidance}
       pending={loading || pendingSteering}
       runtimeState={runtimeState}
