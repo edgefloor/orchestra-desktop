@@ -34,6 +34,7 @@ import {
   withNativeShellDiagnosticDeadline,
   withNativeShellEventTimeout,
   withNativeShellRendererDiagnostics,
+  writeNativeDogfoodFixtureFiles,
 } from "./capture-orchestra-native-shell.mjs";
 
 import {
@@ -66,6 +67,28 @@ import {
 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
 
 describe("native-shell acceptance capture contract", () => {
+  it("creates parent directories for nested native dogfood fixtures", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "orchestra-fixtures-"));
+    try {
+      await writeNativeDogfoodFixtureFiles(root, {
+        ".codex/orchestra/native-shell-selected-issue.WORKFLOW.md": "name: selected-issue\n",
+        "README.md": "fixture\n",
+      });
+
+      await expect(
+        NodeFSP.readFile(
+          NodePath.join(root, ".codex/orchestra/native-shell-selected-issue.WORKFLOW.md"),
+          "utf8",
+        ),
+      ).resolves.toBe("name: selected-issue\n");
+      await expect(NodeFSP.readFile(NodePath.join(root, "README.md"), "utf8")).resolves.toBe(
+        "fixture\n",
+      );
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("waits for exact provider readiness before dispatching the first native turn", async () => {
     let releaseProvider;
     const providerReady = new Promise((resolve) => {

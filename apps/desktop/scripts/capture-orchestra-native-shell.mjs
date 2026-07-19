@@ -141,6 +141,16 @@ function cleanCargoEnvironment() {
   return environment;
 }
 
+export async function writeNativeDogfoodFixtureFiles(root, files) {
+  await Promise.all(
+    Object.entries(files).map(async ([relativePath, contents]) => {
+      const path = NodePath.join(root, relativePath);
+      await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
+      await NodeFSP.writeFile(path, contents);
+    }),
+  );
+}
+
 function rustHostTarget() {
   const verboseVersion = runChecked("rustc", ["-vV"]);
   const host = verboseVersion
@@ -714,12 +724,8 @@ async function launchUnderElectron() {
     ),
   );
   await Promise.all([
-    ...Object.entries(dogfoodFixtures.repositoryFiles).map(([relativePath, contents]) =>
-      NodeFSP.writeFile(NodePath.join(dogfoodRepository, relativePath), contents),
-    ),
-    ...Object.entries(dogfoodFixtures.codexHomeFiles).map(([relativePath, contents]) =>
-      NodeFSP.writeFile(NodePath.join(codexHome, relativePath), contents),
-    ),
+    writeNativeDogfoodFixtureFiles(dogfoodRepository, dogfoodFixtures.repositoryFiles),
+    writeNativeDogfoodFixtureFiles(codexHome, dogfoodFixtures.codexHomeFiles),
   ]);
   const gitFixtureIdentity = prepareNativeShellGitFixture({
     repository: dogfoodRepository,
