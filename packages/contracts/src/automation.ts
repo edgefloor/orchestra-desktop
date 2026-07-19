@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { NonNegativeInt, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -267,7 +268,7 @@ export const AutomationIssueClaim = Schema.Struct({
   issueId: Schema.String,
   issueIdentifier: Schema.String,
   issueTitle: AutomationBoundedText,
-  issueUrl: Schema.NullOr(Schema.String),
+  issueUrl: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   trackerState: Schema.String,
   priority: Schema.optional(Schema.Number),
   attempt: NonNegativeInt,

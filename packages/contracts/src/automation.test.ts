@@ -243,6 +243,21 @@ describe("production Automation operations", () => {
       ],
     });
 
+    const [{ issueUrl: _legacyIssueUrl, ...legacyClaim }] = run.claims;
+    expect(
+      decodeAutomationRun({
+        ...run,
+        claims: [legacyClaim],
+      }).claims[0]?.issueUrl,
+    ).toBeNull();
+
+    expect(
+      decodeAutomationRun({
+        ...run,
+        claims: [{ ...run.claims[0], issueUrl: null }],
+      }).claims[0]?.issueUrl,
+    ).toBeNull();
+
     const { coordination: _, ...withoutCoordination } = run;
     expect(() => decodeAutomationRun(withoutCoordination)).toThrow();
   });
