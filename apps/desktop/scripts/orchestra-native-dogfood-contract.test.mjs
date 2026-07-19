@@ -182,6 +182,9 @@ describe("native workspace dogfood contract", () => {
   it("builds sealed repository, Symphony profile, and isolated Codex config fixtures", () => {
     const fixtures = buildNativeDogfoodFixtures("http://127.0.0.1:43123");
 
+    expect(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH).toBe(
+      ".codex/orchestra/native-shell-selected-issue/WORKFLOW.md",
+    );
     expect(Object.keys(fixtures.repositoryFiles).sort()).toEqual([
       ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH,
       ORCHESTRA_NATIVE_DOGFOOD_PROFILE_PATH,

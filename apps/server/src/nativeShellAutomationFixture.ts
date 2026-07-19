@@ -6,7 +6,7 @@ import {
 import * as Schema from "effect/Schema";
 
 export const NATIVE_SHELL_SELECTED_ISSUE_PROFILE_PATH =
-  ".codex/orchestra/native-shell-selected-issue.WORKFLOW.md";
+  ".codex/orchestra/native-shell-selected-issue/WORKFLOW.md";
 export const NATIVE_SHELL_SELECTED_ISSUE_ENV = "ORCHESTRA_NATIVE_ACCEPTANCE_SELECTED_ISSUE_FIXTURE";
 
 export function resolveNativeShellAutomationFixture(

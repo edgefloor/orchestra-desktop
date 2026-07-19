@@ -65,19 +65,23 @@ import {
   runGit,
   sha256,
 } from "../../../scripts/lib/orchestra-evidence-primitives.mjs";
+import { ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH } from "../../../scripts/lib/orchestra-native-dogfood-contract.mjs";
 
 describe("native-shell acceptance capture contract", () => {
   it("creates parent directories for nested native dogfood fixtures", async () => {
+    expect(NodePath.basename(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH)).toBe(
+      "WORKFLOW.md",
+    );
     const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "orchestra-fixtures-"));
     try {
       await writeNativeDogfoodFixtureFiles(root, {
-        ".codex/orchestra/native-shell-selected-issue.WORKFLOW.md": "name: selected-issue\n",
+        [ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH]: "name: selected-issue\n",
         "README.md": "fixture\n",
       });
 
       await expect(
         NodeFSP.readFile(
-          NodePath.join(root, ".codex/orchestra/native-shell-selected-issue.WORKFLOW.md"),
+          NodePath.join(root, ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH),
           "utf8",
         ),
       ).resolves.toBe("name: selected-issue\n");
