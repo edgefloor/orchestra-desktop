@@ -770,6 +770,18 @@ describe("native-shell acceptance capture contract", () => {
     expect(captureSource).toContain(
       "selectedIssueResponseCount !== ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT",
     );
+    const selectedIssueReattachSource = captureSource.slice(
+      selectedIssuePhase,
+      taskNavigationStart,
+    );
+    expect(selectedIssueReattachSource).toContain("#automation-run-id");
+    expect(selectedIssueReattachSource).toContain("selectedIssueStarted.run.runId");
+    expect(selectedIssueReattachSource).toContain("new InputEvent('input'");
+    expect(selectedIssueReattachSource).toContain('clickButtonByText(symphonySelector, "Reattach"');
+    expect(selectedIssueReattachSource).toContain("matchingRoots.length !== 1");
+    expect(selectedIssueReattachSource).toContain("roots.length !== 1");
+    expect(selectedIssueReattachSource).toContain("exact selected-Issue Symphony reattachment");
+    expect(selectedIssueReattachSource).not.toContain("selected-Issue Symphony inspection");
     expect(taskNavigationSource).toContain("routeSegments.length === 2");
     expect(taskNavigationSource).toContain("persisted.activeSurfaceKey");
     expect(taskNavigationSource).toContain(

@@ -2494,20 +2494,63 @@ async function runElectronChild() {
       throw new Error("native selected-Issue Workflow response was not held at the model boundary");
     }
 
-    await clickButtonByText(symphonySelector, "Inspect", "selected-Issue Symphony inspection");
     const selectedIssueInspectorSelector = `[aria-label=${JSON.stringify(
       `${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.identifier} inspector`,
     )}]`;
-    await waitFor(
+    const selectedIssueReattachInput = await renderer.executeJavaScript(
+      `(() => {
+        const workspace = document.querySelector(${JSON.stringify(symphonySelector)});
+        const input = workspace?.querySelector('#automation-run-id');
+        if (!(input instanceof HTMLInputElement)) throw new Error('Symphony root Run input missing');
+        const value = ${JSON.stringify(selectedIssueStarted.run.runId)};
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (!setter) throw new Error('native input value setter missing');
+        setter.call(input, value);
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+        return input.value;
+      })()`,
+      true,
+    );
+    if (selectedIssueReattachInput !== selectedIssueStarted.run.runId) {
+      throw new Error("selected-Issue Symphony root Run input did not retain the exact run ID");
+    }
+    await clickButtonByText(symphonySelector, "Reattach", "selected-Issue Symphony reattach");
+    const selectedIssueSymphonyProjection = await waitFor(
       () =>
         renderer.executeJavaScript(
-          `document.querySelector(${JSON.stringify(selectedIssueInspectorSelector)})?.innerText.includes(${JSON.stringify(
-            ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title,
-          )}) === true`,
+          `(() => {
+            const workspace = document.querySelector(${JSON.stringify(symphonySelector)});
+            if (!(workspace instanceof HTMLElement)) return null;
+            const roots = [...workspace.querySelectorAll('[aria-label="Automation root status"]')];
+            const expectedRunId = ${JSON.stringify(selectedIssueStarted.run.runId)};
+            const matchingRoots = roots.filter((root) => [...root.querySelectorAll('code')]
+              .some((code) => code.textContent?.trim() === expectedRunId));
+            const inspector = workspace.querySelector(${JSON.stringify(selectedIssueInspectorSelector)});
+            if (
+              roots.length !== 1 ||
+              matchingRoots.length !== 1 ||
+              !(inspector instanceof HTMLElement) ||
+              !inspector.innerText.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title)})
+            ) return null;
+            return {
+              runId: expectedRunId,
+              instanceCount: matchingRoots.length,
+              totalRootCount: roots.length,
+              inspectorTitle: inspector.innerText.slice(0, 1000),
+            };
+          })()`,
           true,
         ),
-      "selected-Issue Symphony inspector",
+      "exact selected-Issue Symphony reattachment",
     );
+    if (
+      selectedIssueSymphonyProjection.instanceCount !== 1 ||
+      selectedIssueSymphonyProjection.totalRootCount !== 1
+    ) {
+      throw new Error(
+        `selected-Issue Symphony reattachment was not unique: ${JSON.stringify(selectedIssueSymphonyProjection)}`,
+      );
+    }
     await clickButtonByText(
       selectedIssueInspectorSelector,
       "Open issue task",
