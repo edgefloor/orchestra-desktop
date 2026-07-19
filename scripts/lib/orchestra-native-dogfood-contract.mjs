@@ -706,7 +706,7 @@ export function matchNativeDogfoodResponsesRequest(requestIndex, request) {
   if (requestIndex >= ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT) {
     contractError(
       "extra_request",
-      "the native dogfood contract permits exactly five requests",
+      `the native dogfood contract permits exactly ${ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT} requests`,
       409,
     );
   }

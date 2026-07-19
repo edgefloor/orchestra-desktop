@@ -716,6 +716,53 @@ describe("native-shell acceptance capture contract", () => {
     expect(workflowObserverSource).not.toContain("Loading step outputs and evidence references");
   });
 
+  it("seals selected-Issue request phases and exact task-surface navigation", async () => {
+    const captureSource = await NodeFSP.readFile(
+      NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),
+      "utf8",
+    );
+    const completedPhase = captureSource.indexOf(
+      'ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,\n      "native dogfood completed workflow"',
+    );
+    const automationStart = captureSource.indexOf("client[WS_METHODS.automationStart]");
+    const selectedIssuePhase = captureSource.indexOf(
+      'ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,\n      "native selected-Issue Workflow request"',
+    );
+    const taskNavigationStart = captureSource.indexOf(
+      "const selectedIssueWorkspaceSelector = `[data-automation-issue-workspace]`",
+    );
+    const taskNavigationEnd = captureSource.indexOf(
+      '"selected-Issue 1024x768 viewport"',
+      taskNavigationStart,
+    );
+    const taskNavigationSource = captureSource.slice(taskNavigationStart, taskNavigationEnd);
+
+    expect(completedPhase).toBeGreaterThanOrEqual(0);
+    expect(automationStart).toBeGreaterThan(completedPhase);
+    expect(selectedIssuePhase).toBeGreaterThan(automationStart);
+    expect(captureSource).toContain(
+      "selectedIssueResponseCount !== ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT",
+    );
+    expect(taskNavigationSource).toContain("routeSegments.length === 2");
+    expect(taskNavigationSource).toContain("persisted.activeSurfaceKey");
+    expect(taskNavigationSource).toContain(
+      "activeSurface.issueTaskThreadId === expectedIssueTaskThreadId",
+    );
+    expect(taskNavigationSource).not.toContain("document.body.innerText.includes");
+
+    const semanticChecksStart = captureSource.indexOf("const selectedIssueInitial =");
+    const steeringActivation = captureSource.indexOf(
+      '"selected-Issue native steering"',
+      semanticChecksStart,
+    );
+    const semanticChecksSource = captureSource.slice(semanticChecksStart, steeringActivation);
+    expect(semanticChecksSource).toContain("selectedIssueInitial.sendGuidance.disabled !== true");
+    expect(semanticChecksSource).toContain('"enabled selected-Issue guidance action"');
+    expect(semanticChecksSource.indexOf('"enabled selected-Issue guidance action"')).toBeLessThan(
+      semanticChecksSource.indexOf("await clickButtonByText("),
+    );
+  });
+
   it("opens the retained Git menu accessibly and reads only its visible structured items", async () => {
     const captureSource = await NodeFSP.readFile(
       NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),

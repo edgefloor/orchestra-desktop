@@ -17,6 +17,7 @@ import {
   ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE,
   ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH,
   ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH,
+  ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
   ORCHESTRA_NATIVE_DOGFOOD_WORKFLOW_PATH,
 } from "../../../scripts/lib/orchestra-native-dogfood-contract.mjs";
 
@@ -320,6 +321,11 @@ describe("native workspace dogfood contract", () => {
       } catch (error) {
         expect(error).toBeInstanceOf(NativeDogfoodContractError);
         expect(error).toMatchObject({ code, statusCode });
+        if (code === "extra_request") {
+          expect(error.message).toContain(
+            `exactly ${ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT} requests`,
+          );
+        }
       }
     }
     expect(() => assertNativeDogfoodResponsesComplete(4)).toThrow("incomplete_sequence");

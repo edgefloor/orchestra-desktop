@@ -2085,7 +2085,7 @@ async function runElectronChild() {
       throw new Error("native dogfood completed turn did not return a typed receipt sequence");
     }
     await responsesRequestCounter.waitFor(
-      ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
+      ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,
       "native dogfood completed workflow",
     );
     assertNativeDogfoodResponsesComplete(responsesRequestCounter.count);
@@ -2475,10 +2475,15 @@ async function runElectronChild() {
         `native selected-Issue fixture did not publish the exact running claim: ${JSON.stringify(selectedIssueStarted)}`,
       );
     }
-    await responsesRequestCounter.waitFor(
-      ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,
+    const selectedIssueResponseCount = await responsesRequestCounter.waitFor(
+      ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
       "native selected-Issue Workflow request",
     );
+    if (selectedIssueResponseCount !== ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT) {
+      throw new Error(
+        `native selected-Issue Workflow reached ${selectedIssueResponseCount} Responses requests instead of exactly ${ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT}`,
+      );
+    }
     if (!heldSelectedIssueWorkflowResponse) {
       throw new Error("native selected-Issue Workflow response was not held at the model boundary");
     }
@@ -2503,18 +2508,59 @@ async function runElectronChild() {
       "selected-Issue task navigation",
     );
     const selectedIssueWorkspaceSelector = `[data-automation-issue-workspace]`;
-    await waitFor(
+    const selectedIssueNavigation = await waitFor(
       () =>
         renderer
           .executeJavaScript(
-            `(() => ({
-              route: location.hash,
-              ready: document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)})?.innerText.includes('ready') === true,
-              issueTask: document.body.innerText.includes(${JSON.stringify(selectedIssueClaim.issueTask.threadId)})
-            }))()`,
+            `(() => {
+              const expectedEnvironmentId = ${JSON.stringify(bootstrap.bootstrap.id)};
+              const expectedIssueTaskThreadId = ${JSON.stringify(selectedIssueClaim.issueTask.threadId)};
+              const expectedRunId = ${JSON.stringify(selectedIssueStarted.run.runId)};
+              const expectedIssueId = ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id)};
+              const routeSegments = location.hash.slice(1).split('/').filter(Boolean).map(decodeURIComponent);
+              let persisted = null;
+              try {
+                persisted = JSON.parse(localStorage.getItem('orchestra:workspace-surfaces:v2') ?? 'null')?.state ?? null;
+              } catch {
+                persisted = null;
+              }
+              const activeEntry = persisted?.entries?.find((entry) => {
+                const surface = entry?.surface;
+                const key = JSON.stringify([
+                  'orchestra-workspace-surface',
+                  2,
+                  'issue',
+                  surface?.environmentId,
+                  surface?.projectId,
+                  surface?.threadId,
+                  surface?.automationRunId,
+                  surface?.issueId,
+                  surface?.issueTaskThreadId,
+                ]);
+                return key === persisted.activeSurfaceKey;
+              }) ?? null;
+              const activeSurface = activeEntry?.surface;
+              return {
+                route: location.hash,
+                routeExact:
+                  routeSegments.length === 2
+                  && routeSegments[0] === expectedEnvironmentId
+                  && routeSegments[1] === expectedIssueTaskThreadId,
+                surfaceExact:
+                  activeEntry?.availability === 'available'
+                  && activeSurface?.kind === 'issue'
+                  && activeSurface.environmentId === expectedEnvironmentId
+                  && activeSurface.projectId === ${JSON.stringify(projectId)}
+                  && activeSurface.threadId === ${JSON.stringify(threadId)}
+                  && activeSurface.automationRunId === expectedRunId
+                  && activeSurface.issueId === expectedIssueId
+                  && activeSurface.issueTaskThreadId === expectedIssueTaskThreadId,
+                ready: document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)})?.innerText.includes('ready') === true,
+              };
+            })()`,
             true,
           )
-          .then((value) => (value.ready && value.issueTask ? value : null)),
+          .then((value) => (value.ready && value.routeExact && value.surfaceExact ? value : null)),
       "actual selected-Issue task surface",
       45_000,
     );
@@ -2541,10 +2587,11 @@ async function runElectronChild() {
         const activity = document.querySelector('[aria-label="Issue activity"]');
         if (!(workspace instanceof HTMLElement) || !(composer instanceof HTMLFormElement)) return null;
         const style = getComputedStyle(workspace);
-        const namedActions = ['Open Symphony', 'Diff', 'Open in Linear', 'Refresh', 'Send guidance'].map((name) => {
+        const namedActions = ['Open Symphony', 'Diff', 'Open in Linear', 'Refresh'].map((name) => {
           const button = [...workspace.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim().includes(name));
           return { name, present: button instanceof HTMLButtonElement, disabled: button?.disabled ?? null, tabIndex: button?.tabIndex ?? null };
         });
+        const sendGuidance = [...workspace.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim().includes('Send guidance'));
         return {
           text: workspace.innerText.slice(0, 6000),
           parent: workspace.innerText.includes('Parent: Symphony'),
@@ -2560,6 +2607,11 @@ async function runElectronChild() {
           rootScrollWidth: document.documentElement.scrollWidth,
           rootClientWidth: document.documentElement.clientWidth,
           namedActions,
+          sendGuidance: {
+            present: sendGuidance instanceof HTMLButtonElement,
+            disabled: sendGuidance?.disabled ?? null,
+            tabIndex: sendGuidance?.tabIndex ?? null,
+          },
         };
       })()`,
       true,
@@ -2573,7 +2625,10 @@ async function runElectronChild() {
       !selectedIssueInitial.rootOverflow ||
       selectedIssueInitial.namedActions.some(
         (action) => !action.present || action.disabled === true || action.tabIndex < 0,
-      )
+      ) ||
+      !selectedIssueInitial.sendGuidance.present ||
+      selectedIssueInitial.sendGuidance.disabled !== true ||
+      selectedIssueInitial.sendGuidance.tabIndex < 0
     ) {
       throw new Error(
         `actual selected-Issue task surface failed semantic/layout checks: ${JSON.stringify(selectedIssueInitial)}`,
@@ -2616,6 +2671,19 @@ async function runElectronChild() {
         input.dispatchEvent(new Event('input', {bubbles:true}));
       })()`,
       "enter selected-Issue guidance",
+    );
+    await waitFor(
+      () =>
+        renderer.executeJavaScript(
+          `(() => {
+            const workspace = document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)});
+            const button = [...(workspace?.querySelectorAll('button') ?? [])]
+              .find((candidate) => candidate.textContent?.trim().includes('Send guidance'));
+            return button instanceof HTMLButtonElement && !button.disabled && button.tabIndex >= 0;
+          })()`,
+          true,
+        ),
+      "enabled selected-Issue guidance action",
     );
     await clickButtonByText(
       selectedIssueWorkspaceSelector,
@@ -2723,6 +2791,7 @@ async function runElectronChild() {
       issueTaskThreadId: selectedIssueClaim.issueTask.threadId,
       claimId: selectedIssueClaim.claimId,
       trackerUrl: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url,
+      navigation: selectedIssueNavigation,
       initial: selectedIssueInitial,
       attachment: selectedIssueAttachment,
       steeringReceipt: steeredClaim.latestSteeringReceipt,
@@ -3149,6 +3218,8 @@ async function runElectronChild() {
         selectedIssueObservation,
         selectedIssueObservation.runId === selectedIssueStarted.run.runId &&
           selectedIssueObservation.issueTaskThreadId === selectedIssueClaim.issueTask.threadId &&
+          selectedIssueObservation.navigation.routeExact === true &&
+          selectedIssueObservation.navigation.surfaceExact === true &&
           selectedIssueObservation.initial.text.includes(
             ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title,
           ) &&
