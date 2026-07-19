@@ -5,6 +5,7 @@ export const ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH =
 export const ORCHESTRA_NATIVE_DOGFOOD_PROFILE_PATH = "WORKFLOW.md";
 export const ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH =
   ".codex/orchestra/native-shell-selected-issue/WORKFLOW.md";
+export const ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_WORKFLOW_PATH = `.codex/orchestra/native-shell-selected-issue/${ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH}`;
 export const ORCHESTRA_NATIVE_DOGFOOD_PARENT_PROMPT =
   "Run the current-fork native workspace dogfood workflow.";
 export const ORCHESTRA_NATIVE_DOGFOOD_RESUME_PROMPT =
@@ -256,6 +257,7 @@ supports_websockets = false
       [ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH]: symphonyWorkflow,
       [ORCHESTRA_NATIVE_DOGFOOD_PROFILE_PATH]: profile,
       [ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH]: profile,
+      [ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_WORKFLOW_PATH]: symphonyWorkflow,
     }),
     codexHomeFiles: Object.freeze({ "config.toml": config }),
     missingCredentialEnvironmentVariable: missingLinearCredential,

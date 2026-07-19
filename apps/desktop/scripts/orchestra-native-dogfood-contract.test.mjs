@@ -16,6 +16,7 @@ import {
   ORCHESTRA_NATIVE_DOGFOOD_RESUME_PROMPT,
   ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE,
   ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH,
+  ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_WORKFLOW_PATH,
   ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH,
   ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
   ORCHESTRA_NATIVE_DOGFOOD_WORKFLOW_PATH,
@@ -187,6 +188,7 @@ describe("native workspace dogfood contract", () => {
     );
     expect(Object.keys(fixtures.repositoryFiles).sort()).toEqual([
       ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH,
+      ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_WORKFLOW_PATH,
       ORCHESTRA_NATIVE_DOGFOOD_PROFILE_PATH,
       ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH,
       ORCHESTRA_NATIVE_DOGFOOD_WORKFLOW_PATH,
@@ -208,6 +210,9 @@ describe("native workspace dogfood contract", () => {
     );
     expect(fixtures.repositoryFiles[ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH]).toContain(
       'task_prompt: { type: "string" }',
+    );
+    expect(fixtures.repositoryFiles[ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_WORKFLOW_PATH]).toBe(
+      fixtures.repositoryFiles[ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH],
     );
     expect(fixtures.codexHomeFiles["config.toml"]).toContain(
       'base_url = "http://127.0.0.1:43123/v1"',
