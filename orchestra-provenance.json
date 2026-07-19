@@ -11,7 +11,7 @@
   },
   "orchestraCodex": {
     "repository": "https://github.com/edgefloor/orchestra-codex.git",
-    "revision": "136521159943b9209f84a96c8da2d56d090c5fdd",
+    "revision": "8ce07e2b8c100e6ce7391e5f6dfec3c4503d1073",
     "schemaPath": "codex-rs/app-server-protocol/schema/typescript",
     "sourceTree": "0d4767c3b01157cf94797502aad0074cb2083f04",
     "generatedPath": "apps/web/src/orchestra/generated",
