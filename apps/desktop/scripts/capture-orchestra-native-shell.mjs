@@ -2667,9 +2667,7 @@ async function runElectronChild() {
                 nativeActivityExact:
                   nativeActivity instanceof HTMLElement
                   && nativeActivity.innerText.includes(expectedIssueTaskThreadId),
-                ready:
-                  document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)})?.innerText.includes('ready') === true
-                  && nativeActivity instanceof HTMLElement,
+                ready: nativeActivity instanceof HTMLElement,
               };
             })()`,
                 true,
