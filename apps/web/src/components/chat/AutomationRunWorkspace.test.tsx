@@ -143,7 +143,7 @@ describe("AutomationRunWorkspace", () => {
     const issue = projectAutomationWorkspace(runResult).issues[0]!;
 
     expect(automationIssueTaskNavigationInput(issue, runResult.run.runId)).toEqual({
-      threadId: "issue-task-70",
+      agentThreadId: "issue-task-70",
       automationRunId: "automation-root-70",
       issueId: "issue-70",
       issueIdentifier: "ORC-70",

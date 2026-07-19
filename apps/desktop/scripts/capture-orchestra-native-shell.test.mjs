@@ -743,7 +743,7 @@ describe("native-shell acceptance capture contract", () => {
     expect(workflowObserverSource).not.toContain("Loading step outputs and evidence references");
   });
 
-  it("seals selected-Issue request phases and exact task-surface navigation", async () => {
+  it("seals selected-Issue request phases and exact owner-hosted native-child navigation", async () => {
     const captureSource = await NodeFSP.readFile(
       NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),
       "utf8",
@@ -789,6 +789,7 @@ describe("native-shell acceptance capture contract", () => {
     expect(selectedIssueReattachSource).toContain("exact selected-Issue Symphony reattachment");
     expect(selectedIssueReattachSource).not.toContain("selected-Issue Symphony inspection");
     expect(taskNavigationSource).toContain("routeSegments.length === 2");
+    expect(taskNavigationSource).toContain("routeSegments[1] === expectedOwnerThreadId");
     expect(taskNavigationSource).toContain("persisted.activeSurfaceKey");
     expect(taskNavigationSource).toContain(
       "activeSurface.issueTaskThreadId === expectedIssueTaskThreadId",
@@ -801,6 +802,11 @@ describe("native-shell acceptance capture contract", () => {
       semanticChecksStart,
     );
     const semanticChecksSource = captureSource.slice(semanticChecksStart, steeringActivation);
+    expect(semanticChecksSource).toContain('[data-automation-issue-native-activity="ready"]');
+    expect(semanticChecksSource).toContain("selectedIssueInitial.nativeActivityExact");
+    expect(semanticChecksSource).toContain("selectedIssueInitial.ownerComposerAbsent");
+    expect(semanticChecksSource).not.toContain("native-selected-issue.png");
+    expect(semanticChecksSource).not.toContain("new DataTransfer()");
     expect(semanticChecksSource).toContain("selectedIssueInitial.sendGuidance.disabled !== true");
     expect(semanticChecksSource).toContain('"enabled selected-Issue guidance action"');
     expect(semanticChecksSource.indexOf('"enabled selected-Issue guidance action"')).toBeLessThan(

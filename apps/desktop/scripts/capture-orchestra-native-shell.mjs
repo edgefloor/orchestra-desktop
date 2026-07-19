@@ -2589,12 +2589,16 @@ async function runElectronChild() {
       "selected-Issue task navigation",
     );
     const selectedIssueWorkspaceSelector = `[data-automation-issue-workspace]`;
-    const selectedIssueNavigation = await waitFor(
-      () =>
-        renderer
-          .executeJavaScript(
-            `(() => {
+    let lastSelectedIssueNavigation = null;
+    let selectedIssueNavigation;
+    try {
+      selectedIssueNavigation = await waitFor(
+        () =>
+          renderer
+            .executeJavaScript(
+              `(() => {
               const expectedEnvironmentId = ${JSON.stringify(bootstrap.bootstrap.id)};
+              const expectedOwnerThreadId = ${JSON.stringify(threadId)};
               const expectedIssueTaskThreadId = ${JSON.stringify(selectedIssueClaim.issueTask.threadId)};
               const expectedRunId = ${JSON.stringify(selectedIssueStarted.run.runId)};
               const expectedIssueId = ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id)};
@@ -2626,7 +2630,7 @@ async function runElectronChild() {
                 routeExact:
                   routeSegments.length === 2
                   && routeSegments[0] === expectedEnvironmentId
-                  && routeSegments[1] === expectedIssueTaskThreadId,
+                  && routeSegments[1] === expectedOwnerThreadId,
                 surfaceExact:
                   activeEntry?.availability === 'available'
                   && activeSurface?.kind === 'issue'
@@ -2639,12 +2643,21 @@ async function runElectronChild() {
                 ready: document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)})?.innerText.includes('ready') === true,
               };
             })()`,
-            true,
-          )
-          .then((value) => (value.ready && value.routeExact && value.surfaceExact ? value : null)),
-      "actual selected-Issue task surface",
-      45_000,
-    );
+              true,
+            )
+            .then((value) => {
+              lastSelectedIssueNavigation = value;
+              return value.ready && value.routeExact && value.surfaceExact ? value : null;
+            }),
+        "actual selected-Issue task surface",
+        45_000,
+      );
+    } catch (cause) {
+      throw new Error(
+        `actual selected-Issue task surface failed with last bounded projection: ${JSON.stringify(lastSelectedIssueNavigation)}`,
+        { cause },
+      );
+    }
 
     await mainWindow.setContentSize(1024, 768, false);
     await waitFor(
@@ -2663,11 +2676,11 @@ async function runElectronChild() {
     const selectedIssueInitial = await renderer.executeJavaScript(
       `(() => {
         const workspace = document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)});
-        const composer = document.querySelector('[data-chat-composer-form="true"]');
-        const retainedComposer = document.querySelector('[data-automation-issue-composer-retained="true"]');
+        const ownerComposer = document.querySelector('[data-chat-composer-form="true"]');
         const activity = document.querySelector('[aria-label="Issue activity"]');
-        if (!(workspace instanceof HTMLElement) || !(composer instanceof HTMLFormElement)) return null;
-        const style = getComputedStyle(workspace);
+        const nativeActivity = document.querySelector('[data-automation-issue-native-activity="ready"]');
+        if (!(workspace instanceof HTMLElement) || !(activity instanceof HTMLElement) || !(nativeActivity instanceof HTMLElement)) return null;
+        const activityStyle = getComputedStyle(nativeActivity);
         const namedActions = ['Open Symphony', 'Diff', 'Open in Linear', 'Refresh'].map((name) => {
           const button = [...workspace.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim().includes(name));
           return { name, present: button instanceof HTMLButtonElement, disabled: button?.disabled ?? null, tabIndex: button?.tabIndex ?? null };
@@ -2676,14 +2689,15 @@ async function runElectronChild() {
         return {
           text: workspace.innerText.slice(0, 6000),
           parent: workspace.innerText.includes('Parent: Symphony'),
-          activityRegion: activity instanceof HTMLElement,
-          composer: Boolean(retainedComposer),
-          attachmentAffordance: composer.ondrop !== null || composer.closest('[data-chat-composer-surface]') !== null,
-          contenteditable: composer.querySelector('[contenteditable="true"], [contenteditable="plaintext-only"]') !== null,
-          bounded: style.overflowY === 'auto' && workspace.scrollHeight > workspace.clientHeight,
-          overflowY: style.overflowY,
-          scrollHeight: workspace.scrollHeight,
-          clientHeight: workspace.clientHeight,
+          activityRegion: true,
+          nativeActivityReady: nativeActivity.dataset.automationIssueNativeActivity === 'ready',
+          nativeActivityText: nativeActivity.innerText.slice(0, 6000),
+          nativeActivityExact: nativeActivity.innerText.includes(${JSON.stringify(selectedIssueClaim.issueTask.threadId)}),
+          ownerComposerAbsent: ownerComposer === null,
+          bounded: activityStyle.overflowY === 'auto',
+          overflowY: activityStyle.overflowY,
+          scrollHeight: nativeActivity.scrollHeight,
+          clientHeight: nativeActivity.clientHeight,
           rootOverflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
           rootScrollWidth: document.documentElement.scrollWidth,
           rootClientWidth: document.documentElement.clientWidth,
@@ -2700,8 +2714,9 @@ async function runElectronChild() {
     if (
       !selectedIssueInitial?.parent ||
       !selectedIssueInitial.activityRegion ||
-      !selectedIssueInitial.composer ||
-      !selectedIssueInitial.contenteditable ||
+      !selectedIssueInitial.nativeActivityReady ||
+      !selectedIssueInitial.nativeActivityExact ||
+      !selectedIssueInitial.ownerComposerAbsent ||
       !selectedIssueInitial.bounded ||
       !selectedIssueInitial.rootOverflow ||
       selectedIssueInitial.namedActions.some(
@@ -2713,30 +2728,6 @@ async function runElectronChild() {
     ) {
       throw new Error(
         `actual selected-Issue task surface failed semantic/layout checks: ${JSON.stringify(selectedIssueInitial)}`,
-      );
-    }
-
-    const selectedIssueAttachment = await renderer.executeJavaScript(
-      `(async () => {
-        const form = document.querySelector('[data-chat-composer-form="true"]');
-        if (!(form instanceof HTMLFormElement)) throw new Error('normal ChatComposer form missing');
-        const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), (value) => value.charCodeAt(0));
-        const transfer = new DataTransfer();
-        transfer.items.add(new File([bytes], 'native-selected-issue.png', {type:'image/png'}));
-        form.dispatchEvent(new DragEvent('drop', {bubbles:true,cancelable:true,dataTransfer:transfer}));
-        for (let attempt = 0; attempt < 40; attempt += 1) {
-          const preview = document.querySelector('[aria-label="Preview native-selected-issue.png"]');
-          const remove = document.querySelector('[aria-label="Remove native-selected-issue.png"]');
-          if (preview && remove) return { preview: true, remove: true };
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
-        return { preview: false, remove: false };
-      })()`,
-      true,
-    );
-    if (!selectedIssueAttachment.preview || !selectedIssueAttachment.remove) {
-      throw new Error(
-        `normal ChatComposer did not retain dropped attachment: ${JSON.stringify(selectedIssueAttachment)}`,
       );
     }
 
@@ -2874,7 +2865,6 @@ async function runElectronChild() {
       trackerUrl: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url,
       navigation: selectedIssueNavigation,
       initial: selectedIssueInitial,
-      attachment: selectedIssueAttachment,
       steeringReceipt: steeredClaim.latestSteeringReceipt,
       externalUrls: openedExternalUrls,
       diff: selectedIssueDiff,
@@ -3334,16 +3324,17 @@ async function runElectronChild() {
         selectedIssueObservation.diff.title === "Diff" &&
           selectedIssueObservation.diff.panelVisible === true,
       ),
-      nativeSelectedIssueComposerAttachment: makeNativeShellAssertion(
-        selectedIssueObservation.attachment,
-        selectedIssueObservation.initial.composer === true &&
-          selectedIssueObservation.initial.contenteditable === true &&
-          selectedIssueObservation.attachment.preview === true &&
-          selectedIssueObservation.attachment.remove === true,
-      ),
-      nativeSelectedIssueSemanticActivity: makeNativeShellAssertion(
-        selectedIssueObservation.initial.activityRegion,
-        selectedIssueObservation.initial.activityRegion === true,
+      nativeSelectedIssueNativeActivity: makeNativeShellAssertion(
+        {
+          activityRegion: selectedIssueObservation.initial.activityRegion,
+          nativeActivityReady: selectedIssueObservation.initial.nativeActivityReady,
+          nativeActivityExact: selectedIssueObservation.initial.nativeActivityExact,
+          ownerComposerAbsent: selectedIssueObservation.initial.ownerComposerAbsent,
+        },
+        selectedIssueObservation.initial.activityRegion === true &&
+          selectedIssueObservation.initial.nativeActivityReady === true &&
+          selectedIssueObservation.initial.nativeActivityExact === true &&
+          selectedIssueObservation.initial.ownerComposerAbsent === true,
       ),
       nativeSelectedIssueBoundedScroll: makeNativeShellAssertion(
         {

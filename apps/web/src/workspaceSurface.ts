@@ -37,7 +37,8 @@ export type WorkspaceSurface =
       readonly threadId: ThreadId;
       readonly automationRunId: string;
       readonly issueId: string;
-      readonly issueTaskThreadId: ThreadId;
+      /** Provider-native child identity; never a T3 host-task route identity. */
+      readonly issueTaskThreadId: string;
       /** Bounded presentation snapshot; never part of issue surface identity. */
       readonly issueIdentifier?: string;
       /** Bounded presentation snapshot; never part of issue surface identity. */

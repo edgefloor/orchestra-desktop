@@ -24,7 +24,7 @@ import {
 type AutomationWorkspaceView = "issues" | "activity" | "recovery" | "events";
 
 export interface AutomationIssueTaskNavigationInput {
-  readonly threadId: ThreadId;
+  readonly agentThreadId: string;
   readonly automationRunId: string;
   readonly issueId: string;
   readonly issueIdentifier: string;
@@ -73,7 +73,7 @@ export function automationIssueTaskNavigationInput(
   const threadId = issue.claim?.issueTask?.threadId;
   if (!threadId) return null;
   return {
-    threadId: ThreadId.make(threadId),
+    agentThreadId: threadId,
     automationRunId,
     issueId: issue.issueId,
     issueIdentifier: issue.issueIdentifier,

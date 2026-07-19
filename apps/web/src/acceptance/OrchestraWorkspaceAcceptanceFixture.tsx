@@ -656,6 +656,7 @@ export function OrchestraWorkspaceAcceptanceFixture({
               <AutomationIssueTaskFrame
                 activity={<Timeline />}
                 composer={<Composer />}
+                issueActivity={<Timeline />}
                 issueActive
               />
             ) : (

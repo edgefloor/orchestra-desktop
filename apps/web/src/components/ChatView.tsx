@@ -204,6 +204,7 @@ import {
 } from "../state/entities";
 import { environmentShell } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
+import { AutomationIssueActivity } from "./chat/AutomationIssueActivity";
 import { AutomationIssueTaskFrame } from "./chat/AutomationIssueTaskFrame";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
@@ -1378,19 +1379,16 @@ function ChatViewContent(props: ChatViewProps) {
         threadId: activeThread.id,
         automationRunId: input.automationRunId,
         issueId: input.issueId,
-        issueTaskThreadId: input.threadId,
+        issueTaskThreadId: input.agentThreadId,
         issueIdentifier: input.issueIdentifier,
         issueTitle: input.issueTitle,
       });
       setAutomationWorkspaceThreadId(null);
-      const issueTaskRef = scopeThreadRef(activeThread.environmentId, input.threadId);
-      useRightPanelStore.getState().close(issueTaskRef);
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(issueTaskRef),
-      });
+      useRightPanelStore
+        .getState()
+        .close(scopeThreadRef(activeThread.environmentId, activeThread.id));
     },
-    [activeThread, navigate],
+    [activeThread],
   );
   const reviewComposerAttention = useCallback(() => {
     if (shouldUseWorkspaceContextSheet) {
@@ -1596,7 +1594,7 @@ function ChatViewContent(props: ChatViewProps) {
       surface?.kind !== "issue" ||
       surface.environmentId !== activeThread.environmentId ||
       surface.projectId !== activeThread.projectId ||
-      surface.issueTaskThreadId !== activeThread.id
+      surface.threadId !== activeThread.id
     ) {
       return null;
     }
@@ -1660,7 +1658,7 @@ function ChatViewContent(props: ChatViewProps) {
       activeWorkspaceEntry?.surface.kind === "issue" &&
       activeWorkspaceEntry.surface.environmentId === activeTaskSurface.environmentId &&
       activeWorkspaceEntry.surface.projectId === activeTaskSurface.projectId &&
-      activeWorkspaceEntry.surface.issueTaskThreadId === activeTaskSurface.threadId
+      activeWorkspaceEntry.surface.threadId === activeTaskSurface.threadId
     ) {
       setWorkspaceContextRailView(null);
       setWorkspaceContextSheetOpen(false);
@@ -1732,10 +1730,7 @@ function ChatViewContent(props: ChatViewProps) {
                   projectedRunIds.has(entry.surface.runId)
                 );
               case "issue":
-                return (
-                  validTaskIds.has(entry.surface.threadId) &&
-                  validTaskIds.has(entry.surface.issueTaskThreadId)
-                );
+                return validTaskIds.has(entry.surface.threadId);
               case "preview":
               case "files":
               case "diff":
@@ -1960,15 +1955,15 @@ function ChatViewContent(props: ChatViewProps) {
           return;
         }
         case "issue": {
-          const issueTaskRef = scopeThreadRef(surface.environmentId, surface.issueTaskThreadId);
-          useRightPanelStore.getState().close(issueTaskRef);
+          const ownerTaskRef = scopeThreadRef(surface.environmentId, surface.threadId);
+          useRightPanelStore.getState().close(ownerTaskRef);
           setWorkspaceContextRailView(null);
           setWorkspaceContextSheetOpen(false);
           setAutomationWorkspaceThreadId(null);
-          if (surface.issueTaskThreadId === activeThread?.id) return;
+          if (surface.threadId === activeThread?.id) return;
           void navigate({
             to: "/$environmentId/$threadId",
-            params: buildThreadRouteParams(issueTaskRef),
+            params: buildThreadRouteParams(ownerTaskRef),
           });
           return;
         }
@@ -5964,26 +5959,35 @@ function ChatViewContent(props: ChatViewProps) {
             onOpenIssueTask={openAutomationIssueTask}
           />
         ) : null}
-        {activeAutomationIssueEntry ? (
-          <AutomationIssueWorkspace
-            key={workspaceSurfaceKey(activeAutomationIssueEntry.surface)}
-            automationRunId={activeAutomationIssueEntry.surface.automationRunId}
-            availability={activeAutomationIssueEntry.availability}
-            environmentId={activeAutomationIssueEntry.surface.environmentId}
-            issueId={activeAutomationIssueEntry.surface.issueId}
-            issueIdentifier={activeAutomationIssueEntry.surface.issueIdentifier}
-            issueTaskThreadId={activeAutomationIssueEntry.surface.issueTaskThreadId}
-            issueTitle={activeAutomationIssueEntry.surface.issueTitle}
-            onOpenDiff={onOpenIssueDiff}
-            onOpenSymphony={openIssueParentSymphony}
-            ownerThreadId={activeAutomationIssueEntry.surface.threadId}
-          />
-        ) : null}
         {/* Main content area with optional plan sidebar */}
         <div className="flex min-h-0 min-w-0 flex-1">
           {/* Chat column */}
           <AutomationIssueTaskFrame
             issueActive={activeAutomationIssueEntry !== null}
+            issueActivity={
+              activeAutomationIssueEntry ? (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <AutomationIssueWorkspace
+                    key={workspaceSurfaceKey(activeAutomationIssueEntry.surface)}
+                    automationRunId={activeAutomationIssueEntry.surface.automationRunId}
+                    availability={activeAutomationIssueEntry.availability}
+                    environmentId={activeAutomationIssueEntry.surface.environmentId}
+                    issueId={activeAutomationIssueEntry.surface.issueId}
+                    issueIdentifier={activeAutomationIssueEntry.surface.issueIdentifier}
+                    issueTaskThreadId={activeAutomationIssueEntry.surface.issueTaskThreadId}
+                    issueTitle={activeAutomationIssueEntry.surface.issueTitle}
+                    onOpenDiff={onOpenIssueDiff}
+                    onOpenSymphony={openIssueParentSymphony}
+                    ownerThreadId={activeAutomationIssueEntry.surface.threadId}
+                  />
+                  <AutomationIssueActivity
+                    agentThreadId={activeAutomationIssueEntry.surface.issueTaskThreadId}
+                    environmentId={activeAutomationIssueEntry.surface.environmentId}
+                    ownerThreadId={activeAutomationIssueEntry.surface.threadId}
+                  />
+                </div>
+              ) : null
+            }
             activity={
               <>
                 {/* Messages — LegendList handles virtualization and scrolling internally */}
@@ -6045,9 +6049,6 @@ function ChatViewContent(props: ChatViewProps) {
               <div
                 ref={setComposerOverlayElement}
                 data-chat-composer-overlay="true"
-                data-automation-issue-composer-retained={
-                  activeAutomationIssueEntry ? "true" : undefined
-                }
                 className="pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-1.5 sm:pt-2"
               >
                 <div

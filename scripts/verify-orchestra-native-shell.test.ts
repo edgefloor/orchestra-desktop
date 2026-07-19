@@ -437,7 +437,7 @@ async function makeFixture(
     claimId: "claim-orc-70",
     trackerUrl: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url,
     navigation: {
-      route: "#/native-shell/019f-native-selected-issue",
+      route: "#/native-shell/thread-native-shell-acceptance",
       routeExact: true,
       surfaceExact: true,
       ready: true,
@@ -446,9 +446,10 @@ async function makeFixture(
       text: `${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title}\nParent: Symphony`,
       parent: true,
       activityRegion: true,
-      composer: true,
-      attachmentAffordance: true,
-      contenteditable: true,
+      nativeActivityReady: true,
+      nativeActivityExact: true,
+      nativeActivityText: "019f-native-selected-issue\nNative selected Issue activity",
+      ownerComposerAbsent: true,
       bounded: true,
       overflowY: "auto",
       scrollHeight: 512,
@@ -464,7 +465,6 @@ async function makeFixture(
       })),
       sendGuidance: { present: true, disabled: true, tabIndex: 0 },
     },
-    attachment: { preview: true, remove: true },
     steeringReceipt: {
       status: "delivered",
       inputPreview: "Keep this native selected-Issue task grounded in exact receipts.",
@@ -753,14 +753,14 @@ describe("Orchestra native-shell evidence verifier", () => {
           (selectedIssue.navigation as Record<string, unknown>).routeExact = false;
         },
         message:
-          "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact issue task route and persisted surface",
+          "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact owner route and persisted provider-child surface",
       },
       {
         mutate: (selectedIssue) => {
           (selectedIssue.navigation as Record<string, unknown>).surfaceExact = false;
         },
         message:
-          "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact issue task route and persisted surface",
+          "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact owner route and persisted provider-child surface",
       },
       {
         mutate: (selectedIssue) => {

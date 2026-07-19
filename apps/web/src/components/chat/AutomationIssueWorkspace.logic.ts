@@ -16,7 +16,8 @@ export interface AutomationIssueWorkspaceLocator {
   readonly ownerThreadId: ThreadId;
   readonly automationRunId: string;
   readonly issueId: string;
-  readonly issueTaskThreadId: ThreadId;
+  /** Provider-native child identity; never a T3 host-task route identity. */
+  readonly issueTaskThreadId: string;
 }
 
 export interface AutomationIssueWorkspaceSnapshot {

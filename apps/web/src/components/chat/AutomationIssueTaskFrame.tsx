@@ -2,12 +2,14 @@ import type { PropsWithChildren, ReactNode } from "react";
 
 interface AutomationIssueTaskFrameProps extends PropsWithChildren {
   readonly issueActive: boolean;
+  readonly issueActivity: ReactNode;
   readonly activity: ReactNode;
   readonly composer: ReactNode;
 }
 
 export function AutomationIssueTaskFrame({
   issueActive,
+  issueActivity,
   activity,
   composer,
   children,
@@ -15,9 +17,7 @@ export function AutomationIssueTaskFrame({
   return (
     <div
       className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-      data-automation-issue-layout={
-        issueActive ? "bounded-context-with-retained-composer" : undefined
-      }
+      data-automation-issue-layout={issueActive ? "owner-hosted-native-child" : undefined}
     >
       <section
         aria-label={issueActive ? "Issue activity" : undefined}
@@ -31,9 +31,9 @@ export function AutomationIssueTaskFrame({
             Issue activity
           </div>
         ) : null}
-        {activity}
+        {issueActive ? issueActivity : activity}
       </section>
-      {composer}
+      {issueActive ? null : composer}
       {children}
     </div>
   );

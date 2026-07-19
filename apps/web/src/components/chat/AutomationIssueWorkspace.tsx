@@ -194,31 +194,33 @@ export function AutomationIssueWorkspacePresentation({
               </section>
             ) : null}
 
-            {canSteer ? (
-              <div className="space-y-2 rounded-lg border bg-background p-3">
-                <Label htmlFor={`issue-workspace-guidance-${claim.claimId}`}>
-                  Guide Issue task
-                </Label>
-                <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-                  <Input
-                    id={`issue-workspace-guidance-${claim.claimId}`}
-                    maxLength={16_384}
-                    onChange={(event) => onGuidanceChange(event.target.value)}
-                    placeholder="Send bounded guidance through native Codex authority"
-                    value={guidance}
-                  />
-                  <Button
-                    className="w-full sm:w-auto"
-                    disabled={pending || !guidance.trim()}
-                    onClick={onSendGuidance}
-                    size="sm"
-                    variant="outline"
-                  >
-                    Send guidance
-                  </Button>
-                </div>
+            <div className="space-y-2 rounded-lg border bg-background p-3">
+              <Label htmlFor={`issue-workspace-guidance-${claim.claimId}`}>Guide Issue task</Label>
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                <Input
+                  disabled={!canSteer || pending}
+                  id={`issue-workspace-guidance-${claim.claimId}`}
+                  maxLength={16_384}
+                  onChange={(event) => onGuidanceChange(event.target.value)}
+                  placeholder="Send bounded guidance through native Codex authority"
+                  value={guidance}
+                />
+                <Button
+                  className="w-full sm:w-auto"
+                  disabled={!canSteer || pending || !guidance.trim()}
+                  onClick={onSendGuidance}
+                  size="sm"
+                  variant="outline"
+                >
+                  Send guidance
+                </Button>
               </div>
-            ) : null}
+              {!canSteer ? (
+                <p className="text-xs text-muted-foreground" role="status">
+                  Issue guidance is available only while the exact native claim is running.
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <section

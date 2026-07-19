@@ -359,10 +359,6 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     selectedIssue.initial,
     "manifest.runtime.nativeDogfood.selectedIssue.initial",
   );
-  const selectedAttachment = record(
-    selectedIssue.attachment,
-    "manifest.runtime.nativeDogfood.selectedIssue.attachment",
-  );
   const selectedSteering = record(
     selectedIssue.steeringReceipt,
     "manifest.runtime.nativeDogfood.selectedIssue.steeringReceipt",
@@ -381,7 +377,7 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
   );
   if (selectedNavigation.routeExact !== true || selectedNavigation.surfaceExact !== true) {
     throw new Error(
-      "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact issue task route and persisted surface",
+      "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact owner route and persisted provider-child surface",
     );
   }
   if (!Array.isArray(selectedInitial.namedActions)) {
@@ -451,12 +447,11 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     typeof selectedIssue.claimId !== "string" ||
     selectedInitial.parent !== true ||
     selectedInitial.activityRegion !== true ||
-    selectedInitial.composer !== true ||
-    selectedInitial.contenteditable !== true ||
+    selectedInitial.nativeActivityReady !== true ||
+    selectedInitial.nativeActivityExact !== true ||
+    selectedInitial.ownerComposerAbsent !== true ||
     selectedInitial.bounded !== true ||
     selectedInitial.rootOverflow !== true ||
-    selectedAttachment.preview !== true ||
-    selectedAttachment.remove !== true ||
     !Array.isArray(selectedExternalUrls) ||
     selectedExternalUrls.length !== 1 ||
     selectedExternalUrls[0] !== ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url ||
@@ -466,7 +461,7 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     selectedParent.instanceCount !== 1
   ) {
     throw new Error(
-      "manifest.runtime.nativeDogfood.selectedIssue must prove the real focused controller, Product actions, composer, and 1024x768 layout",
+      "manifest.runtime.nativeDogfood.selectedIssue must prove the owner-hosted native child, Product actions, guidance, and 1024x768 layout",
     );
   }
   return dogfood;
