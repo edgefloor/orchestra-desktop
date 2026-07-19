@@ -375,6 +375,72 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     selectedIssue.parent,
     "manifest.runtime.nativeDogfood.selectedIssue.parent",
   );
+  const selectedNavigation = record(
+    selectedIssue.navigation,
+    "manifest.runtime.nativeDogfood.selectedIssue.navigation",
+  );
+  if (selectedNavigation.routeExact !== true || selectedNavigation.surfaceExact !== true) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact issue task route and persisted surface",
+    );
+  }
+  if (!Array.isArray(selectedInitial.namedActions)) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.selectedIssue.initial.namedActions must be an array",
+    );
+  }
+  requireExactArray(
+    selectedInitial.namedActions.map(
+      (entry) =>
+        record(entry, "manifest.runtime.nativeDogfood.selectedIssue.initial.namedAction").name,
+    ),
+    ["Open Symphony", "Diff", "Open in Linear", "Refresh"],
+    "manifest.runtime.nativeDogfood.selectedIssue.initial.namedActions",
+    "selected-Issue navigation actions",
+  );
+  if (
+    selectedInitial.namedActions.some((entry) => {
+      const action = record(
+        entry,
+        "manifest.runtime.nativeDogfood.selectedIssue.initial.namedAction",
+      );
+      return (
+        action.present !== true ||
+        action.disabled !== false ||
+        typeof action.tabIndex !== "number" ||
+        !Number.isInteger(action.tabIndex) ||
+        action.tabIndex < 0
+      );
+    })
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.selectedIssue.initial.namedActions must prove four enabled focusable navigation actions",
+    );
+  }
+  const selectedSendGuidance = record(
+    selectedInitial.sendGuidance,
+    "manifest.runtime.nativeDogfood.selectedIssue.initial.sendGuidance",
+  );
+  if (
+    selectedSendGuidance.present !== true ||
+    selectedSendGuidance.disabled !== true ||
+    typeof selectedSendGuidance.tabIndex !== "number" ||
+    !Number.isInteger(selectedSendGuidance.tabIndex) ||
+    selectedSendGuidance.tabIndex < 0
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.selectedIssue.initial.sendGuidance must prove an initially disabled focusable guidance action",
+    );
+  }
+  if (
+    selectedSteering.status !== "delivered" ||
+    typeof selectedSteering.inputPreview !== "string" ||
+    !selectedSteering.inputPreview.includes("native selected-Issue task")
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.selectedIssue.steeringReceipt must prove enabled guidance was delivered",
+    );
+  }
   const selectedExternalUrls = selectedIssue.externalUrls;
   if (
     selectedIssue.issueId !== ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id ||
@@ -389,17 +455,8 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     selectedInitial.contenteditable !== true ||
     selectedInitial.bounded !== true ||
     selectedInitial.rootOverflow !== true ||
-    !Array.isArray(selectedInitial.namedActions) ||
-    selectedInitial.namedActions.length !== 5 ||
-    selectedInitial.namedActions.some((entry) => {
-      const action = record(entry, "manifest.runtime.nativeDogfood.selectedIssue.namedAction");
-      return action.present !== true || action.disabled === true || Number(action.tabIndex) < 0;
-    }) ||
     selectedAttachment.preview !== true ||
     selectedAttachment.remove !== true ||
-    selectedSteering.status !== "delivered" ||
-    typeof selectedSteering.inputPreview !== "string" ||
-    !selectedSteering.inputPreview.includes("native selected-Issue task") ||
     !Array.isArray(selectedExternalUrls) ||
     selectedExternalUrls.length !== 1 ||
     selectedExternalUrls[0] !== ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url ||
@@ -1209,6 +1266,7 @@ export async function verifyOrchestraNativeShell(
     reload: nativeDogfood.reload,
   });
   requireSameObservation("nativeDogfoodProviderRestartRecovered", nativeDogfood.restart);
+  requireSameObservation("nativeSelectedIssueRendered", nativeDogfood.selectedIssue);
 
   const narrowOpened = assertionObservation("narrowDrawerOpened");
   if (!isNarrowDrawerOpenedObservation(narrowOpened)) {

@@ -436,6 +436,12 @@ async function makeFixture(
     issueTaskThreadId: "019f-native-selected-issue",
     claimId: "claim-orc-70",
     trackerUrl: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url,
+    navigation: {
+      route: "#/native-shell/019f-native-selected-issue",
+      routeExact: true,
+      surfaceExact: true,
+      ready: true,
+    },
     initial: {
       text: `${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title}\nParent: Symphony`,
       parent: true,
@@ -450,9 +456,13 @@ async function makeFixture(
       rootOverflow: true,
       rootScrollWidth: 1024,
       rootClientWidth: 1024,
-      namedActions: ["Open Symphony", "Diff", "Open in Linear", "Refresh", "Send guidance"].map(
-        (name) => ({ name, present: true, disabled: false, tabIndex: 0 }),
-      ),
+      namedActions: ["Open Symphony", "Diff", "Open in Linear", "Refresh"].map((name) => ({
+        name,
+        present: true,
+        disabled: false,
+        tabIndex: 0,
+      })),
+      sendGuidance: { present: true, disabled: true, tabIndex: 0 },
     },
     attachment: { preview: true, remove: true },
     steeringReceipt: {
@@ -686,6 +696,87 @@ describe("Orchestra native-shell evidence verifier", () => {
     const { rootDir } = await makeFixture();
 
     await expect(verifyOrchestraNativeShell({ rootDir })).resolves.toBeUndefined();
+  });
+
+  it("seals selected-Issue navigation actions, disabled guidance, and exact routing", async () => {
+    const invalidCases: Array<{
+      readonly mutate: (selectedIssue: Record<string, unknown>) => void;
+      readonly message: string;
+    }> = [
+      {
+        mutate: (selectedIssue) => {
+          const initial = selectedIssue.initial as { namedActions: Array<Record<string, unknown>> };
+          initial.namedActions.push({
+            name: "Send guidance",
+            present: true,
+            disabled: false,
+            tabIndex: 0,
+          });
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.initial.namedActions must exactly match the selected-Issue navigation actions contract",
+      },
+      {
+        mutate: (selectedIssue) => {
+          const initial = selectedIssue.initial as { namedActions: Array<Record<string, unknown>> };
+          initial.namedActions[1]!.disabled = true;
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.initial.namedActions must prove four enabled focusable navigation actions",
+      },
+      {
+        mutate: (selectedIssue) => {
+          const initial = selectedIssue.initial as { namedActions: Array<Record<string, unknown>> };
+          initial.namedActions[1]!.tabIndex = "0";
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.initial.namedActions must prove four enabled focusable navigation actions",
+      },
+      {
+        mutate: (selectedIssue) => {
+          const initial = selectedIssue.initial as { sendGuidance: Record<string, unknown> };
+          initial.sendGuidance.disabled = false;
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.initial.sendGuidance must prove an initially disabled focusable guidance action",
+      },
+      {
+        mutate: (selectedIssue) => {
+          const initial = selectedIssue.initial as { sendGuidance: Record<string, unknown> };
+          initial.sendGuidance.tabIndex = -1;
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.initial.sendGuidance must prove an initially disabled focusable guidance action",
+      },
+      {
+        mutate: (selectedIssue) => {
+          (selectedIssue.navigation as Record<string, unknown>).routeExact = false;
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact issue task route and persisted surface",
+      },
+      {
+        mutate: (selectedIssue) => {
+          (selectedIssue.navigation as Record<string, unknown>).surfaceExact = false;
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact issue task route and persisted surface",
+      },
+      {
+        mutate: (selectedIssue) => {
+          (selectedIssue.steeringReceipt as Record<string, unknown>).status = "failed";
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.steeringReceipt must prove enabled guidance was delivered",
+      },
+    ];
+
+    for (const invalidCase of invalidCases) {
+      const { rootDir } = await makeFixture((manifest) => {
+        invalidCase.mutate(manifest.runtime.nativeDogfood.selectedIssue as Record<string, unknown>);
+      });
+      await expect(verifyOrchestraNativeShell({ rootDir })).rejects.toThrow(invalidCase.message);
+    }
   });
 
   it("requires the four production artifacts in sealed order and checks their bytes", async () => {
