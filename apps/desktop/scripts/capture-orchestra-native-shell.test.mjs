@@ -780,6 +780,12 @@ describe("native-shell acceptance capture contract", () => {
     expect(selectedIssueReattachSource).toContain('clickButtonByText(symphonySelector, "Reattach"');
     expect(selectedIssueReattachSource).toContain("matchingRoots.length !== 1");
     expect(selectedIssueReattachSource).toContain("roots.length !== 1");
+    expect(selectedIssueReattachSource).toContain(
+      'table[aria-label="Symphony issues"] button[aria-controls="automation-issue-inspector"]',
+    );
+    expect(selectedIssueReattachSource).toContain("issueButton.click()");
+    expect(selectedIssueReattachSource).toContain("selected-Issue inspector selection");
+    expect(selectedIssueReattachSource).toContain("selected-Issue Symphony inspector");
     expect(selectedIssueReattachSource).toContain("exact selected-Issue Symphony reattachment");
     expect(selectedIssueReattachSource).not.toContain("selected-Issue Symphony inspection");
     expect(taskNavigationSource).toContain("routeSegments.length === 2");

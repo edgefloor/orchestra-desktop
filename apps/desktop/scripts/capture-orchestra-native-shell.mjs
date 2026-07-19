@@ -2525,18 +2525,21 @@ async function runElectronChild() {
             const expectedRunId = ${JSON.stringify(selectedIssueStarted.run.runId)};
             const matchingRoots = roots.filter((root) => [...root.querySelectorAll('code')]
               .some((code) => code.textContent?.trim() === expectedRunId));
-            const inspector = workspace.querySelector(${JSON.stringify(selectedIssueInspectorSelector)});
+            const issueButton = [...workspace.querySelectorAll('table[aria-label="Symphony issues"] button[aria-controls="automation-issue-inspector"]')]
+              .find((button) =>
+                button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.identifier)}) &&
+                button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title)})
+              );
             if (
               roots.length !== 1 ||
               matchingRoots.length !== 1 ||
-              !(inspector instanceof HTMLElement) ||
-              !inspector.innerText.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title)})
+              !(issueButton instanceof HTMLButtonElement)
             ) return null;
             return {
               runId: expectedRunId,
               instanceCount: matchingRoots.length,
               totalRootCount: roots.length,
-              inspectorTitle: inspector.innerText.slice(0, 1000),
+              issueButtonText: issueButton.innerText.slice(0, 1000),
             };
           })()`,
           true,
@@ -2551,6 +2554,35 @@ async function runElectronChild() {
         `selected-Issue Symphony reattachment was not unique: ${JSON.stringify(selectedIssueSymphonyProjection)}`,
       );
     }
+    await waitFor(
+      () =>
+        renderer.executeJavaScript(
+          `(() => {
+            const workspace = document.querySelector(${JSON.stringify(symphonySelector)});
+            if (!(workspace instanceof HTMLElement)) return false;
+            const issueButton = [...workspace.querySelectorAll('table[aria-label="Symphony issues"] button[aria-controls="automation-issue-inspector"]')]
+              .find((button) =>
+                button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.identifier)}) &&
+                button.textContent?.includes(${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title)})
+              );
+            if (!(issueButton instanceof HTMLButtonElement) || issueButton.disabled) return false;
+            issueButton.click();
+            return true;
+          })()`,
+          true,
+        ),
+      "selected-Issue inspector selection",
+    );
+    await waitFor(
+      () =>
+        renderer.executeJavaScript(
+          `document.querySelector(${JSON.stringify(selectedIssueInspectorSelector)})?.innerText.includes(${JSON.stringify(
+            ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title,
+          )}) === true`,
+          true,
+        ),
+      "selected-Issue Symphony inspector",
+    );
     await clickButtonByText(
       selectedIssueInspectorSelector,
       "Open issue task",
