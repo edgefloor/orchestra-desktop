@@ -229,7 +229,7 @@ export default workflow({
   steps: [pipeline([
     agent({
       id: "implement-automation-issue",
-      prompt: "{{inputs.task_prompt}}\\n\\nReturn summary and tracker_comment as bounded JSON outputs.",
+      prompt: "\${inputs.task_prompt}\\n\\nReturn summary and tracker_comment as bounded JSON outputs.",
       model: "${model}",
       reasoning_effort: "low",
       outputs: ["summary", "tracker_comment"],

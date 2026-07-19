@@ -211,6 +211,12 @@ describe("native workspace dogfood contract", () => {
     expect(fixtures.repositoryFiles[ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH]).toContain(
       'task_prompt: { type: "string" }',
     );
+    expect(fixtures.repositoryFiles[ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH]).toContain(
+      "${inputs.task_prompt}",
+    );
+    expect(fixtures.repositoryFiles[ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH]).not.toContain(
+      "{{inputs.task_prompt}}",
+    );
     expect(fixtures.repositoryFiles[ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_WORKFLOW_PATH]).toBe(
       fixtures.repositoryFiles[ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH],
     );
@@ -319,6 +325,19 @@ describe("native workspace dogfood contract", () => {
       [4, request(resumeTurn()), "tool_pair_missing", 422],
       [5, request(resumeFollowUp()), "selected_issue_prompt_missing", 422],
       [6, request(selectedIssueReady()), "selected_issue_workflow_prompt_missing", 422],
+      [
+        6,
+        request(
+          common([
+            message(
+              "user",
+              "{{inputs.task_prompt}}\\n\\nReturn summary and tracker_comment as bounded JSON outputs.",
+            ),
+          ]),
+        ),
+        "selected_issue_workflow_prompt_missing",
+        422,
+      ],
       [7, request(selectedIssueWorkflow()), "extra_request", 409],
     ];
 
