@@ -14,6 +14,8 @@ import {
   ORCHESTRA_NATIVE_DOGFOOD_PROFILE_PATH,
   ORCHESTRA_NATIVE_DOGFOOD_RESUME_CALL_ID,
   ORCHESTRA_NATIVE_DOGFOOD_RESUME_PROMPT,
+  ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE,
+  ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH,
   ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH,
   ORCHESTRA_NATIVE_DOGFOOD_WORKFLOW_PATH,
 } from "../../../scripts/lib/orchestra-native-dogfood-contract.mjs";
@@ -159,11 +161,28 @@ const resumeFollowUp = () => ({
   ]),
 });
 
+const selectedIssueReady = () =>
+  common([
+    message(
+      "user",
+      `You are the persistent Issue task for \`${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.identifier}\`. Retain ${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title} at ${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url} and return exactly {"ready":true}.`,
+    ),
+  ]);
+
+const selectedIssueWorkflow = () =>
+  common([
+    message(
+      "user",
+      `Implement ${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.identifier}: ${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title}\n\nReturn exactly one JSON object containing these keys: summary, tracker_comment.`,
+    ),
+  ]);
+
 describe("native workspace dogfood contract", () => {
   it("builds sealed repository, Symphony profile, and isolated Codex config fixtures", () => {
     const fixtures = buildNativeDogfoodFixtures("http://127.0.0.1:43123");
 
     expect(Object.keys(fixtures.repositoryFiles).sort()).toEqual([
+      ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH,
       ORCHESTRA_NATIVE_DOGFOOD_PROFILE_PATH,
       ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH,
       ORCHESTRA_NATIVE_DOGFOOD_WORKFLOW_PATH,
@@ -205,6 +224,8 @@ describe("native workspace dogfood contract", () => {
       parentWaitingFollowUp(),
       resumeTurn(),
       resumeFollowUp(),
+      selectedIssueReady(),
+      selectedIssueWorkflow(),
     ].map((body, index) =>
       matchNativeDogfoodResponsesRequest(index, request(JSON.stringify(body))),
     );
@@ -215,6 +236,8 @@ describe("native workspace dogfood contract", () => {
       "parent_waiting",
       "resume_tool",
       "resume_final",
+      "selected_issue_ready",
+      "selected_issue_workflow",
     ]);
     expect(responses[0].events[1]).toMatchObject({
       item: {
@@ -285,7 +308,9 @@ describe("native workspace dogfood contract", () => {
       [3, request(parentWaitingFollowUp()), "resume_prompt_missing", 422],
       [3, request({ ...resumeTurn(), tools: [] }), "orchestra_resume_tool_missing", 422],
       [4, request(resumeTurn()), "tool_pair_missing", 422],
-      [5, request(resumeFollowUp()), "extra_request", 409],
+      [5, request(resumeFollowUp()), "selected_issue_prompt_missing", 422],
+      [6, request(selectedIssueReady()), "selected_issue_workflow_prompt_missing", 422],
+      [7, request(selectedIssueWorkflow()), "extra_request", 409],
     ];
 
     for (const [index, modelRequest, code, statusCode] of cases) {

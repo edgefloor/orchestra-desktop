@@ -998,6 +998,14 @@ describe("native-shell acceptance capture contract", () => {
   it("seals both themes and real narrow drawer scenarios", () => {
     expect(ORCHESTRA_NATIVE_SHELL_SCREENSHOTS).toEqual([
       {
+        scenario: "native-selected-issue-1024x768-dark",
+        width: 1024,
+        height: 768,
+        theme: "dark",
+        selectedIssue: true,
+        drawerOpen: false,
+      },
+      {
         scenario: "native-browser-1440x900-dark",
         width: 1440,
         height: 900,

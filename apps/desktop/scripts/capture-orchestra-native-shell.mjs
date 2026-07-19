@@ -71,6 +71,9 @@ import {
   ORCHESTRA_NATIVE_DOGFOOD_PARENT_PROMPT,
   ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,
   ORCHESTRA_NATIVE_DOGFOOD_RESUME_PROMPT,
+  ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE,
+  ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH,
+  ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
 } from "../../../scripts/lib/orchestra-native-dogfood-contract.mjs";
 import { resolveElectronLaunchCommand } from "./electron-launcher.mjs";
 
@@ -91,7 +94,10 @@ const projectTitle = "Orchestra Desktop Native Acceptance";
 const threadTitle = "Native Browser acceptance";
 const rejectedProbePartition = "persist:orchestra-native-shell-rejected";
 const requiredAssertionNames = ORCHESTRA_NATIVE_SHELL_ASSERTIONS;
-const screenshotScenarios = ORCHESTRA_NATIVE_SHELL_SCREENSHOTS;
+const evidenceScreenshotScenarios = ORCHESTRA_NATIVE_SHELL_SCREENSHOTS;
+const screenshotScenarios = evidenceScreenshotScenarios.filter(
+  (scenario) => !scenario.selectedIssue,
+);
 
 function runChecked(command, args, options = {}) {
   return NodeChildProcess.execFileSync(command, args, {
@@ -773,6 +779,9 @@ async function launchUnderElectron() {
       desktop: desktopBuildReceipt,
       evaluator: evaluatorBuildReceipt,
     }),
+    ORCHESTRA_NATIVE_ACCEPTANCE_SELECTED_ISSUE_FIXTURE: JSON.stringify(
+      ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE,
+    ),
   };
   delete environment.ELECTRON_RUN_AS_NODE;
   delete environment.VITE_DEV_SERVER_URL;
@@ -1124,9 +1133,19 @@ async function awaitNativeShellAssistantMessageEvent({
   );
 }
 
-async function readNativeShellAutomationStatus({ baseUrl, token, threadId, runId }) {
+async function readNativeShellAutomationStatus({
+  baseUrl,
+  token,
+  threadId,
+  runId,
+  focusedIssueId,
+}) {
   return runWithNativeShellRpcClient(baseUrl, token, (client) =>
-    client[WS_METHODS.automationStatus]({ threadId, runId }),
+    client[WS_METHODS.automationStatus]({
+      threadId,
+      runId,
+      ...(focusedIssueId ? { focusedIssueId } : {}),
+    }),
   );
 }
 
@@ -1674,7 +1693,7 @@ async function collectNativeDogfoodTimeoutDiagnostic({
 }
 
 async function runElectronChild() {
-  const { app, BrowserWindow, webContents } = await import("electron");
+  const { app, BrowserWindow, webContents, shell } = await import("electron");
   const runtimeDirectory = process.env.ORCHESTRA_NATIVE_ACCEPTANCE_RUNTIME_DIR;
   const backendPort = Number(process.env.ORCHESTRA_NATIVE_ACCEPTANCE_BACKEND_PORT);
   const guestPort = Number(process.env.ORCHESTRA_NATIVE_ACCEPTANCE_GUEST_PORT);
@@ -1734,6 +1753,7 @@ async function runElectronChild() {
 
   const responsesRequestCounter = createNativeShellRequestCountWaiter();
   const responsesRequestJournal = createNativeShellResponsesRequestJournal();
+  let heldSelectedIssueWorkflowResponse = null;
   const responsesServer = NodeHttp.createServer((request, response) => {
     const url = new URL(request.url ?? "/", `http://127.0.0.1:${responsesPort}`);
     if (request.method === "GET" && url.pathname === "/v1/models") {
@@ -1763,6 +1783,10 @@ async function runElectronChild() {
           body: Buffer.concat(chunks),
         });
         responsesRequestCounter.increment();
+        if (matched.kind === "selected_issue_workflow") {
+          heldSelectedIssueWorkflowResponse = { response, matched };
+          return;
+        }
         response.writeHead(matched.statusCode, matched.headers);
         response.end(matched.body);
       } catch (error) {
@@ -1788,6 +1812,11 @@ async function runElectronChild() {
   let hasPrimaryFailure = false;
   let primaryFailure = null;
   let terminalFailure = null;
+  const openedExternalUrls = [];
+  const originalOpenExternal = shell.openExternal.bind(shell);
+  shell.openExternal = async (url) => {
+    openedExternalUrls.push(url);
+  };
   try {
     await import(NodeURL.pathToFileURL(mainBundle).href);
     mainWindow = await waitFor(
@@ -2056,7 +2085,7 @@ async function runElectronChild() {
       throw new Error("native dogfood completed turn did not return a typed receipt sequence");
     }
     await responsesRequestCounter.waitFor(
-      ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,
+      ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
       "native dogfood completed workflow",
     );
     assertNativeDogfoodResponsesComplete(responsesRequestCounter.count);
@@ -2424,6 +2453,283 @@ async function runElectronChild() {
         restartSymphonyRoot.totalRootCount === 1,
       sameSymphonyStatus: restartSymphonyRoot.status === "running",
     };
+
+    const selectedIssueStarted = await runWithNativeShellRpcClient(
+      bootstrap.bootstrap.httpBaseUrl,
+      bootstrap.token,
+      (client) =>
+        client[WS_METHODS.automationStart]({
+          threadId,
+          profilePath: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH,
+        }),
+    );
+    const selectedIssueClaim = selectedIssueStarted.run.claims.find(
+      (claim) => claim.issueId === ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+    );
+    if (
+      !selectedIssueClaim?.issueTask?.threadId ||
+      selectedIssueClaim.status !== "running" ||
+      selectedIssueClaim.issueUrl !== ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url
+    ) {
+      throw new Error(
+        `native selected-Issue fixture did not publish the exact running claim: ${JSON.stringify(selectedIssueStarted)}`,
+      );
+    }
+    await responsesRequestCounter.waitFor(
+      ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT,
+      "native selected-Issue Workflow request",
+    );
+    if (!heldSelectedIssueWorkflowResponse) {
+      throw new Error("native selected-Issue Workflow response was not held at the model boundary");
+    }
+
+    await clickButtonByText(symphonySelector, "Inspect", "selected-Issue Symphony inspection");
+    const selectedIssueInspectorSelector = `[aria-label=${JSON.stringify(
+      `${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.identifier} inspector`,
+    )}]`;
+    await waitFor(
+      () =>
+        renderer.executeJavaScript(
+          `document.querySelector(${JSON.stringify(selectedIssueInspectorSelector)})?.innerText.includes(${JSON.stringify(
+            ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title,
+          )}) === true`,
+          true,
+        ),
+      "selected-Issue Symphony inspector",
+    );
+    await clickButtonByText(
+      selectedIssueInspectorSelector,
+      "Open issue task",
+      "selected-Issue task navigation",
+    );
+    const selectedIssueWorkspaceSelector = `[data-automation-issue-workspace]`;
+    await waitFor(
+      () =>
+        renderer
+          .executeJavaScript(
+            `(() => ({
+              route: location.hash,
+              ready: document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)})?.innerText.includes('ready') === true,
+              issueTask: document.body.innerText.includes(${JSON.stringify(selectedIssueClaim.issueTask.threadId)})
+            }))()`,
+            true,
+          )
+          .then((value) => (value.ready && value.issueTask ? value : null)),
+      "actual selected-Issue task surface",
+      45_000,
+    );
+
+    await mainWindow.setContentSize(1024, 768, false);
+    await waitFor(
+      () =>
+        renderer.executeJavaScript(
+          `window.innerWidth === 1024 && window.innerHeight === 768`,
+          true,
+        ),
+      "selected-Issue 1024x768 viewport",
+    );
+    await executeNativeShellRendererStep(
+      renderer,
+      `window.desktopBridge.setTheme("dark")`,
+      "selected-Issue dark theme",
+    );
+    const selectedIssueInitial = await renderer.executeJavaScript(
+      `(() => {
+        const workspace = document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)});
+        const composer = document.querySelector('[data-chat-composer-form="true"]');
+        const retainedComposer = document.querySelector('[data-automation-issue-composer-retained="true"]');
+        const activity = document.querySelector('[aria-label="Issue activity"]');
+        if (!(workspace instanceof HTMLElement) || !(composer instanceof HTMLFormElement)) return null;
+        const style = getComputedStyle(workspace);
+        const namedActions = ['Open Symphony', 'Diff', 'Open in Linear', 'Refresh', 'Send guidance'].map((name) => {
+          const button = [...workspace.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim().includes(name));
+          return { name, present: button instanceof HTMLButtonElement, disabled: button?.disabled ?? null, tabIndex: button?.tabIndex ?? null };
+        });
+        return {
+          text: workspace.innerText.slice(0, 6000),
+          parent: workspace.innerText.includes('Parent: Symphony'),
+          activityRegion: activity instanceof HTMLElement,
+          composer: Boolean(retainedComposer),
+          attachmentAffordance: composer.ondrop !== null || composer.closest('[data-chat-composer-surface]') !== null,
+          contenteditable: composer.querySelector('[contenteditable="true"], [contenteditable="plaintext-only"]') !== null,
+          bounded: style.overflowY === 'auto' && workspace.scrollHeight > workspace.clientHeight,
+          overflowY: style.overflowY,
+          scrollHeight: workspace.scrollHeight,
+          clientHeight: workspace.clientHeight,
+          rootOverflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+          rootScrollWidth: document.documentElement.scrollWidth,
+          rootClientWidth: document.documentElement.clientWidth,
+          namedActions,
+        };
+      })()`,
+      true,
+    );
+    if (
+      !selectedIssueInitial?.parent ||
+      !selectedIssueInitial.activityRegion ||
+      !selectedIssueInitial.composer ||
+      !selectedIssueInitial.contenteditable ||
+      !selectedIssueInitial.bounded ||
+      !selectedIssueInitial.rootOverflow ||
+      selectedIssueInitial.namedActions.some(
+        (action) => !action.present || action.disabled === true || action.tabIndex < 0,
+      )
+    ) {
+      throw new Error(
+        `actual selected-Issue task surface failed semantic/layout checks: ${JSON.stringify(selectedIssueInitial)}`,
+      );
+    }
+
+    const selectedIssueAttachment = await renderer.executeJavaScript(
+      `(async () => {
+        const form = document.querySelector('[data-chat-composer-form="true"]');
+        if (!(form instanceof HTMLFormElement)) throw new Error('normal ChatComposer form missing');
+        const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), (value) => value.charCodeAt(0));
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([bytes], 'native-selected-issue.png', {type:'image/png'}));
+        form.dispatchEvent(new DragEvent('drop', {bubbles:true,cancelable:true,dataTransfer:transfer}));
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          const preview = document.querySelector('[aria-label="Preview native-selected-issue.png"]');
+          const remove = document.querySelector('[aria-label="Remove native-selected-issue.png"]');
+          if (preview && remove) return { preview: true, remove: true };
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return { preview: false, remove: false };
+      })()`,
+      true,
+    );
+    if (!selectedIssueAttachment.preview || !selectedIssueAttachment.remove) {
+      throw new Error(
+        `normal ChatComposer did not retain dropped attachment: ${JSON.stringify(selectedIssueAttachment)}`,
+      );
+    }
+
+    const guidance = "Keep this native selected-Issue task grounded in exact receipts.";
+    await executeNativeShellRendererStep(
+      renderer,
+      `(() => {
+        const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.includes('Guide Issue task'));
+        const input = label?.htmlFor ? document.getElementById(label.htmlFor) : null;
+        if (!(input instanceof HTMLInputElement)) throw new Error('selected-Issue guidance input missing');
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        setter?.call(input, ${JSON.stringify(guidance)});
+        input.dispatchEvent(new Event('input', {bubbles:true}));
+      })()`,
+      "enter selected-Issue guidance",
+    );
+    await clickButtonByText(
+      selectedIssueWorkspaceSelector,
+      "Send guidance",
+      "selected-Issue native steering",
+    );
+    await waitFor(
+      () =>
+        renderer.executeJavaScript(
+          `(() => {
+            const region = document.querySelector('[aria-label="Latest issue guidance"]');
+            return region instanceof HTMLElement && region.innerText.includes(${JSON.stringify(guidance)}) && region.innerText.includes('delivered')
+              ? { text: region.innerText }
+              : null;
+          })()`,
+          true,
+        ),
+      "durable selected-Issue steering receipt",
+    );
+    const selectedIssueSteered = await readNativeShellAutomationStatus({
+      baseUrl: bootstrap.bootstrap.httpBaseUrl,
+      token: bootstrap.token,
+      threadId,
+      runId: selectedIssueStarted.run.runId,
+      focusedIssueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+    });
+    const steeredClaim = selectedIssueSteered.run.claims.find(
+      (claim) => claim.claimId === selectedIssueClaim.claimId,
+    );
+    if (
+      steeredClaim?.latestSteeringReceipt?.inputPreview !== guidance ||
+      steeredClaim.latestSteeringReceipt.status !== "delivered"
+    ) {
+      throw new Error(
+        `selected-Issue steering was not durable through focused status: ${JSON.stringify(selectedIssueSteered)}`,
+      );
+    }
+
+    await clickButtonByText(selectedIssueWorkspaceSelector, "Open in Linear", "safe tracker URL");
+    await waitFor(
+      () => openedExternalUrls.at(-1) === ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url,
+      "production shell external URL boundary",
+    );
+    await clickButtonByText(selectedIssueWorkspaceSelector, "Diff", "selected-Issue Diff");
+    const selectedIssueDiff = await observeActiveRightPanelSurface(
+      renderer,
+      "Diff",
+      "selected-Issue production Diff surface",
+    );
+    await renderer.executeJavaScript(
+      `document.querySelector('[aria-label="Toggle right panel"][data-pressed="true"], [aria-label="Toggle right panel"][aria-pressed="true"]')?.click()`,
+      true,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const selectedIssueImage = await mainWindow.webContents.capturePage();
+    const selectedIssueImageBytes = selectedIssueImage.toPNG();
+    const selectedIssueDimensions = readPngDimensions(
+      selectedIssueImageBytes,
+      "native-selected-issue-1024x768-dark",
+    );
+    if (selectedIssueDimensions.width !== 1024 || selectedIssueDimensions.height !== 768) {
+      throw new Error("native selected-Issue screenshot did not preserve the 1024x768 viewport");
+    }
+    const selectedIssueScreenshot = {
+      scenario: "native-selected-issue-1024x768-dark",
+      file: `${evidenceRelativeDirectory}/native-selected-issue-1024x768-dark.png`,
+      width: 1024,
+      height: 768,
+      deviceScaleFactor: 1,
+      theme: "dark",
+      layout: {
+        width: 1024,
+        height: 768,
+        overflow: selectedIssueInitial.rootOverflow,
+        browserVisible: false,
+        narrowDisclosure: true,
+        drawerOpen: false,
+        webviewRect: null,
+        wrapperRect: null,
+        selectedIssueVisible: true,
+        boundedInternalScroll: selectedIssueInitial.bounded,
+      },
+      sha256: sha256(selectedIssueImageBytes),
+    };
+    await NodeFSP.mkdir(evidenceDirectory, { recursive: true });
+    await NodeFSP.writeFile(
+      NodePath.join(repoRoot, selectedIssueScreenshot.file),
+      selectedIssueImageBytes,
+    );
+
+    await clickButtonByText(
+      selectedIssueWorkspaceSelector,
+      "Open Symphony",
+      "selected-Issue Parent",
+    );
+    const selectedIssueParent = await observeSymphonyRoot(
+      renderer,
+      selectedIssueStarted.run.runId,
+      "selected-Issue exact Parent Symphony",
+    );
+    const selectedIssueObservation = {
+      runId: selectedIssueStarted.run.runId,
+      ownerThreadId: threadId,
+      issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+      issueTaskThreadId: selectedIssueClaim.issueTask.threadId,
+      claimId: selectedIssueClaim.claimId,
+      trackerUrl: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url,
+      initial: selectedIssueInitial,
+      attachment: selectedIssueAttachment,
+      steeringReceipt: steeredClaim.latestSteeringReceipt,
+      externalUrls: openedExternalUrls,
+      diff: selectedIssueDiff,
+      parent: selectedIssueParent,
+    };
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Close Symphony workspace"]')?.click()`,
       true,
@@ -2760,7 +3066,7 @@ async function runElectronChild() {
       ),
       nativeDogfoodResponsesExact: makeNativeShellAssertion(
         { requestCount: responsesRequestCounter.count },
-        isExactNativeDogfoodResponseCount(responsesRequestCounter.count),
+        responsesRequestCounter.count === ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
       ),
       currentCodexForkRecorded: makeNativeShellAssertion(
         dogfoodCodexIdentity,
@@ -2839,6 +3145,69 @@ async function runElectronChild() {
           nativeDogfoodObservation.restart.sameSymphonyRoot === true &&
           nativeDogfoodObservation.restart.sameSymphonyStatus === true,
       ),
+      nativeSelectedIssueRendered: makeNativeShellAssertion(
+        selectedIssueObservation,
+        selectedIssueObservation.runId === selectedIssueStarted.run.runId &&
+          selectedIssueObservation.issueTaskThreadId === selectedIssueClaim.issueTask.threadId &&
+          selectedIssueObservation.initial.text.includes(
+            ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title,
+          ) &&
+          selectedIssueObservation.initial.text.includes("Parent: Symphony"),
+      ),
+      nativeSelectedIssueFocusedStatus: makeNativeShellAssertion(
+        {
+          focusedIssueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+          projectedClaimIds: selectedIssueSteered.run.claims.map((claim) => claim.claimId),
+        },
+        selectedIssueSteered.run.claims.length === 1 &&
+          selectedIssueSteered.run.claims[0]?.claimId === selectedIssueClaim.claimId,
+      ),
+      nativeSelectedIssueSteeringDelivered: makeNativeShellAssertion(
+        selectedIssueObservation.steeringReceipt,
+        selectedIssueObservation.steeringReceipt?.status === "delivered" &&
+          selectedIssueObservation.steeringReceipt.inputPreview === guidance,
+      ),
+      nativeSelectedIssueTrackerBoundary: makeNativeShellAssertion(
+        selectedIssueObservation.externalUrls,
+        selectedIssueObservation.externalUrls.length === 1 &&
+          selectedIssueObservation.externalUrls[0] === ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url,
+      ),
+      nativeSelectedIssueParentNavigation: makeNativeShellAssertion(
+        selectedIssueObservation.parent,
+        selectedIssueObservation.parent.runId === selectedIssueStarted.run.runId &&
+          selectedIssueObservation.parent.instanceCount === 1,
+      ),
+      nativeSelectedIssueDiffSurface: makeNativeShellAssertion(
+        selectedIssueObservation.diff,
+        selectedIssueObservation.diff.title === "Diff" &&
+          selectedIssueObservation.diff.panelVisible === true,
+      ),
+      nativeSelectedIssueComposerAttachment: makeNativeShellAssertion(
+        selectedIssueObservation.attachment,
+        selectedIssueObservation.initial.composer === true &&
+          selectedIssueObservation.initial.contenteditable === true &&
+          selectedIssueObservation.attachment.preview === true &&
+          selectedIssueObservation.attachment.remove === true,
+      ),
+      nativeSelectedIssueSemanticActivity: makeNativeShellAssertion(
+        selectedIssueObservation.initial.activityRegion,
+        selectedIssueObservation.initial.activityRegion === true,
+      ),
+      nativeSelectedIssueBoundedScroll: makeNativeShellAssertion(
+        {
+          overflowY: selectedIssueObservation.initial.overflowY,
+          scrollHeight: selectedIssueObservation.initial.scrollHeight,
+          clientHeight: selectedIssueObservation.initial.clientHeight,
+        },
+        selectedIssueObservation.initial.bounded === true,
+      ),
+      nativeSelectedIssueRootNoOverflow: makeNativeShellAssertion(
+        {
+          scrollWidth: selectedIssueObservation.initial.rootScrollWidth,
+          clientWidth: selectedIssueObservation.initial.rootClientWidth,
+        },
+        selectedIssueObservation.initial.rootOverflow === true,
+      ),
       composerVisible: makeNativeShellAssertion(nativeShell.composer),
       taskTabsVisible: makeNativeShellAssertion(nativeShell.taskTabs),
       realWebviewAttached: makeNativeShellAssertion(
@@ -2910,8 +3279,8 @@ async function runElectronChild() {
     }
 
     await NodeFSP.mkdir(evidenceDirectory, { recursive: true });
-    const screenshots = [];
-    let everyScenarioAvoidsHorizontalOverflow = true;
+    const screenshots = [selectedIssueScreenshot];
+    let everyScenarioAvoidsHorizontalOverflow = selectedIssueInitial.rootOverflow;
     const narrowDrawerObservations = [];
     let narrowSurfaceActivated = false;
     for (const scenario of screenshotScenarios) {
@@ -3138,7 +3507,8 @@ async function runElectronChild() {
     );
     assertions.themeMatrixCaptured = makeNativeShellAssertion(
       screenshots.map(({ scenario, theme }) => ({ scenario, theme })),
-      new Set(screenshots.map(({ theme }) => theme)).size === 2 && screenshots.length === 4,
+      new Set(screenshots.map(({ theme }) => theme)).size === 2 &&
+        screenshots.length === evidenceScreenshotScenarios.length,
     );
     assertions.narrowDrawerOpened = makeNativeShellAssertion(
       narrowDrawerObservations,
@@ -3255,6 +3625,7 @@ async function runElectronChild() {
           responsesRequestCount: responsesRequestCounter.count,
           waitingProjectionVisible: Boolean(waitingWorkflow),
           completedProjectionVisible: Boolean(completedWorkflow),
+          selectedIssue: selectedIssueObservation,
           ...nativeDogfoodObservation,
         },
         navigation,
@@ -3263,7 +3634,7 @@ async function runElectronChild() {
       agentReview: {
         status: "pending",
         reviewedAt: new Date(0).toISOString(),
-        scenarios: screenshotScenarios.map(({ scenario }) => ({
+        scenarios: evidenceScreenshotScenarios.map(({ scenario }) => ({
           scenario,
           clipping: "pending",
           contrast: "pending",
@@ -3291,6 +3662,8 @@ async function runElectronChild() {
     hasPrimaryFailure = true;
     primaryFailure = normalizeNativeShellFailure(error);
   } finally {
+    shell.openExternal = originalOpenExternal;
+    heldSelectedIssueWorkflowResponse?.response.destroy();
     const cleanupFailures = await settleNativeShellChildCleanup({
       mainWindow,
       guestServer,

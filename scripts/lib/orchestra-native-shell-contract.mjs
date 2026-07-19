@@ -64,6 +64,16 @@ export const ORCHESTRA_NATIVE_SHELL_ASSERTIONS = Object.freeze(
     "nativeSymphonySkippedIntake",
     "nativeDogfoodIdentityRecovered",
     "nativeDogfoodProviderRestartRecovered",
+    "nativeSelectedIssueRendered",
+    "nativeSelectedIssueFocusedStatus",
+    "nativeSelectedIssueSteeringDelivered",
+    "nativeSelectedIssueTrackerBoundary",
+    "nativeSelectedIssueParentNavigation",
+    "nativeSelectedIssueDiffSurface",
+    "nativeSelectedIssueComposerAttachment",
+    "nativeSelectedIssueSemanticActivity",
+    "nativeSelectedIssueBoundedScroll",
+    "nativeSelectedIssueRootNoOverflow",
     "retainedDesktopCapabilitiesProbed",
     "composerVisible",
     "taskTabsVisible",
@@ -97,6 +107,14 @@ export const ORCHESTRA_NATIVE_SHELL_ASSERTIONS = Object.freeze(
 );
 
 export const ORCHESTRA_NATIVE_SHELL_SCREENSHOTS = Object.freeze([
+  Object.freeze({
+    scenario: "native-selected-issue-1024x768-dark",
+    width: 1024,
+    height: 768,
+    theme: "dark",
+    selectedIssue: true,
+    drawerOpen: false,
+  }),
   Object.freeze({
     scenario: "native-browser-1440x900-dark",
     width: 1440,

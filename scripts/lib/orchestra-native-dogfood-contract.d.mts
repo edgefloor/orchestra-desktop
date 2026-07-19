@@ -1,6 +1,7 @@
 export const ORCHESTRA_NATIVE_DOGFOOD_WORKFLOW_PATH: string;
 export const ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH: string;
 export const ORCHESTRA_NATIVE_DOGFOOD_PROFILE_PATH: string;
+export const ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH: string;
 export const ORCHESTRA_NATIVE_DOGFOOD_PARENT_PROMPT: string;
 export const ORCHESTRA_NATIVE_DOGFOOD_RESUME_PROMPT: string;
 export const ORCHESTRA_NATIVE_DOGFOOD_CHILD_PROMPT: string;
@@ -8,6 +9,19 @@ export const ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING: string;
 export const ORCHESTRA_NATIVE_DOGFOOD_CALL_ID: string;
 export const ORCHESTRA_NATIVE_DOGFOOD_RESUME_CALL_ID: string;
 export const ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT: number;
+export const ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT: number;
+export const ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE: Readonly<{
+  id: string;
+  identifier: string;
+  title: string;
+  description: string;
+  priority: number;
+  state: string;
+  branchName: string;
+  url: string;
+  labels: ReadonlyArray<string>;
+  blockedBy: ReadonlyArray<never>;
+}>;
 export const ORCHESTRA_NATIVE_DOGFOOD_MAX_REQUEST_BYTES: number;
 export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID: string;
 export const ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID: string;
@@ -37,7 +51,14 @@ export interface NativeDogfoodModelRequest {
 }
 
 export interface NativeDogfoodModelResponse {
-  readonly kind: "parent_tool" | "native_child" | "parent_waiting" | "resume_tool" | "resume_final";
+  readonly kind:
+    | "parent_tool"
+    | "native_child"
+    | "parent_waiting"
+    | "resume_tool"
+    | "resume_final"
+    | "selected_issue_ready"
+    | "selected_issue_workflow";
   readonly statusCode: 200;
   readonly headers: Readonly<Record<string, string>>;
   readonly events: ReadonlyArray<Readonly<Record<string, unknown>>>;

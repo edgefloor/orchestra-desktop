@@ -4,6 +4,7 @@ export interface NativeShellScenario {
   readonly height: number;
   readonly theme: "dark" | "light";
   readonly drawerOpen: boolean;
+  readonly selectedIssue?: boolean;
 }
 
 export interface NativeShellAssertion {

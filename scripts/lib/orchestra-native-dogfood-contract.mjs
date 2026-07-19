@@ -3,6 +3,8 @@ export const ORCHESTRA_NATIVE_DOGFOOD_WORKFLOW_PATH =
 export const ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH =
   "orchestra-native-symphony-dogfood.workflow.ts";
 export const ORCHESTRA_NATIVE_DOGFOOD_PROFILE_PATH = "WORKFLOW.md";
+export const ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH =
+  ".codex/orchestra/native-shell-selected-issue.WORKFLOW.md";
 export const ORCHESTRA_NATIVE_DOGFOOD_PARENT_PROMPT =
   "Run the current-fork native workspace dogfood workflow.";
 export const ORCHESTRA_NATIVE_DOGFOOD_RESUME_PROMPT =
@@ -13,6 +15,19 @@ export const ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING = "deterministic native chil
 export const ORCHESTRA_NATIVE_DOGFOOD_CALL_ID = "call-cycle8-orchestra-run";
 export const ORCHESTRA_NATIVE_DOGFOOD_RESUME_CALL_ID = "call-cycle8-orchestra-resume";
 export const ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT = 5;
+export const ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT = 7;
+export const ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE = Object.freeze({
+  id: "issue-orc-70",
+  identifier: "ORC-70",
+  title: "Complete the Symphony workspace",
+  description: "Exercise the selected Issue surface through native Product boundaries.",
+  priority: 1,
+  state: "Todo",
+  branchName: "bubble/orc-70-complete-symphony-workspace",
+  url: "https://linear.app/demystify/issue/ORC-70/complete-the-symphony-workspace",
+  labels: Object.freeze(["orchestra-native-dogfood"]),
+  blockedBy: Object.freeze([]),
+});
 export const ORCHESTRA_NATIVE_DOGFOOD_MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 export const ORCHESTRA_NATIVE_DOGFOOD_CHECK_STEP_ID = "verify-native-repository";
 export const ORCHESTRA_NATIVE_DOGFOOD_AGENT_STEP_ID = "inspect-native-runtime";
@@ -36,6 +51,11 @@ const childOutput = JSON.stringify({
   [ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME]: ORCHESTRA_NATIVE_DOGFOOD_CHILD_FINDING,
 });
 const waitingAssistantText = "Native workflow is waiting for approval.";
+const selectedIssueReady = JSON.stringify({ ready: true });
+const selectedIssueWorkflowOutput = JSON.stringify({
+  summary: "Selected Issue context remained grounded in native receipts.",
+  tracker_comment: "Native selected Issue acceptance verified without live Linear.",
+});
 
 const completedEvent = (id) => ({
   type: "response.completed",
@@ -92,6 +112,16 @@ const responseEvents = Object.freeze([
     createdEvent("resp-cycle8-resume-final"),
     assistantEvent("msg-cycle8-resume-final", ORCHESTRA_NATIVE_DOGFOOD_FINAL_ASSISTANT_TEXT),
     completedEvent("resp-cycle8-resume-final"),
+  ]),
+  Object.freeze([
+    createdEvent("resp-cycle9-issue-ready"),
+    assistantEvent("msg-cycle9-issue-ready", selectedIssueReady),
+    completedEvent("resp-cycle9-issue-ready"),
+  ]),
+  Object.freeze([
+    createdEvent("resp-cycle9-issue-workflow"),
+    assistantEvent("msg-cycle9-issue-workflow", selectedIssueWorkflowOutput),
+    completedEvent("resp-cycle9-issue-workflow"),
   ]),
 ]);
 
@@ -225,6 +255,7 @@ supports_websockets = false
       [ORCHESTRA_NATIVE_DOGFOOD_WORKFLOW_PATH]: workflow,
       [ORCHESTRA_NATIVE_DOGFOOD_SYMPHONY_WORKFLOW_PATH]: symphonyWorkflow,
       [ORCHESTRA_NATIVE_DOGFOOD_PROFILE_PATH]: profile,
+      [ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE_PROFILE_PATH]: profile,
     }),
     codexHomeFiles: Object.freeze({ "config.toml": config }),
     missingCredentialEnvironmentVariable: missingLinearCredential,
@@ -602,6 +633,51 @@ function assertResumeFollowUp(body) {
   );
 }
 
+function assertSelectedIssueReadyRequest(body) {
+  const prompt = inputTexts(body, "user").find((text) =>
+    text.includes(
+      `persistent Issue task for \`${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.identifier}\``,
+    ),
+  );
+  if (!prompt)
+    contractError("selected_issue_prompt_missing", "selected Issue task prompt is missing");
+  for (const expected of [
+    ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title,
+    ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url,
+    'return exactly {"ready":true}',
+  ]) {
+    if (!prompt.includes(expected)) {
+      contractError(
+        "selected_issue_contract_missing",
+        `selected Issue task prompt is missing: ${expected}`,
+      );
+    }
+  }
+}
+
+function assertSelectedIssueWorkflowRequest(body) {
+  const prompt = inputTexts(body, "user").find((text) =>
+    text.includes(`Implement ${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.identifier}`),
+  );
+  if (!prompt) {
+    contractError(
+      "selected_issue_workflow_prompt_missing",
+      "selected Issue Workflow prompt is missing",
+    );
+  }
+  for (const expected of [
+    ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title,
+    "Return exactly one JSON object containing these keys: summary, tracker_comment.",
+  ]) {
+    if (!prompt.includes(expected)) {
+      contractError(
+        "selected_issue_workflow_contract_missing",
+        `selected Issue Workflow prompt is missing: ${expected}`,
+      );
+    }
+  }
+}
+
 function resumeToolEvents(body) {
   const runId = waitingRunId(body);
   const id = "resp-cycle8-resume-tool";
@@ -627,7 +703,7 @@ export function matchNativeDogfoodResponsesRequest(requestIndex, request) {
   if (!Number.isInteger(requestIndex) || requestIndex < 0) {
     contractError("invalid_request_index", "request index must be a non-negative integer", 400);
   }
-  if (requestIndex >= ORCHESTRA_NATIVE_DOGFOOD_REQUEST_COUNT) {
+  if (requestIndex >= ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT) {
     contractError(
       "extra_request",
       "the native dogfood contract permits exactly five requests",
@@ -642,12 +718,20 @@ export function matchNativeDogfoodResponsesRequest(requestIndex, request) {
     assertParentWaitingFollowUp,
     assertResumeTurnRequest,
     assertResumeFollowUp,
+    assertSelectedIssueReadyRequest,
+    assertSelectedIssueWorkflowRequest,
   ][requestIndex](body);
   const events = requestIndex === 3 ? resumeToolEvents(body) : responseEvents[requestIndex];
   return Object.freeze({
-    kind: ["parent_tool", "native_child", "parent_waiting", "resume_tool", "resume_final"][
-      requestIndex
-    ],
+    kind: [
+      "parent_tool",
+      "native_child",
+      "parent_waiting",
+      "resume_tool",
+      "resume_final",
+      "selected_issue_ready",
+      "selected_issue_workflow",
+    ][requestIndex],
     statusCode: 200,
     headers: Object.freeze({ "content-type": "text/event-stream" }),
     events,

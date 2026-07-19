@@ -117,6 +117,7 @@ import * as VcsProjectConfig from "./vcs/VcsProjectConfig.ts";
 import * as VcsProcess from "./vcs/VcsProcess.ts";
 import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as SessionStore from "./auth/SessionStore.ts";
+import { resolveNativeShellAutomationFixture } from "./nativeShellAutomationFixture.ts";
 import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
 import * as RelayClient from "@t3tools/shared/relayClient";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
@@ -1299,6 +1300,25 @@ const makeWsRpcLayer = (
                   threadId: input.threadId,
                   message: "Production Automation start is unavailable.",
                 });
+              }
+              const fixtureInput = resolveNativeShellAutomationFixture(input, process.env);
+              if (fixtureInput) {
+                if (!providerService.runAutomationFixture) {
+                  return yield* new AutomationRunError({
+                    threadId: input.threadId,
+                    message: "Native selected-Issue fixture execution is unavailable.",
+                  });
+                }
+                return yield* providerService.runAutomationFixture(fixtureInput).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new AutomationRunError({
+                        threadId: input.threadId,
+                        message: cause.message,
+                        cause,
+                      }),
+                  ),
+                );
               }
               return yield* providerService.startAutomation(input).pipe(
                 Effect.mapError(

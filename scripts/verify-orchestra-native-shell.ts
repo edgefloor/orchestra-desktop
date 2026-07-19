@@ -43,6 +43,8 @@ import {
   ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_NAME,
   ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS,
   ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS,
+  ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE,
+  ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
 } from "./lib/orchestra-native-dogfood-contract.mjs";
 
 export {
@@ -126,17 +128,18 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
       "symphony",
       "reload",
       "restart",
+      "selectedIssue",
     ],
     "manifest.runtime.nativeDogfood",
   );
   const dogfood = value as Record<string, unknown>;
   if (
-    !isExactNativeDogfoodResponseCount(Number(dogfood.responsesRequestCount)) ||
+    Number(dogfood.responsesRequestCount) !== ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT ||
     dogfood.waitingProjectionVisible !== true ||
     dogfood.completedProjectionVisible !== true
   ) {
     throw new Error(
-      "manifest.runtime.nativeDogfood must contain the exact five-request projection",
+      "manifest.runtime.nativeDogfood must contain the exact seven-request Product projection",
     );
   }
   try {
@@ -345,6 +348,68 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
   ) {
     throw new Error(
       "manifest.runtime.nativeDogfood.restart must recover the same Run, Evidence, and Root after a stopped/ready provider cycle",
+    );
+  }
+
+  const selectedIssue = record(
+    dogfood.selectedIssue,
+    "manifest.runtime.nativeDogfood.selectedIssue",
+  );
+  const selectedInitial = record(
+    selectedIssue.initial,
+    "manifest.runtime.nativeDogfood.selectedIssue.initial",
+  );
+  const selectedAttachment = record(
+    selectedIssue.attachment,
+    "manifest.runtime.nativeDogfood.selectedIssue.attachment",
+  );
+  const selectedSteering = record(
+    selectedIssue.steeringReceipt,
+    "manifest.runtime.nativeDogfood.selectedIssue.steeringReceipt",
+  );
+  const selectedDiff = record(
+    selectedIssue.diff,
+    "manifest.runtime.nativeDogfood.selectedIssue.diff",
+  );
+  const selectedParent = record(
+    selectedIssue.parent,
+    "manifest.runtime.nativeDogfood.selectedIssue.parent",
+  );
+  const selectedExternalUrls = selectedIssue.externalUrls;
+  if (
+    selectedIssue.issueId !== ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id ||
+    selectedIssue.trackerUrl !== ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url ||
+    typeof selectedIssue.runId !== "string" ||
+    typeof selectedIssue.ownerThreadId !== "string" ||
+    typeof selectedIssue.issueTaskThreadId !== "string" ||
+    typeof selectedIssue.claimId !== "string" ||
+    selectedInitial.parent !== true ||
+    selectedInitial.activityRegion !== true ||
+    selectedInitial.composer !== true ||
+    selectedInitial.contenteditable !== true ||
+    selectedInitial.bounded !== true ||
+    selectedInitial.rootOverflow !== true ||
+    !Array.isArray(selectedInitial.namedActions) ||
+    selectedInitial.namedActions.length !== 5 ||
+    selectedInitial.namedActions.some((entry) => {
+      const action = record(entry, "manifest.runtime.nativeDogfood.selectedIssue.namedAction");
+      return action.present !== true || action.disabled === true || Number(action.tabIndex) < 0;
+    }) ||
+    selectedAttachment.preview !== true ||
+    selectedAttachment.remove !== true ||
+    selectedSteering.status !== "delivered" ||
+    typeof selectedSteering.inputPreview !== "string" ||
+    !selectedSteering.inputPreview.includes("native selected-Issue task") ||
+    !Array.isArray(selectedExternalUrls) ||
+    selectedExternalUrls.length !== 1 ||
+    selectedExternalUrls[0] !== ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url ||
+    selectedDiff.title !== "Diff" ||
+    selectedDiff.panelVisible !== true ||
+    selectedParent.runId !== selectedIssue.runId ||
+    selectedParent.instanceCount !== 1
+  ) {
+    throw new Error(
+      "manifest.runtime.nativeDogfood.selectedIssue must prove the real focused controller, Product actions, composer, and 1024x768 layout",
     );
   }
   return dogfood;

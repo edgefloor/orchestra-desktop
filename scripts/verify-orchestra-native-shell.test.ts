@@ -15,6 +15,8 @@ import { sha256 } from "./lib/orchestra-evidence-primitives.mjs";
 import {
   ORCHESTRA_NATIVE_DOGFOOD_CHILD_OUTPUT_MAX_CHARS,
   ORCHESTRA_NATIVE_DOGFOOD_CHILD_TEXT_MAX_CHARS,
+  ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE,
+  ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
 } from "./lib/orchestra-native-dogfood-contract.mjs";
 
 import {
@@ -427,8 +429,42 @@ async function makeFixture(
     sameSymphonyRoot: true,
     sameSymphonyStatus: true,
   };
+  const selectedIssue = {
+    runId: "automation-cycle9",
+    ownerThreadId: "thread-native-shell-acceptance",
+    issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
+    issueTaskThreadId: "019f-native-selected-issue",
+    claimId: "claim-orc-70",
+    trackerUrl: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url,
+    initial: {
+      text: `${ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.title}\nParent: Symphony`,
+      parent: true,
+      activityRegion: true,
+      composer: true,
+      attachmentAffordance: true,
+      contenteditable: true,
+      bounded: true,
+      overflowY: "auto",
+      scrollHeight: 512,
+      clientHeight: 320,
+      rootOverflow: true,
+      rootScrollWidth: 1024,
+      rootClientWidth: 1024,
+      namedActions: ["Open Symphony", "Diff", "Open in Linear", "Refresh", "Send guidance"].map(
+        (name) => ({ name, present: true, disabled: false, tabIndex: 0 }),
+      ),
+    },
+    attachment: { preview: true, remove: true },
+    steeringReceipt: {
+      status: "delivered",
+      inputPreview: "Keep this native selected-Issue task grounded in exact receipts.",
+    },
+    externalUrls: [ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.url],
+    diff: { title: "Diff", panelVisible: true },
+    parent: { runId: "automation-cycle9", instanceCount: 1, totalRootCount: 1 },
+  };
   const nativeDogfood = {
-    responsesRequestCount: 5,
+    responsesRequestCount: ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT,
     waitingProjectionVisible: true,
     completedProjectionVisible: true,
     workflow,
@@ -438,6 +474,7 @@ async function makeFixture(
     symphony,
     reload,
     restart,
+    selectedIssue,
   };
   const retainedDesktopCapabilities = {
     workspace: {
@@ -467,7 +504,10 @@ async function makeFixture(
       makeNativeShellAssertion({ proof: assertion }, true),
     ]),
   );
-  assertions.nativeDogfoodResponsesExact = makeNativeShellAssertion({ requestCount: 5 }, true);
+  assertions.nativeDogfoodResponsesExact = makeNativeShellAssertion(
+    { requestCount: ORCHESTRA_NATIVE_DOGFOOD_TOTAL_REQUEST_COUNT },
+    true,
+  );
   assertions.nativeChildProjected = makeNativeShellAssertion(child, true);
   assertions.nativeWorkflowLifecycleRendered = makeNativeShellAssertion(workflow, true);
   assertions.nativeAttentionResolved = makeNativeShellAssertion(attention, true);
@@ -478,6 +518,7 @@ async function makeFixture(
     true,
   );
   assertions.nativeDogfoodProviderRestartRecovered = makeNativeShellAssertion(restart, true);
+  assertions.nativeSelectedIssueRendered = makeNativeShellAssertion(selectedIssue, true);
   const drawerObservations = [
     { opened: true, closed: true, focusRestored: true },
     { opened: true, closed: true, focusRestored: true },
@@ -668,6 +709,7 @@ describe("Orchestra native-shell evidence verifier", () => {
 
   it("requires exactly the ordered wide and narrow dark/light screenshots", async () => {
     expect(ORCHESTRA_NATIVE_SHELL_SCREENSHOT_NAMES).toEqual([
+      "native-selected-issue-1024x768-dark",
       "native-browser-1440x900-dark",
       "native-browser-1440x900-light",
       "native-workspace-1024x768-dark-drawer",
@@ -744,13 +786,13 @@ describe("Orchestra native-shell evidence verifier", () => {
         mutate: (manifest) => {
           manifest.agentReview.scenarios[0]!.notes = " ";
         },
-        message: "manifest.agentReview.native-browser-1440x900-dark.notes must be non-empty",
+        message: "manifest.agentReview.native-selected-issue-1024x768-dark.notes must be non-empty",
       },
       {
         mutate: (manifest) => {
           manifest.agentReview.scenarios[0]!.contrast = "pending";
         },
-        message: "manifest.agentReview.native-browser-1440x900-dark.contrast must be pass",
+        message: "manifest.agentReview.native-selected-issue-1024x768-dark.contrast must be pass",
       },
       {
         mutate: (manifest) => {
