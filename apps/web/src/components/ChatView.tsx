@@ -5975,6 +5975,19 @@ function ChatViewContent(props: ChatViewProps) {
               activeAutomationIssueEntry ? (
                 <div
                   className="flex min-h-0 flex-1 flex-col"
+                  data-automation-environment-id={activeAutomationIssueEntry.surface.environmentId}
+                  data-automation-issue-availability={activeAutomationIssueEntry.availability}
+                  data-automation-issue-id={activeAutomationIssueEntry.surface.issueId}
+                  data-automation-issue-surface="active"
+                  data-automation-issue-task-thread-id={
+                    activeAutomationIssueEntry.surface.issueTaskThreadId
+                  }
+                  data-automation-owner-thread-id={
+                    activeAutomationIssueEntry.surface.automationOwnerThreadId
+                  }
+                  data-automation-project-id={activeAutomationIssueEntry.surface.projectId}
+                  data-automation-route-thread-id={activeAutomationIssueEntry.surface.threadId}
+                  data-automation-run-id={activeAutomationIssueEntry.surface.automationRunId}
                   key={workspaceSurfaceKey(activeAutomationIssueEntry.surface)}
                 >
                   <AutomationIssueWorkspace

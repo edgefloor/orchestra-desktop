@@ -375,7 +375,27 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     selectedIssue.navigation,
     "manifest.runtime.nativeDogfood.selectedIssue.navigation",
   );
-  if (selectedNavigation.routeExact !== true || selectedNavigation.surfaceExact !== true) {
+  const exactSelectedIssueNavigation = (navigation: Record<string, unknown>): boolean => {
+    const surface = record(
+      navigation.surface,
+      "manifest.runtime.nativeDogfood.selectedIssue.navigation.surface",
+    );
+    return (
+      navigation.routeEnvironmentId === selectedIssue.environmentId &&
+      navigation.routeOwnerThreadId === selectedIssue.ownerThreadId &&
+      navigation.routeExact === true &&
+      navigation.surfaceExact === true &&
+      navigation.nativeActivityExact === true &&
+      surface.environmentId === selectedIssue.environmentId &&
+      surface.projectId === selectedIssue.projectId &&
+      surface.threadId === selectedIssue.ownerThreadId &&
+      surface.automationOwnerThreadId === selectedIssue.automationOwnerThreadId &&
+      surface.automationRunId === selectedIssue.runId &&
+      surface.issueId === selectedIssue.issueId &&
+      surface.issueTaskThreadId === selectedIssue.issueTaskThreadId
+    );
+  };
+  if (!exactSelectedIssueNavigation(selectedNavigation)) {
     throw new Error(
       "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact owner route and persisted provider-child surface",
     );
@@ -432,26 +452,12 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     navigation: Record<string, unknown>,
     identity: Record<string, unknown>,
   ): boolean => {
-    const surface = record(
-      navigation.surface,
-      "manifest.runtime.nativeDogfood.selectedIssue.recovery.navigation.surface",
-    );
     const providerChild = record(
       identity.providerChild,
       "manifest.runtime.nativeDogfood.selectedIssue.recovery.identity.providerChild",
     );
     return (
-      navigation.routeEnvironmentId === selectedIssue.environmentId &&
-      navigation.routeOwnerThreadId === selectedIssue.ownerThreadId &&
-      navigation.routeExact === true &&
-      navigation.surfaceExact === true &&
-      navigation.nativeActivityExact === true &&
-      surface.environmentId === selectedIssue.environmentId &&
-      surface.projectId === selectedIssue.projectId &&
-      surface.threadId === selectedIssue.ownerThreadId &&
-      surface.automationRunId === selectedIssue.runId &&
-      surface.issueId === selectedIssue.issueId &&
-      surface.issueTaskThreadId === selectedIssue.issueTaskThreadId &&
+      exactSelectedIssueNavigation(navigation) &&
       identity.runId === selectedIssue.runId &&
       identity.claimCount === 1 &&
       identity.claimId === selectedIssue.claimId &&
@@ -542,6 +548,7 @@ function requireNativeDogfoodObservation(value: unknown): Record<string, unknown
     typeof selectedIssue.projectId !== "string" ||
     typeof selectedIssue.runId !== "string" ||
     typeof selectedIssue.ownerThreadId !== "string" ||
+    typeof selectedIssue.automationOwnerThreadId !== "string" ||
     typeof selectedIssue.issueTaskThreadId !== "string" ||
     typeof selectedIssue.claimId !== "string" ||
     selectedInitial.parent !== true ||

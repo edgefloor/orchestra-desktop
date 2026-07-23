@@ -793,10 +793,17 @@ describe("native-shell acceptance capture contract", () => {
     expect(taskNavigationSource).toContain("JSON.stringify(environmentId)");
     expect(taskNavigationSource).not.toContain("bootstrap.bootstrap.id");
     expect(captureSource).toContain("const environmentId = await renderer.executeJavaScript(");
-    expect(taskNavigationSource).toContain("persisted.activeSurfaceKey");
     expect(taskNavigationSource).toContain(
-      "activeSurface.issueTaskThreadId === expectedIssueTaskThreadId",
+      "document.querySelector('[data-automation-issue-surface=\"active\"]')",
     );
+    expect(taskNavigationSource).toContain(
+      "activeSurface.dataset.automationOwnerThreadId === expectedAutomationOwnerThreadId",
+    );
+    expect(taskNavigationSource).toContain(
+      "activeSurface.dataset.automationIssueTaskThreadId === expectedIssueTaskThreadId",
+    );
+    expect(taskNavigationSource).not.toContain("workspace-surfaces:v");
+    expect(taskNavigationSource).not.toContain("persisted.activeSurfaceKey");
     expect(taskNavigationSource).toContain(
       "issueWorkspace.dataset.automationIssueWorkspace === 'ready'",
     );

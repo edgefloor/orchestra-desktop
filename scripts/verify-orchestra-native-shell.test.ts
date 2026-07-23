@@ -434,6 +434,7 @@ async function makeFixture(
     projectId: "project-native-shell-acceptance",
     runId: "automation-cycle9",
     ownerThreadId: "thread-native-shell-acceptance",
+    automationOwnerThreadId: "provider-native-thread-cycle9",
     issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
     issueTaskThreadId: "019f-native-selected-issue",
     claimId: "claim-orc-70",
@@ -450,6 +451,7 @@ async function makeFixture(
         environmentId: "native-shell",
         projectId: "project-native-shell-acceptance",
         threadId: "thread-native-shell-acceptance",
+        automationOwnerThreadId: "provider-native-thread-cycle9",
         automationRunId: "automation-cycle9",
         issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
         issueTaskThreadId: "019f-native-selected-issue",
@@ -496,6 +498,7 @@ async function makeFixture(
           environmentId: "native-shell",
           projectId: "project-native-shell-acceptance",
           threadId: "thread-native-shell-acceptance",
+          automationOwnerThreadId: "provider-native-thread-cycle9",
           automationRunId: "automation-cycle9",
           issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
           issueTaskThreadId: "019f-native-selected-issue",
@@ -528,6 +531,7 @@ async function makeFixture(
             environmentId: "native-shell",
             projectId: "project-native-shell-acceptance",
             threadId: "thread-native-shell-acceptance",
+            automationOwnerThreadId: "provider-native-thread-cycle9",
             automationRunId: "automation-cycle9",
             issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
             issueTaskThreadId: "019f-native-selected-issue",
@@ -842,6 +846,16 @@ describe("Orchestra native-shell evidence verifier", () => {
       {
         mutate: (selectedIssue) => {
           (selectedIssue.navigation as Record<string, unknown>).surfaceExact = false;
+        },
+        message:
+          "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact owner route and persisted provider-child surface",
+      },
+      {
+        mutate: (selectedIssue) => {
+          const navigation = selectedIssue.navigation as {
+            surface: Record<string, unknown>;
+          };
+          navigation.surface.automationOwnerThreadId = "different-provider-owner";
         },
         message:
           "manifest.runtime.nativeDogfood.selectedIssue.navigation must prove the exact owner route and persisted provider-child surface",

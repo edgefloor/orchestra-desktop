@@ -2618,29 +2618,7 @@ async function runElectronChild() {
               const expectedRunId = ${JSON.stringify(selectedIssueStarted.run.runId)};
               const expectedIssueId = ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id)};
               const routeSegments = location.hash.slice(1).split('/').filter(Boolean).map(decodeURIComponent);
-              let persisted = null;
-              try {
-                persisted = JSON.parse(localStorage.getItem('orchestra:workspace-surfaces:v3') ?? 'null')?.state ?? null;
-              } catch {
-                persisted = null;
-              }
-              const activeEntry = persisted?.entries?.find((entry) => {
-                const surface = entry?.surface;
-                const key = JSON.stringify([
-                  'orchestra-workspace-surface',
-                  3,
-                  'issue',
-                  surface?.environmentId,
-                  surface?.projectId,
-                  surface?.threadId,
-                  surface?.automationOwnerThreadId,
-                  surface?.automationRunId,
-                  surface?.issueId,
-                  surface?.issueTaskThreadId,
-                ]);
-                return key === persisted.activeSurfaceKey;
-              }) ?? null;
-              const activeSurface = activeEntry?.surface;
+              const activeSurface = document.querySelector('[data-automation-issue-surface="active"]');
               const issueWorkspace = document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)});
               const nativeActivity = document.querySelector('[data-automation-issue-native-activity]');
               return {
@@ -2652,23 +2630,23 @@ async function runElectronChild() {
                   && routeSegments[0] === expectedEnvironmentId
                   && routeSegments[1] === expectedOwnerThreadId,
                 surfaceExact:
-                  activeEntry?.availability === 'available'
-                  && activeSurface?.kind === 'issue'
-                  && activeSurface.environmentId === expectedEnvironmentId
-                  && activeSurface.projectId === ${JSON.stringify(projectId)}
-                  && activeSurface.threadId === ${JSON.stringify(threadId)}
-                  && activeSurface.automationOwnerThreadId === expectedAutomationOwnerThreadId
-                  && activeSurface.automationRunId === expectedRunId
-                  && activeSurface.issueId === expectedIssueId
-                  && activeSurface.issueTaskThreadId === expectedIssueTaskThreadId,
-                surface: activeSurface ? {
-                  environmentId: activeSurface.environmentId ?? null,
-                  projectId: activeSurface.projectId ?? null,
-                  threadId: activeSurface.threadId ?? null,
-                  automationOwnerThreadId: activeSurface.automationOwnerThreadId ?? null,
-                  automationRunId: activeSurface.automationRunId ?? null,
-                  issueId: activeSurface.issueId ?? null,
-                  issueTaskThreadId: activeSurface.issueTaskThreadId ?? null,
+                  activeSurface instanceof HTMLElement
+                  && activeSurface.dataset.automationIssueAvailability === 'available'
+                  && activeSurface.dataset.automationEnvironmentId === expectedEnvironmentId
+                  && activeSurface.dataset.automationProjectId === ${JSON.stringify(projectId)}
+                  && activeSurface.dataset.automationRouteThreadId === expectedOwnerThreadId
+                  && activeSurface.dataset.automationOwnerThreadId === expectedAutomationOwnerThreadId
+                  && activeSurface.dataset.automationRunId === expectedRunId
+                  && activeSurface.dataset.automationIssueId === expectedIssueId
+                  && activeSurface.dataset.automationIssueTaskThreadId === expectedIssueTaskThreadId,
+                surface: activeSurface instanceof HTMLElement ? {
+                  environmentId: activeSurface.dataset.automationEnvironmentId ?? null,
+                  projectId: activeSurface.dataset.automationProjectId ?? null,
+                  threadId: activeSurface.dataset.automationRouteThreadId ?? null,
+                  automationOwnerThreadId: activeSurface.dataset.automationOwnerThreadId ?? null,
+                  automationRunId: activeSurface.dataset.automationRunId ?? null,
+                  issueId: activeSurface.dataset.automationIssueId ?? null,
+                  issueTaskThreadId: activeSurface.dataset.automationIssueTaskThreadId ?? null,
                 } : null,
                 issueWorkspaceState:
                   issueWorkspace instanceof HTMLElement
