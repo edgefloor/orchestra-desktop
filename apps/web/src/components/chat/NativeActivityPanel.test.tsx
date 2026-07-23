@@ -13,7 +13,7 @@ const presentation: NativeActivityPresentation = {
     {
       id: "activity-1",
       kind: "coordination",
-      status: "waiting_gate",
+      status: "waiting gate",
       summary: "Waiting for approval",
       detail: "The native gate remains durable.",
       occurredAt: "42 ms",

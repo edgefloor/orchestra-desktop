@@ -22,7 +22,7 @@ const detail: NativeSubagentDetail = {
     {
       id: "item-1",
       type: "assistant",
-      status: "completed",
+      status: "waiting_gate",
       summary: "Verified the native child boundary.",
     },
   ],
@@ -61,7 +61,7 @@ describe("AutomationIssueActivity", () => {
       {
         id: "item-1",
         kind: "assistant",
-        status: "completed",
+        status: "waiting_gate",
         summary: "Verified the native child boundary.",
       },
     ]);
@@ -94,6 +94,8 @@ describe("AutomationIssueActivity", () => {
     expect(markup).toContain('aria-label="Native Issue task activity"');
     expect(markup).toContain("provider-issue-task");
     expect(markup).toContain("Verified the native child boundary.");
+    expect(markup).toContain("waiting_gate");
+    expect(markup).not.toContain("waiting gate");
     expect(markup).toContain("Earlier activity remains in the native Issue task");
     expect(markup).not.toContain("data-chat-composer-form");
   });

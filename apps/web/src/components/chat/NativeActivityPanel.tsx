@@ -89,9 +89,7 @@ export function NativeActivityPanel({
                 {record.kind || record.status ? (
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     {record.kind ? <span>{record.kind}</span> : null}
-                    {record.status ? (
-                      <Badge variant="outline">{record.status.replace("_", " ")}</Badge>
-                    ) : null}
+                    {record.status ? <Badge variant="outline">{record.status}</Badge> : null}
                   </div>
                 ) : null}
                 <p className={cn("text-sm", record.kind || record.status ? "mt-1" : "font-medium")}>

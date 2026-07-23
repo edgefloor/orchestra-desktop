@@ -851,7 +851,7 @@ export function projectAutomationRootActivityPresentation(
     },
     records: projection.activity.map((entry) => ({
       id: entry.key,
-      status: entry.status,
+      status: entry.status.replace("_", " "),
       summary: entry.summary,
       detail: entry.detail,
       occurredAt: formatAutomationMoment(entry.occurredAtMs),
