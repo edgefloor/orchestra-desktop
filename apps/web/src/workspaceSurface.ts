@@ -1,6 +1,6 @@
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 
-export const WORKSPACE_SURFACE_SCHEMA_VERSION = 2 as const;
+export const WORKSPACE_SURFACE_SCHEMA_VERSION = 3 as const;
 export const MAX_OPEN_WORKSPACE_SURFACES = 8;
 
 interface WorkspaceSurfaceScope {
@@ -35,6 +35,8 @@ export type WorkspaceSurface =
   | (WorkspaceSurfaceScope & {
       readonly kind: "issue";
       readonly threadId: ThreadId;
+      /** Provider-native Automation Root owner; distinct from the host route thread. */
+      readonly automationOwnerThreadId: string;
       readonly automationRunId: string;
       readonly issueId: string;
       /** Provider-native child identity; never a T3 host-task route identity. */
@@ -123,6 +125,7 @@ export function workspaceSurfaceKey(surface: WorkspaceSurface): WorkspaceSurface
     case "issue":
       identity = [
         surface.threadId,
+        surface.automationOwnerThreadId,
         surface.automationRunId,
         surface.issueId,
         surface.issueTaskThreadId,

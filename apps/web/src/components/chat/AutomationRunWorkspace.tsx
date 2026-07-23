@@ -27,6 +27,7 @@ type AutomationWorkspaceView = "issues" | "activity" | "recovery" | "events";
 
 export interface AutomationIssueTaskNavigationInput {
   readonly agentThreadId: string;
+  readonly automationOwnerThreadId: string;
   readonly automationRunId: string;
   readonly issueId: string;
   readonly issueIdentifier: string;
@@ -64,13 +65,14 @@ interface AutomationRunWorkspaceProps {
 
 export function automationIssueTaskNavigationInput(
   issue: AutomationWorkspaceIssue,
-  automationRunId: string,
+  run: AutomationRunResult["run"],
 ): AutomationIssueTaskNavigationInput | null {
   const threadId = issue.claim?.issueTask?.threadId;
   if (!threadId) return null;
   return {
     agentThreadId: threadId,
-    automationRunId,
+    automationOwnerThreadId: run.ownerThreadId,
+    automationRunId: run.runId,
     issueId: issue.issueId,
     issueIdentifier: issue.issueIdentifier,
     issueTitle: issue.issueTitle.text,
@@ -317,7 +319,7 @@ function IssueInspector({
               </div>
               <Button
                 onClick={() => {
-                  const input = automationIssueTaskNavigationInput(issue, runResult.run.runId);
+                  const input = automationIssueTaskNavigationInput(issue, runResult.run);
                   if (input) onOpenIssueTask(input);
                 }}
                 size="xs"
@@ -528,7 +530,7 @@ function RecoveryView({
                   <Button
                     onClick={() => {
                       if (!issue) return;
-                      const input = automationIssueTaskNavigationInput(issue, runResult.run.runId);
+                      const input = automationIssueTaskNavigationInput(issue, runResult.run);
                       if (input) onOpenIssueTask(input);
                     }}
                     size="xs"

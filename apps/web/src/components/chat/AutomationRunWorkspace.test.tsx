@@ -142,8 +142,9 @@ describe("AutomationRunWorkspace", () => {
   it("opens the durable issue task with its bounded identifier and title snapshot", () => {
     const issue = projectAutomationWorkspace(runResult).issues[0]!;
 
-    expect(automationIssueTaskNavigationInput(issue, runResult.run.runId)).toEqual({
+    expect(automationIssueTaskNavigationInput(issue, runResult.run)).toEqual({
       agentThreadId: "issue-task-70",
+      automationOwnerThreadId: "task-70",
       automationRunId: "automation-root-70",
       issueId: "issue-70",
       issueIdentifier: "ORC-70",

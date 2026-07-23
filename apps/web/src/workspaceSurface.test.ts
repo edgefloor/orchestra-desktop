@@ -35,10 +35,16 @@ function openAll(surfaces: ReadonlyArray<WorkspaceSurface>): WorkspaceSurfaceSta
 }
 
 const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
-  { schemaVersion: 2, kind: "project", environmentId, projectId },
-  { schemaVersion: 2, kind: "task", environmentId, projectId, threadId },
+  { schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION, kind: "project", environmentId, projectId },
   {
-    schemaVersion: 2,
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+    kind: "task",
+    environmentId,
+    projectId,
+    threadId,
+  },
+  {
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
     kind: "child",
     environmentId,
     projectId,
@@ -46,7 +52,7 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     agentThreadId: ThreadId.make("child"),
   },
   {
-    schemaVersion: 2,
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
     kind: "workflowRun",
     environmentId,
     projectId,
@@ -54,7 +60,7 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     runId: "run",
   },
   {
-    schemaVersion: 2,
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
     kind: "symphony",
     environmentId,
     projectId,
@@ -62,17 +68,18 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     automationRunId: "automation",
   },
   {
-    schemaVersion: 2,
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
     kind: "issue",
     environmentId,
     projectId,
     threadId,
+    automationOwnerThreadId: "provider-task",
     automationRunId: "automation",
     issueId: "issue",
     issueTaskThreadId: ThreadId.make("issue-task"),
   },
   {
-    schemaVersion: 2,
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
     kind: "evidence",
     environmentId,
     projectId,
@@ -81,9 +88,15 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     stepId: "step",
     evidenceId: "evidence",
   },
-  { schemaVersion: 2, kind: "attention", environmentId, projectId, threadId },
   {
-    schemaVersion: 2,
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+    kind: "attention",
+    environmentId,
+    projectId,
+    threadId,
+  },
+  {
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
     kind: "preview",
     environmentId,
     projectId,
@@ -91,16 +104,22 @@ const everySurfaceKind: ReadonlyArray<WorkspaceSurface> = [
     previewId: "preview",
   },
   {
-    schemaVersion: 2,
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
     kind: "files",
     environmentId,
     projectId,
     threadId,
     relativePath: "src/main.ts",
   },
-  { schemaVersion: 2, kind: "diff", environmentId, projectId, threadId },
   {
-    schemaVersion: 2,
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+    kind: "diff",
+    environmentId,
+    projectId,
+    threadId,
+  },
+  {
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
     kind: "terminal",
     environmentId,
     projectId,
@@ -117,7 +136,7 @@ describe("issue parent Symphony", () => {
     )!;
 
     expect(parentSymphonySurfaceForIssue(issue)).toEqual({
-      schemaVersion: 2,
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
       kind: "symphony",
       environmentId,
       projectId,
@@ -183,6 +202,9 @@ describe("workspace surface identity", () => {
     )!;
     expect(
       workspaceSurfaceKey({ ...issue, issueTaskThreadId: ThreadId.make("other-issue-task") }),
+    ).not.toBe(workspaceSurfaceKey(issue));
+    expect(
+      workspaceSurfaceKey({ ...issue, automationOwnerThreadId: "other-provider-task" }),
     ).not.toBe(workspaceSurfaceKey(issue));
     expect(
       workspaceSurfaceKey({

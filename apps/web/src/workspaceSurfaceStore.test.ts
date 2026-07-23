@@ -1,14 +1,18 @@
 import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { workspaceSurfaceKey, type WorkspaceSurface } from "./workspaceSurface";
+import {
+  workspaceSurfaceKey,
+  WORKSPACE_SURFACE_SCHEMA_VERSION,
+  type WorkspaceSurface,
+} from "./workspaceSurface";
 import {
   normalizePersistedWorkspaceSurfaceState,
   useWorkspaceSurfaceStore,
 } from "./workspaceSurfaceStore";
 
 const surface: WorkspaceSurface = {
-  schemaVersion: 2,
+  schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
   kind: "attention",
   environmentId: EnvironmentId.make("local"),
   projectId: ProjectId.make("orchestra"),
@@ -26,7 +30,40 @@ describe("workspace surface store", () => {
         schemaVersion: 1,
         entries: [{ surface: { ...surface, schemaVersion: 1 } }],
       }),
-    ).toEqual({ schemaVersion: 2, entries: [], activeSurfaceKey: null, focusOrder: [] });
+    ).toEqual({
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+      entries: [],
+      activeSurfaceKey: null,
+      focusOrder: [],
+    });
+  });
+
+  it("drops v2 issue surfaces that cannot prove the provider-native Automation owner", () => {
+    expect(
+      normalizePersistedWorkspaceSurfaceState({
+        schemaVersion: 2,
+        entries: [
+          {
+            surface: {
+              schemaVersion: 2,
+              kind: "issue",
+              environmentId: "local",
+              projectId: "orchestra",
+              threadId: "host-task",
+              automationRunId: "automation-70",
+              issueId: "issue-70",
+              issueTaskThreadId: "issue-task-70",
+            },
+            availability: "available",
+          },
+        ],
+      }),
+    ).toEqual({
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+      entries: [],
+      activeSurfaceKey: null,
+      focusOrder: [],
+    });
   });
 
   it("wraps the pure open, focus, close, and reconcile transitions", () => {
@@ -58,7 +95,7 @@ describe("workspace surface store", () => {
     const key = workspaceSurfaceKey(surface);
     expect(
       normalizePersistedWorkspaceSurfaceState({
-        schemaVersion: 2,
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
         entries: [
           { surface, availability: "temporarilyUnavailable" },
           { surface: { ...surface, kind: "unknown" }, availability: "available" },
@@ -68,7 +105,7 @@ describe("workspace surface store", () => {
         executionAuthority: { invented: true },
       }),
     ).toEqual({
-      schemaVersion: 2,
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
       entries: [{ surface, availability: "temporarilyUnavailable" }],
       activeSurfaceKey: null,
       focusOrder: [key],
@@ -77,11 +114,12 @@ describe("workspace surface store", () => {
 
   it("hydrates backward-compatible bounded issue presentation metadata", () => {
     const issueSurface: WorkspaceSurface = {
-      schemaVersion: 2,
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
       kind: "issue",
       environmentId: EnvironmentId.make("local"),
       projectId: ProjectId.make("orchestra"),
       threadId: ThreadId.make("symphony-task"),
+      automationOwnerThreadId: "provider-symphony-task",
       automationRunId: "automation-70",
       issueId: "issue-70",
       issueTaskThreadId: ThreadId.make("issue-task-70"),
@@ -103,7 +141,7 @@ describe("workspace surface store", () => {
     };
 
     const normalized = normalizePersistedWorkspaceSurfaceState({
-      schemaVersion: 2,
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
       entries: [
         { surface: issueSurface, availability: "available" },
         { surface: legacyIssueSurface, availability: "available" },

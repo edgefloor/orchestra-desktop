@@ -2,7 +2,7 @@ import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { RightPanelSurface } from "./rightPanelStore";
-import type { WorkspaceSurface } from "./workspaceSurface";
+import { WORKSPACE_SURFACE_SCHEMA_VERSION, type WorkspaceSurface } from "./workspaceSurface";
 import {
   rightPanelActivationForWorkspaceSurface,
   workspaceSurfaceForRightPanelSurface,
@@ -45,7 +45,11 @@ function expectedSurface(
     | { kind: "diff" }
     | { kind: "terminal"; terminalId: string },
 ): WorkspaceSurface {
-  return { schemaVersion: 2, ...scope, ...details } as WorkspaceSurface;
+  return {
+    schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+    ...scope,
+    ...details,
+  } as WorkspaceSurface;
 }
 
 describe("workspace right-panel surface projection", () => {
@@ -110,7 +114,7 @@ describe("right-panel activation lookup", () => {
     ).toBeNull();
     expect(
       rightPanelActivationForWorkspaceSurface(
-        { schemaVersion: 2, ...scope, kind: "task" },
+        { schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION, ...scope, kind: "task" },
         surfaces,
       ),
     ).toBeNull();

@@ -16,7 +16,7 @@ import {
   type WorkspaceSurfaceState,
 } from "./workspaceSurface";
 
-const WORKSPACE_SURFACE_STORAGE_KEY = "orchestra:workspace-surfaces:v2";
+const WORKSPACE_SURFACE_STORAGE_KEY = "orchestra:workspace-surfaces:v3";
 // Native bounded text may contain the 4,096-byte prefix plus one Unicode ellipsis.
 const MAX_ISSUE_PRESENTATION_CHARS = 4_097;
 
@@ -67,7 +67,13 @@ function isWorkspaceSurface(value: unknown): value is WorkspaceSurface {
       );
     case "issue":
       return (
-        stringFields("threadId", "automationRunId", "issueId", "issueTaskThreadId") &&
+        stringFields(
+          "threadId",
+          "automationOwnerThreadId",
+          "automationRunId",
+          "issueId",
+          "issueTaskThreadId",
+        ) &&
         optionalBoundedString("issueIdentifier") &&
         optionalBoundedString("issueTitle")
       );

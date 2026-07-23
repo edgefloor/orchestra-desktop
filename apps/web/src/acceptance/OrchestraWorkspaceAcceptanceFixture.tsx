@@ -208,7 +208,8 @@ const acceptanceAutomationRun: AutomationRunResult = {
 };
 
 const acceptanceIssueSnapshot = selectExactAutomationIssueSnapshot(acceptanceAutomationRun, {
-  ownerThreadId: threadId,
+  routeThreadId: threadId,
+  automationOwnerThreadId: acceptanceAutomationRun.run.ownerThreadId,
   automationRunId: acceptanceAutomationRun.run.runId,
   issueId: "issue-orc-70",
   issueTaskThreadId,

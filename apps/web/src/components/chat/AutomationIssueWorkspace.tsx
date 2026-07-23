@@ -272,7 +272,8 @@ export function AutomationIssueWorkspacePresentation({
 
 export function AutomationIssueWorkspaceController({
   environmentId,
-  ownerThreadId,
+  routeThreadId,
+  automationOwnerThreadId,
   automationRunId,
   issueId,
   issueTaskThreadId,
@@ -286,8 +287,14 @@ export function AutomationIssueWorkspaceController({
   const readStatus = useAtomCommand(readAutomationStatus, { reportFailure: false });
   const steerIssue = useAtomCommand(steerAutomationIssue, { reportFailure: false });
   const locator = useMemo<AutomationIssueWorkspaceLocator>(
-    () => ({ ownerThreadId, automationRunId, issueId, issueTaskThreadId }),
-    [automationRunId, issueId, issueTaskThreadId, ownerThreadId],
+    () => ({
+      routeThreadId,
+      automationOwnerThreadId,
+      automationRunId,
+      issueId,
+      issueTaskThreadId,
+    }),
+    [automationOwnerThreadId, automationRunId, issueId, issueTaskThreadId, routeThreadId],
   );
   const [snapshot, setSnapshot] = useState<AutomationIssueWorkspaceSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -357,7 +364,7 @@ export function AutomationIssueWorkspaceController({
     void steerIssue({
       environmentId,
       input: {
-        threadId: ownerThreadId,
+        threadId: routeThreadId,
         runId: automationRunId,
         claimId: claim.claimId,
         input,
@@ -378,7 +385,7 @@ export function AutomationIssueWorkspaceController({
     automationRunId,
     environmentId,
     guidance,
-    ownerThreadId,
+    routeThreadId,
     snapshot,
     steerIssue,
   ]);

@@ -14,7 +14,8 @@ import {
 } from "./AutomationIssueWorkspace.logic";
 
 const locator: AutomationIssueWorkspaceLocator = {
-  ownerThreadId: ThreadId.make("symphony-task-42"),
+  routeThreadId: ThreadId.make("host-task-42"),
+  automationOwnerThreadId: "symphony-task-42",
   automationRunId: "automation-42",
   issueId: "linear-issue-42",
   issueTaskThreadId: ThreadId.make("issue-task-42"),
@@ -131,7 +132,7 @@ const runResult: AutomationRunResult = {
 describe("AutomationIssueWorkspace exact native context", () => {
   it("requests focused native status and selects only the exact issue-task claim", () => {
     expect(exactAutomationStatusInput(locator)).toEqual({
-      threadId: "symphony-task-42",
+      threadId: "host-task-42",
       runId: "automation-42",
       focusedIssueId: "linear-issue-42",
     });
@@ -153,7 +154,7 @@ describe("AutomationIssueWorkspace exact native context", () => {
     expect(
       selectExactAutomationIssueSnapshot(runResult, {
         ...locator,
-        ownerThreadId: ThreadId.make("different-owner"),
+        automationOwnerThreadId: "different-owner",
       }),
     ).toBeNull();
   });

@@ -16,6 +16,7 @@ import {
   createWorkspaceSurfaceState,
   openWorkspaceSurface,
   workspaceSurfaceKey,
+  WORKSPACE_SURFACE_SCHEMA_VERSION,
   type WorkspaceSurface,
 } from "./workspaceSurface";
 import {
@@ -146,10 +147,21 @@ function automationRun(overrides: Partial<AutomationRun> = {}): AutomationRun {
 describe("redesigned native workspace dogfood contract", () => {
   it("keeps one native task while a child, workflow gate, Attention, and Evidence inspection progress", () => {
     const surfaces: WorkspaceSurface[] = [
-      { schemaVersion: 2, kind: "project", environmentId, projectId },
-      { schemaVersion: 2, kind: "task", environmentId, projectId, threadId },
       {
-        schemaVersion: 2,
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+        kind: "project",
+        environmentId,
+        projectId,
+      },
+      {
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+        kind: "task",
+        environmentId,
+        projectId,
+        threadId,
+      },
+      {
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
         kind: "child",
         environmentId,
         projectId,
@@ -157,16 +169,22 @@ describe("redesigned native workspace dogfood contract", () => {
         agentThreadId: ThreadId.make("child-51"),
       },
       {
-        schemaVersion: 2,
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
         kind: "workflowRun",
         environmentId,
         projectId,
         threadId,
         runId: "workflow-51",
       },
-      { schemaVersion: 2, kind: "attention", environmentId, projectId, threadId },
       {
-        schemaVersion: 2,
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+        kind: "attention",
+        environmentId,
+        projectId,
+        threadId,
+      },
+      {
+        schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
         kind: "evidence",
         environmentId,
         projectId,

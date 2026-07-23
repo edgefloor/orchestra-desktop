@@ -2041,6 +2041,7 @@ async function runElectronChild() {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(
         `${message}; bounded diagnostic ${JSON.stringify(diagnostic).slice(0, 4_000)}`,
+        { cause: error },
       );
     }
     const waitingAssistantEvent = await awaitNativeShellAssistantMessageEvent({
@@ -2612,13 +2613,14 @@ async function runElectronChild() {
                 `(() => {
               const expectedEnvironmentId = ${JSON.stringify(environmentId)};
               const expectedOwnerThreadId = ${JSON.stringify(threadId)};
+              const expectedAutomationOwnerThreadId = ${JSON.stringify(selectedIssueStarted.run.ownerThreadId)};
               const expectedIssueTaskThreadId = ${JSON.stringify(selectedIssueClaim.issueTask.threadId)};
               const expectedRunId = ${JSON.stringify(selectedIssueStarted.run.runId)};
               const expectedIssueId = ${JSON.stringify(ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id)};
               const routeSegments = location.hash.slice(1).split('/').filter(Boolean).map(decodeURIComponent);
               let persisted = null;
               try {
-                persisted = JSON.parse(localStorage.getItem('orchestra:workspace-surfaces:v2') ?? 'null')?.state ?? null;
+                persisted = JSON.parse(localStorage.getItem('orchestra:workspace-surfaces:v3') ?? 'null')?.state ?? null;
               } catch {
                 persisted = null;
               }
@@ -2626,11 +2628,12 @@ async function runElectronChild() {
                 const surface = entry?.surface;
                 const key = JSON.stringify([
                   'orchestra-workspace-surface',
-                  2,
+                  3,
                   'issue',
                   surface?.environmentId,
                   surface?.projectId,
                   surface?.threadId,
+                  surface?.automationOwnerThreadId,
                   surface?.automationRunId,
                   surface?.issueId,
                   surface?.issueTaskThreadId,
@@ -2639,7 +2642,7 @@ async function runElectronChild() {
               }) ?? null;
               const activeSurface = activeEntry?.surface;
               const issueWorkspace = document.querySelector(${JSON.stringify(selectedIssueWorkspaceSelector)});
-              const nativeActivity = document.querySelector('[data-automation-issue-native-activity="ready"]');
+              const nativeActivity = document.querySelector('[data-automation-issue-native-activity]');
               return {
                 route: location.hash,
                 routeEnvironmentId: routeSegments[0] ?? null,
@@ -2654,6 +2657,7 @@ async function runElectronChild() {
                   && activeSurface.environmentId === expectedEnvironmentId
                   && activeSurface.projectId === ${JSON.stringify(projectId)}
                   && activeSurface.threadId === ${JSON.stringify(threadId)}
+                  && activeSurface.automationOwnerThreadId === expectedAutomationOwnerThreadId
                   && activeSurface.automationRunId === expectedRunId
                   && activeSurface.issueId === expectedIssueId
                   && activeSurface.issueTaskThreadId === expectedIssueTaskThreadId,
@@ -2661,17 +2665,32 @@ async function runElectronChild() {
                   environmentId: activeSurface.environmentId ?? null,
                   projectId: activeSurface.projectId ?? null,
                   threadId: activeSurface.threadId ?? null,
+                  automationOwnerThreadId: activeSurface.automationOwnerThreadId ?? null,
                   automationRunId: activeSurface.automationRunId ?? null,
                   issueId: activeSurface.issueId ?? null,
                   issueTaskThreadId: activeSurface.issueTaskThreadId ?? null,
                 } : null,
+                issueWorkspaceState:
+                  issueWorkspace instanceof HTMLElement
+                    ? issueWorkspace.dataset.automationIssueWorkspace ?? null
+                    : null,
+                issueWorkspaceText:
+                  issueWorkspace instanceof HTMLElement
+                    ? issueWorkspace.innerText.slice(0, 2000)
+                    : null,
+                nativeActivityState:
+                  nativeActivity instanceof HTMLElement
+                    ? nativeActivity.dataset.automationIssueNativeActivity ?? null
+                    : null,
                 nativeActivityExact:
                   nativeActivity instanceof HTMLElement
+                  && nativeActivity.dataset.automationIssueNativeActivity === 'ready'
                   && nativeActivity.innerText.includes(expectedIssueTaskThreadId),
                 ready:
                   issueWorkspace instanceof HTMLElement
                   && issueWorkspace.dataset.automationIssueWorkspace === 'ready'
-                  && nativeActivity instanceof HTMLElement,
+                  && nativeActivity instanceof HTMLElement
+                  && nativeActivity.dataset.automationIssueNativeActivity === 'ready',
               };
             })()`,
                 true,
@@ -3042,6 +3061,7 @@ async function runElectronChild() {
       projectId,
       runId: selectedIssueStarted.run.runId,
       ownerThreadId: threadId,
+      automationOwnerThreadId: selectedIssueStarted.run.ownerThreadId,
       issueId: ORCHESTRA_NATIVE_DOGFOOD_SELECTED_ISSUE.id,
       issueTaskThreadId: selectedIssueClaim.issueTask.threadId,
       claimId: selectedIssueClaim.claimId,

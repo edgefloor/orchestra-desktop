@@ -13,7 +13,10 @@ export type AutomationIssueWorkspaceRuntimeState =
   | "temporarilyUnavailable";
 
 export interface AutomationIssueWorkspaceLocator {
-  readonly ownerThreadId: ThreadId;
+  /** T3 host-task identity used only to route provider RPCs. */
+  readonly routeThreadId: ThreadId;
+  /** Provider-native Automation Root owner identity used to validate returned data. */
+  readonly automationOwnerThreadId: string;
   readonly automationRunId: string;
   readonly issueId: string;
   /** Provider-native child identity; never a T3 host-task route identity. */
@@ -47,7 +50,7 @@ export function selectExactAutomationIssueSnapshot(
 ): AutomationIssueWorkspaceSnapshot | null {
   if (
     runResult.run.runId !== locator.automationRunId ||
-    runResult.run.ownerThreadId !== locator.ownerThreadId
+    runResult.run.ownerThreadId !== locator.automationOwnerThreadId
   ) {
     return null;
   }
@@ -106,7 +109,7 @@ export function automationIssueClaimUrl(claim: AutomationIssueClaim | undefined)
 
 export function exactAutomationStatusInput(locator: AutomationIssueWorkspaceLocator) {
   return {
-    threadId: locator.ownerThreadId,
+    threadId: locator.routeThreadId,
     runId: locator.automationRunId,
     focusedIssueId: locator.issueId,
   };

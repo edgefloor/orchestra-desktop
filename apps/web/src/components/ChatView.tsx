@@ -1383,6 +1383,7 @@ function ChatViewContent(props: ChatViewProps) {
         environmentId: activeThread.environmentId,
         projectId: activeThread.projectId,
         threadId: activeThread.id,
+        automationOwnerThreadId: input.automationOwnerThreadId,
         automationRunId: input.automationRunId,
         issueId: input.issueId,
         issueTaskThreadId: input.agentThreadId,
@@ -5977,6 +5978,9 @@ function ChatViewContent(props: ChatViewProps) {
                   key={workspaceSurfaceKey(activeAutomationIssueEntry.surface)}
                 >
                   <AutomationIssueWorkspace
+                    automationOwnerThreadId={
+                      activeAutomationIssueEntry.surface.automationOwnerThreadId
+                    }
                     automationRunId={activeAutomationIssueEntry.surface.automationRunId}
                     availability={activeAutomationIssueEntry.availability}
                     environmentId={activeAutomationIssueEntry.surface.environmentId}
@@ -5987,7 +5991,7 @@ function ChatViewContent(props: ChatViewProps) {
                     onOpenDiff={onOpenIssueDiff}
                     onNativeActivityRefresh={refreshAutomationIssueActivity}
                     onOpenSymphony={openIssueParentSymphony}
-                    ownerThreadId={activeAutomationIssueEntry.surface.threadId}
+                    routeThreadId={activeAutomationIssueEntry.surface.threadId}
                   />
                   <AutomationIssueActivity
                     agentThreadId={activeAutomationIssueEntry.surface.issueTaskThreadId}

@@ -115,7 +115,8 @@ import {
 
 const locatorProps: AutomationIssueWorkspaceProps = {
   environmentId: EnvironmentId.make("local"),
-  ownerThreadId: ThreadId.make("symphony-task-42"),
+  routeThreadId: ThreadId.make("host-task-42"),
+  automationOwnerThreadId: "symphony-task-42",
   automationRunId: "automation-42",
   issueId: "linear-issue-42",
   issueTaskThreadId: ThreadId.make("issue-task-42"),
@@ -273,7 +274,7 @@ describe("AutomationIssueWorkspaceController", () => {
     expect(testState.readStatus).toHaveBeenCalledWith({
       environmentId: "local",
       input: {
-        threadId: "symphony-task-42",
+        threadId: "host-task-42",
         runId: "automation-42",
         focusedIssueId: "linear-issue-42",
       },
@@ -298,7 +299,7 @@ describe("AutomationIssueWorkspaceController", () => {
     expect(testState.steerIssue).toHaveBeenCalledWith({
       environmentId: "local",
       input: {
-        threadId: "symphony-task-42",
+        threadId: "host-task-42",
         runId: "automation-42",
         claimId: "claim-42",
         input: "Retry exact guidance",
@@ -313,7 +314,7 @@ describe("AutomationIssueWorkspaceController", () => {
     expect(testState.steerIssue).toHaveBeenNthCalledWith(2, {
       environmentId: "local",
       input: {
-        threadId: "symphony-task-42",
+        threadId: "host-task-42",
         runId: "automation-42",
         claimId: "claim-42",
         input: "Retry exact guidance",
