@@ -14,6 +14,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import {
+  formatAutomationMoment,
   projectAutomationRootActivityPresentation,
   projectAutomationWorkspace,
   retainAutomationIssueSelection,
@@ -59,12 +60,6 @@ interface AutomationRunWorkspaceProps {
   readonly onSteeringInputChange: (claimId: string, value: string) => void;
   readonly initialView?: AutomationWorkspaceView;
   readonly initialSelectedIssueId?: string | null;
-}
-
-function formatMoment(value: number | undefined): string {
-  if (value === undefined) return "Not recorded";
-  if (value < 100_000_000_000) return `${value} ms`;
-  return new Date(value).toLocaleString();
 }
 
 export function automationIssueTaskNavigationInput(
@@ -303,7 +298,7 @@ function IssueInspector({
             ) : null}
             <div>
               <dt className="inline font-medium text-foreground">Last progress </dt>
-              <dd className="inline">{formatMoment(claim.lastProgressAtMs)}</dd>
+              <dd className="inline">{formatAutomationMoment(claim.lastProgressAtMs)}</dd>
             </div>
             <div>
               <dt className="inline font-medium text-foreground">Cleanup </dt>
@@ -715,7 +710,7 @@ export function AutomationRunWorkspace({
                           {issue.claim?.issueTask ? "Task" : "—"}
                           {issue.claim?.workflowRunId ? " · Workflow" : ""}
                         </TableCell>
-                        <TableCell>{formatMoment(issue.lastProgressAtMs)}</TableCell>
+                        <TableCell>{formatAutomationMoment(issue.lastProgressAtMs)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -814,7 +809,7 @@ export function AutomationRunWorkspace({
                           <Badge variant="outline">{event.status.replace("_", " ")}</Badge>
                           {event.occurredAtMs !== undefined ? (
                             <span className="text-muted-foreground">
-                              {formatMoment(event.occurredAtMs)}
+                              {formatAutomationMoment(event.occurredAtMs)}
                             </span>
                           ) : null}
                         </div>

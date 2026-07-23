@@ -147,7 +147,7 @@ export type AutomationWorkspaceProjectionLimits = {
   readonly eventsPerGroup?: number;
 };
 
-function formatActivityMoment(value: number | undefined): string {
+export function formatAutomationMoment(value: number | undefined): string {
   if (value === undefined) return "Not recorded";
   if (value < 100_000_000_000) return `${value} ms`;
   return new Date(value).toLocaleString();
@@ -854,7 +854,7 @@ export function projectAutomationRootActivityPresentation(
       status: entry.status,
       summary: entry.summary,
       detail: entry.detail,
-      occurredAt: formatActivityMoment(entry.occurredAtMs),
+      occurredAt: formatAutomationMoment(entry.occurredAtMs),
     })),
     emptyMessage: "No durable Root or Issue activity is available in this native snapshot.",
     truncationMessage: projection.bounds.activity.truncated
