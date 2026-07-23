@@ -6,6 +6,8 @@ import type {
   AutomationRunResult,
 } from "@t3tools/contracts";
 
+import type { NativeActivityPresentation } from "./NativeActivityPanel.logic";
+
 export type AutomationIssueExecutionState =
   | "running"
   | "retrying"
@@ -144,6 +146,12 @@ export type AutomationWorkspaceProjectionLimits = {
   readonly recovery?: number;
   readonly eventsPerGroup?: number;
 };
+
+function formatActivityMoment(value: number | undefined): string {
+  if (value === undefined) return "Not recorded";
+  if (value < 100_000_000_000) return `${value} ms`;
+  return new Date(value).toLocaleString();
+}
 
 const DEFAULT_ISSUE_LIMIT = 100;
 const DEFAULT_ACTIVITY_LIMIT = 100;
@@ -820,6 +828,38 @@ export function projectAutomationWorkspace(
         truncated: recovery.length < allRecovery.length,
       },
     },
+  };
+}
+
+export function projectAutomationRootActivityPresentation(
+  run: AutomationRun,
+  projection: Pick<AutomationWorkspaceProjection, "activity" | "bounds">,
+): NativeActivityPresentation {
+  return {
+    accessibleLabel: "Automation activity",
+    identity: {
+      label: "Root Run",
+      value: run.runId,
+      status: run.status,
+    },
+    state: projection.activity.length === 0 ? "empty" : "ready",
+    overview: {
+      summary: `${projection.bounds.activity.shown} durable activity ${
+        projection.bounds.activity.shown === 1 ? "summary" : "summaries"
+      } in this native snapshot`,
+      metadata: `Revision ${run.revision} · reconciliation ${run.reconciliation.replace("_", " ")}`,
+    },
+    records: projection.activity.map((entry) => ({
+      id: entry.key,
+      status: entry.status,
+      summary: entry.summary,
+      detail: entry.detail,
+      occurredAt: formatActivityMoment(entry.occurredAtMs),
+    })),
+    emptyMessage: "No durable Root or Issue activity is available in this native snapshot.",
+    truncationMessage: projection.bounds.activity.truncated
+      ? `Showing ${projection.bounds.activity.shown} of ${projection.bounds.activity.available} durable activity summaries.`
+      : undefined,
   };
 }
 

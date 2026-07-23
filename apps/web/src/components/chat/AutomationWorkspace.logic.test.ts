@@ -7,6 +7,7 @@ import type {
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  projectAutomationRootActivityPresentation,
   projectAutomationWorkspace,
   retainAutomationIssueSelection,
 } from "./AutomationWorkspace.logic";
@@ -267,6 +268,27 @@ describe("projectAutomationWorkspace activity and events", () => {
     expect(projection.activity[0]).toMatchObject({
       summary: "Guidance delivered for ORC-1",
       detail: "Focus on recovery.",
+    });
+
+    const presentation = projectAutomationRootActivityPresentation(
+      runResult([activeClaim]).run,
+      projection,
+    );
+    expect(presentation).toMatchObject({
+      accessibleLabel: "Automation activity",
+      identity: { label: "Root Run", value: "root-1", status: "running" },
+      state: "ready",
+    });
+    expect(presentation.records.slice(0, 4).map((entry) => entry.id)).toEqual([
+      "steering:claim-1:2",
+      "claim:claim-1:progress:40",
+      "coordination:root-1:7",
+      "dispatch:intent-1",
+    ]);
+    expect(presentation.records[0]).toMatchObject({
+      summary: "Guidance delivered for ORC-1",
+      detail: "Focus on recovery.",
+      occurredAt: "50 ms",
     });
   });
 

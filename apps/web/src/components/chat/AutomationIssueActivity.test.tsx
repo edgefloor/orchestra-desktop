@@ -6,6 +6,7 @@ import { AutomationIssueActivityPresentation } from "./AutomationIssueActivity";
 import {
   exactNativeIssueActivityInput,
   isExactNativeIssueActivityDetail,
+  projectAutomationIssueActivityPresentation,
 } from "./AutomationIssueActivity.logic";
 
 const ownerThreadId = ThreadId.make("automation-owner");
@@ -29,6 +30,43 @@ const detail: NativeSubagentDetail = {
 };
 
 describe("AutomationIssueActivity", () => {
+  it("adapts every exact-read state without changing Issue identity or item order", () => {
+    const states = [
+      { detail: null, error: null, loading: true, expected: "loading" },
+      { detail, error: null, loading: true, expected: "refreshing" },
+      { detail, error: null, loading: false, expected: "ready" },
+      { detail, error: "native read unavailable", loading: false, expected: "stale" },
+      { detail: null, error: "native read unavailable", loading: false, expected: "error" },
+      { detail: null, error: null, loading: false, expected: "empty" },
+    ] as const;
+
+    for (const state of states) {
+      const presentation = projectAutomationIssueActivityPresentation({
+        agentThreadId: "provider-issue-task",
+        detail: state.detail,
+        error: state.error,
+        loading: state.loading,
+      });
+      expect(presentation.state).toBe(state.expected);
+      expect(presentation.identity.value).toBe("provider-issue-task");
+    }
+
+    const presentation = projectAutomationIssueActivityPresentation({
+      agentThreadId: "provider-issue-task",
+      detail,
+      error: null,
+      loading: false,
+    });
+    expect(presentation.records).toEqual([
+      {
+        id: "item-1",
+        kind: "assistant",
+        status: "completed",
+        summary: "Verified the native child boundary.",
+      },
+    ]);
+  });
+
   it("addresses the provider child through its owner instead of a host-task route", () => {
     expect(exactNativeIssueActivityInput(ownerThreadId, "provider-issue-task")).toEqual({
       threadId: "automation-owner",

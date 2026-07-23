@@ -1,5 +1,4 @@
 import {
-  ThreadId,
   type AutomationQueueReadInput,
   type AutomationQueueReadResult,
   type AutomationRunResult,
@@ -15,11 +14,13 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import {
+  projectAutomationRootActivityPresentation,
   projectAutomationWorkspace,
   retainAutomationIssueSelection,
   type AutomationWorkspaceIssue,
   type AutomationWorkspaceProjection,
 } from "./AutomationWorkspace.logic";
+import { NativeActivityPanel } from "./NativeActivityPanel";
 
 type AutomationWorkspaceView = "issues" | "activity" | "recovery" | "events";
 
@@ -777,31 +778,9 @@ export function AutomationRunWorkspace({
               />
             </div>
           ) : activeView === "activity" ? (
-            <div className="space-y-2" aria-label="Automation activity">
-              {projection.activity.map((entry) => (
-                <article
-                  className="grid gap-1 rounded-lg border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto]"
-                  key={entry.key}
-                >
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium">{entry.summary}</span>
-                      <Badge variant="outline">{entry.status.replace("_", " ")}</Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{entry.detail}</p>
-                  </div>
-                  <time className="text-xs text-muted-foreground">
-                    {formatMoment(entry.occurredAtMs)}
-                  </time>
-                </article>
-              ))}
-              {projection.bounds.activity.truncated ? (
-                <p className="text-xs text-amber-600">
-                  Showing {projection.bounds.activity.shown} of{" "}
-                  {projection.bounds.activity.available} durable activity summaries.
-                </p>
-              ) : null}
-            </div>
+            <NativeActivityPanel
+              presentation={projectAutomationRootActivityPresentation(runResult.run, projection)}
+            />
           ) : activeView === "recovery" ? (
             <RecoveryView
               onInspectRun={onInspectRun}
