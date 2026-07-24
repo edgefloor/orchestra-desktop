@@ -324,6 +324,7 @@ export function AutomationIssueWorkspaceController({
 
   const load = useCallback(
     (onSettled?: () => void) => {
+      if (!connectionReady) return;
       const requestId = beginAutomationIssueRequest(statusRequestIdRef);
       setLoading(true);
       setError(null);
@@ -341,20 +342,28 @@ export function AutomationIssueWorkspaceController({
         onSettled?.();
       });
     },
-    [acceptRunResult, environmentId, locator, readStatus],
+    [acceptRunResult, connectionReady, environmentId, locator, readStatus],
   );
 
   useEffect(() => {
     if (!connectionReady) {
       statusRequestIdRef.current += 1;
+      steeringRequestIdRef.current += 1;
+      setPendingSteering(false);
       return;
     }
     load();
     return () => {
       statusRequestIdRef.current += 1;
-      steeringRequestIdRef.current += 1;
     };
   }, [connectionReady, load]);
+
+  useEffect(
+    () => () => {
+      steeringRequestIdRef.current += 1;
+    },
+    [locator],
+  );
 
   const refresh = useCallback(() => {
     load(onNativeActivityRefresh);
@@ -363,7 +372,15 @@ export function AutomationIssueWorkspaceController({
   const sendGuidance = useCallback(() => {
     const claim = snapshot?.issue.claim;
     const input = guidance.trim();
-    if (!claim || claim.status !== "running" || !claim.issueTask?.threadId || !input) return;
+    if (
+      !connectionReady ||
+      !claim ||
+      claim.status !== "running" ||
+      !claim.issueTask?.threadId ||
+      !input
+    ) {
+      return;
+    }
     const requestId = beginAutomationIssueRequest(steeringRequestIdRef);
     setPendingSteering(true);
     setError(null);
@@ -389,6 +406,7 @@ export function AutomationIssueWorkspaceController({
   }, [
     acceptRunResult,
     automationRunId,
+    connectionReady,
     environmentId,
     guidance,
     routeThreadId,
@@ -422,7 +440,7 @@ export function AutomationIssueWorkspaceController({
       onOpenTracker={openTracker}
       onRefresh={refresh}
       onSendGuidance={sendGuidance}
-      pending={loading || pendingSteering}
+      pending={!connectionReady || loading || pendingSteering}
       runtimeState={runtimeState}
       snapshot={snapshot}
     />

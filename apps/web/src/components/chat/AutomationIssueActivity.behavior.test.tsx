@@ -137,7 +137,7 @@ describe("AutomationIssueActivityController", () => {
     presentation = renderController();
     expect(presentation.props.detail).toEqual(detail);
 
-    presentation.props.onRetry();
+    presentation.props.onRetry?.();
     await flushPromises();
     presentation = renderController();
     expect(presentation.props.detail).toEqual(detail);
@@ -162,6 +162,14 @@ describe("AutomationIssueActivityController", () => {
     expect(presentation.props.error).toBeNull();
   });
 
+  it("does not expose a manual retry while disconnected", () => {
+    const presentation = renderController({ ...props, connectionReady: false });
+    hooks.runMountEffects();
+
+    expect(presentation.props.onRetry).toBeUndefined();
+    expect(testState.readDetail).not.toHaveBeenCalled();
+  });
+
   it("retains exact activity when a retry fails", async () => {
     testState.readDetail
       .mockResolvedValueOnce({ _tag: "Success", value: detail })
@@ -171,7 +179,7 @@ describe("AutomationIssueActivityController", () => {
     hooks.runMountEffects();
     await flushPromises();
     presentation = renderController();
-    presentation.props.onRetry();
+    presentation.props.onRetry?.();
     await flushPromises();
     presentation = renderController();
 

@@ -27,6 +27,9 @@ const hooks = vi.hoisted(() => {
       slots = [];
       effects = [];
     },
+    discardEffects() {
+      effects = [];
+    },
     runMountEffects() {
       const mounted = [...effects];
       effects = [];
@@ -344,6 +347,72 @@ describe("AutomationIssueWorkspaceController", () => {
 
     expect(presentation.props.runtimeState).toBe("ready");
     expect(presentation.props.snapshot?.issue.claim?.claimId).toBe("claim-42");
+  });
+
+  it("blocks manual refresh and steering while disconnected", async () => {
+    testState.readStatus.mockResolvedValueOnce({ _tag: "Success", value: runResult() });
+
+    let presentation = renderController({ ...locatorProps, connectionReady: true });
+    hooks.runMountEffects();
+    await flushPromises();
+    presentation = renderController({ ...locatorProps, connectionReady: false });
+    hooks.runMountEffects();
+    presentation.props.onGuidanceChange("Do not send while disconnected");
+    presentation = renderController({ ...locatorProps, connectionReady: false });
+
+    presentation.props.onRefresh();
+    presentation.props.onSendGuidance();
+
+    expect(testState.readStatus).toHaveBeenCalledOnce();
+    expect(testState.steerIssue).not.toHaveBeenCalled();
+    expect(presentation.props.pending).toBe(true);
+  });
+
+  it("clears pending steering when the environment disconnects mid-request", async () => {
+    let settleSteering:
+      | ((result: { _tag: "Success"; value: AutomationRunResult }) => void)
+      | undefined;
+    testState.readStatus
+      .mockResolvedValueOnce({ _tag: "Success", value: runResult() })
+      .mockResolvedValueOnce({ _tag: "Success", value: runResult() });
+    testState.steerIssue.mockReturnValueOnce(
+      new Promise((resolve) => {
+        settleSteering = resolve;
+      }),
+    );
+
+    let presentation = renderController({ ...locatorProps, connectionReady: true });
+    hooks.runMountEffects();
+    await flushPromises();
+    presentation = renderController({ ...locatorProps, connectionReady: true });
+    hooks.discardEffects();
+    presentation.props.onGuidanceChange("Retain this guidance");
+    presentation = renderController({ ...locatorProps, connectionReady: true });
+    hooks.discardEffects();
+    presentation.props.onSendGuidance();
+    presentation = renderController({ ...locatorProps, connectionReady: true });
+    hooks.discardEffects();
+    expect(presentation.props.pending).toBe(true);
+
+    renderController({ ...locatorProps, connectionReady: false });
+    hooks.runMountEffects();
+    presentation = renderController({ ...locatorProps, connectionReady: false });
+    hooks.discardEffects();
+    expect(presentation.props.pending).toBe(true);
+
+    renderController({ ...locatorProps, connectionReady: true });
+    hooks.runMountEffects();
+    await flushPromises();
+    presentation = renderController({ ...locatorProps, connectionReady: true });
+    hooks.discardEffects();
+    expect(presentation.props.pending).toBe(false);
+    expect(presentation.props.guidance).toBe("Retain this guidance");
+
+    settleSteering?.({ _tag: "Success", value: runResult() });
+    await flushPromises();
+    presentation = renderController({ ...locatorProps, connectionReady: true });
+    expect(presentation.props.pending).toBe(false);
+    expect(presentation.props.guidance).toBe("Retain this guidance");
   });
 
   it("retains exact identity through error, retry, stale, temporary, and reload recovery", async () => {

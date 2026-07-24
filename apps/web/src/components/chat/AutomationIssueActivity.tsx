@@ -28,7 +28,7 @@ export interface AutomationIssueActivityPresentationProps {
   readonly detail: NativeSubagentDetail | null;
   readonly loading: boolean;
   readonly error: string | null;
-  readonly onRetry: () => void;
+  readonly onRetry: (() => void) | undefined;
 }
 
 export function AutomationIssueActivityPresentation({
@@ -72,6 +72,7 @@ export function AutomationIssueActivityController({
   const requestIdRef = useRef(0);
 
   const load = useCallback(() => {
+    if (!connectionReady) return;
     requestIdRef.current += 1;
     const requestId = requestIdRef.current;
     setLoading(true);
@@ -94,7 +95,7 @@ export function AutomationIssueActivityController({
         setError(readableAutomationError(squashAtomCommandFailure(result), 1_024));
       }
     });
-  }, [agentThreadId, environmentId, ownerThreadId, readDetail]);
+  }, [agentThreadId, connectionReady, environmentId, ownerThreadId, readDetail]);
 
   useEffect(() => {
     if (!connectionReady) {
@@ -118,7 +119,7 @@ export function AutomationIssueActivityController({
       detail={exactDetail}
       error={error}
       loading={loading}
-      onRetry={load}
+      onRetry={connectionReady ? load : undefined}
     />
   );
 }
