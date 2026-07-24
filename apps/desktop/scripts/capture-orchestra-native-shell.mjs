@@ -2893,7 +2893,7 @@ async function runElectronChild() {
       `document.querySelector('[aria-label="Toggle right panel"][data-pressed="true"], [aria-label="Toggle right panel"][aria-pressed="true"]')?.click()`,
       true,
     );
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await observeSelectedIssueSurface("selected-Issue restored after closing Diff");
     const selectedIssueImage = await mainWindow.webContents.capturePage();
     const selectedIssueImageBytes = selectedIssueImage.toPNG();
     const selectedIssueDimensions = readPngDimensions(
@@ -2930,8 +2930,11 @@ async function runElectronChild() {
       selectedIssueImageBytes,
     );
 
+    const selectedIssueReloaded = new Promise((resolve) =>
+      renderer.once("did-finish-load", resolve),
+    );
     renderer.reload();
-    await new Promise((resolve) => renderer.once("did-finish-load", resolve));
+    await selectedIssueReloaded;
     await waitFor(
       () =>
         renderer

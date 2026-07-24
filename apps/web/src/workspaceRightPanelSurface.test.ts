@@ -2,8 +2,15 @@ import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { RightPanelSurface } from "./rightPanelStore";
-import { WORKSPACE_SURFACE_SCHEMA_VERSION, type WorkspaceSurface } from "./workspaceSurface";
 import {
+  createWorkspaceSurfaceState,
+  openWorkspaceSurface,
+  workspaceSurfaceKey,
+  WORKSPACE_SURFACE_SCHEMA_VERSION,
+  type WorkspaceSurface,
+} from "./workspaceSurface";
+import {
+  workspaceSurfaceKeyAfterRightPanelClose,
   rightPanelActivationForWorkspaceSurface,
   workspaceSurfaceForRightPanelSurface,
   type WorkspaceRightPanelScope,
@@ -118,5 +125,52 @@ describe("right-panel activation lookup", () => {
         surfaces,
       ),
     ).toBeNull();
+  });
+});
+
+describe("right-panel close workspace restoration", () => {
+  it("restores the most-recent task-owned Issue instead of promoting the generic task", () => {
+    const diff = expectedSurface({ kind: "diff" });
+    const ownerTask: WorkspaceSurface = {
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+      ...scope,
+      kind: "task",
+    };
+    const issue: WorkspaceSurface = {
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+      ...scope,
+      kind: "issue",
+      automationOwnerThreadId: "provider-native-root",
+      automationRunId: "automation-70",
+      issueId: "issue-70",
+      issueTaskThreadId: ThreadId.make("issue-task-70"),
+    };
+    const state = [ownerTask, issue, diff].reduce(
+      openWorkspaceSurface,
+      createWorkspaceSurfaceState(),
+    );
+
+    expect(workspaceSurfaceKeyAfterRightPanelClose(state)).toBe(workspaceSurfaceKey(issue));
+  });
+
+  it("does not cross task ownership or restore another right-panel surface", () => {
+    const otherTaskIssue: WorkspaceSurface = {
+      schemaVersion: WORKSPACE_SURFACE_SCHEMA_VERSION,
+      kind: "issue",
+      environmentId: scope.environmentId,
+      projectId: scope.projectId,
+      threadId: ThreadId.make("other-task"),
+      automationOwnerThreadId: "other-provider-root",
+      automationRunId: "automation-other",
+      issueId: "issue-other",
+      issueTaskThreadId: ThreadId.make("issue-task-other"),
+    };
+    const state = [
+      otherTaskIssue,
+      expectedSurface({ kind: "files", relativePath: null }),
+      expectedSurface({ kind: "diff" }),
+    ].reduce(openWorkspaceSurface, createWorkspaceSurfaceState());
+
+    expect(workspaceSurfaceKeyAfterRightPanelClose(state)).toBeNull();
   });
 });

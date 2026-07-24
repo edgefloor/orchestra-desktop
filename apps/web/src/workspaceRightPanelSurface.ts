@@ -1,7 +1,13 @@
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 
 import type { RightPanelSurface } from "./rightPanelStore";
-import { WORKSPACE_SURFACE_SCHEMA_VERSION, type WorkspaceSurface } from "./workspaceSurface";
+import {
+  workspaceSurfaceKey,
+  WORKSPACE_SURFACE_SCHEMA_VERSION,
+  type WorkspaceSurface,
+  type WorkspaceSurfaceKey,
+  type WorkspaceSurfaceState,
+} from "./workspaceSurface";
 
 export interface WorkspaceRightPanelScope {
   readonly environmentId: EnvironmentId;
@@ -16,6 +22,61 @@ export type WorkspaceRightPanelSurface = Extract<
 
 export interface RightPanelSurfaceActivation {
   readonly surfaceId: RightPanelSurface["id"];
+}
+
+export function isWorkspaceRightPanelSurface(
+  surface: WorkspaceSurface,
+): surface is WorkspaceRightPanelSurface {
+  return (
+    surface.kind === "preview" ||
+    surface.kind === "files" ||
+    surface.kind === "diff" ||
+    surface.kind === "terminal"
+  );
+}
+
+function workspaceSurfaceOwnerThreadId(surface: WorkspaceSurface): ThreadId | null {
+  switch (surface.kind) {
+    case "project":
+      return null;
+    case "child":
+      return surface.parentThreadId;
+    default:
+      return surface.threadId;
+  }
+}
+
+/**
+ * Returns the most-recent task-owned workspace surface that was active before
+ * the current right-panel surface. Hiding a panel must not silently replace an
+ * Issue, Symphony, or other retained task context with the generic task view.
+ */
+export function workspaceSurfaceKeyAfterRightPanelClose(
+  state: WorkspaceSurfaceState,
+): WorkspaceSurfaceKey | null {
+  const activeKey = state.activeSurfaceKey;
+  if (activeKey === null) return null;
+  const activeEntry = state.entries.find(
+    (entry) => workspaceSurfaceKey(entry.surface) === activeKey,
+  );
+  if (!activeEntry || !isWorkspaceRightPanelSurface(activeEntry.surface)) return null;
+  const activeSurface = activeEntry.surface;
+
+  return (
+    state.focusOrder.toReversed().find((candidateKey) => {
+      if (candidateKey === activeKey) return false;
+      const candidate = state.entries.find(
+        (entry) => workspaceSurfaceKey(entry.surface) === candidateKey,
+      );
+      return (
+        candidate !== undefined &&
+        !isWorkspaceRightPanelSurface(candidate.surface) &&
+        candidate.surface.environmentId === activeSurface.environmentId &&
+        candidate.surface.projectId === activeSurface.projectId &&
+        workspaceSurfaceOwnerThreadId(candidate.surface) === activeSurface.threadId
+      );
+    }) ?? null
+  );
 }
 
 /**

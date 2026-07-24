@@ -234,7 +234,9 @@ import {
 } from "../workspaceSurface";
 import { useWorkspaceSurfaceStore } from "../workspaceSurfaceStore";
 import {
+  isWorkspaceRightPanelSurface,
   rightPanelActivationForWorkspaceSurface,
+  workspaceSurfaceKeyAfterRightPanelClose,
   workspaceSurfaceForRightPanelSurface,
 } from "../workspaceRightPanelSurface";
 import { deriveNativeSubagents } from "../nativeSubagents";
@@ -1671,6 +1673,15 @@ function ChatViewContent(props: ChatViewProps) {
       setWorkspaceContextSheetOpen(false);
       setAutomationWorkspaceThreadId(null);
       return;
+    }
+    if (activeWorkspaceEntry && isWorkspaceRightPanelSurface(activeWorkspaceEntry.surface)) {
+      const restoredSurfaceKey = workspaceSurfaceKeyAfterRightPanelClose(
+        useWorkspaceSurfaceStore.getState(),
+      );
+      if (restoredSurfaceKey) {
+        useWorkspaceSurfaceStore.getState().focusSurface(restoredSurfaceKey);
+        return;
+      }
     }
     useWorkspaceSurfaceStore.getState().openSurface(activeTaskSurface);
   }, [
