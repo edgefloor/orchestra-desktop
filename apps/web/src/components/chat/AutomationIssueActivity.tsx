@@ -17,6 +17,7 @@ import { NativeActivityPanel } from "./NativeActivityPanel";
 
 export interface AutomationIssueActivityProps {
   readonly environmentId: EnvironmentId;
+  readonly connectionReady?: boolean;
   readonly ownerThreadId: ThreadId;
   readonly agentThreadId: string;
   readonly refreshGeneration?: number;
@@ -59,6 +60,7 @@ export function AutomationIssueActivityPresentation({
 
 export function AutomationIssueActivityController({
   environmentId,
+  connectionReady = true,
   ownerThreadId,
   agentThreadId,
   refreshGeneration = 0,
@@ -95,11 +97,15 @@ export function AutomationIssueActivityController({
   }, [agentThreadId, environmentId, ownerThreadId, readDetail]);
 
   useEffect(() => {
+    if (!connectionReady) {
+      requestIdRef.current += 1;
+      return;
+    }
     load();
     return () => {
       requestIdRef.current += 1;
     };
-  }, [load, refreshGeneration]);
+  }, [connectionReady, load, refreshGeneration]);
 
   const exactDetail =
     detail && isExactNativeIssueActivityDetail(detail, ownerThreadId, agentThreadId)

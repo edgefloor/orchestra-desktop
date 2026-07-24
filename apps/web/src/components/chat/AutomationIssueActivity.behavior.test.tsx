@@ -144,6 +144,24 @@ describe("AutomationIssueActivityController", () => {
     expect(presentation.props.error).toContain("did not match the exact persisted Issue task");
   });
 
+  it("waits for the existing environment connection before reading exact activity", async () => {
+    testState.readDetail.mockResolvedValueOnce({ _tag: "Success", value: detail });
+
+    let presentation = renderController({ ...props, connectionReady: false });
+    hooks.runMountEffects();
+    expect(testState.readDetail).not.toHaveBeenCalled();
+    expect(presentation.props.loading).toBe(true);
+
+    presentation = renderController({ ...props, connectionReady: true });
+    hooks.runMountEffects();
+    expect(testState.readDetail).toHaveBeenCalledOnce();
+    await flushPromises();
+    presentation = renderController({ ...props, connectionReady: true });
+
+    expect(presentation.props.detail).toEqual(detail);
+    expect(presentation.props.error).toBeNull();
+  });
+
   it("retains exact activity when a retry fails", async () => {
     testState.readDetail
       .mockResolvedValueOnce({ _tag: "Success", value: detail })

@@ -29,6 +29,7 @@ import {
 
 export interface AutomationIssueWorkspaceProps extends AutomationIssueWorkspaceLocator {
   readonly environmentId: EnvironmentId;
+  readonly connectionReady?: boolean;
   readonly availability: "available" | "temporarilyUnavailable";
   readonly issueIdentifier: string | undefined;
   readonly issueTitle: string | undefined;
@@ -272,6 +273,7 @@ export function AutomationIssueWorkspacePresentation({
 
 export function AutomationIssueWorkspaceController({
   environmentId,
+  connectionReady = true,
   routeThreadId,
   automationOwnerThreadId,
   automationRunId,
@@ -343,12 +345,16 @@ export function AutomationIssueWorkspaceController({
   );
 
   useEffect(() => {
+    if (!connectionReady) {
+      statusRequestIdRef.current += 1;
+      return;
+    }
     load();
     return () => {
       statusRequestIdRef.current += 1;
       steeringRequestIdRef.current += 1;
     };
-  }, [load]);
+  }, [connectionReady, load]);
 
   const refresh = useCallback(() => {
     load(onNativeActivityRefresh);

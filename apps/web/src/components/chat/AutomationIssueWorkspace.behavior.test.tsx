@@ -328,6 +328,24 @@ describe("AutomationIssueWorkspaceController", () => {
     expect(presentation.props.snapshot?.runResult.run.claims).toHaveLength(25);
   });
 
+  it("waits for the existing environment connection before reading exact status", async () => {
+    testState.readStatus.mockResolvedValueOnce({ _tag: "Success", value: runResult() });
+
+    let presentation = renderController({ ...locatorProps, connectionReady: false });
+    hooks.runMountEffects();
+    expect(testState.readStatus).not.toHaveBeenCalled();
+    expect(presentation.props.runtimeState).toBe("loading");
+
+    presentation = renderController({ ...locatorProps, connectionReady: true });
+    hooks.runMountEffects();
+    expect(testState.readStatus).toHaveBeenCalledOnce();
+    await flushPromises();
+    presentation = renderController({ ...locatorProps, connectionReady: true });
+
+    expect(presentation.props.runtimeState).toBe("ready");
+    expect(presentation.props.snapshot?.issue.claim?.claimId).toBe("claim-42");
+  });
+
   it("retains exact identity through error, retry, stale, temporary, and reload recovery", async () => {
     testState.readStatus
       .mockResolvedValueOnce({ _tag: "Failure", cause: new Error("offline") })

@@ -6007,6 +6007,7 @@ function ChatViewContent(props: ChatViewProps) {
                     }
                     automationRunId={activeAutomationIssueEntry.surface.automationRunId}
                     availability={activeAutomationIssueEntry.availability}
+                    connectionReady={activeEnvironmentConnectionPhase === "connected"}
                     environmentId={activeAutomationIssueEntry.surface.environmentId}
                     issueId={activeAutomationIssueEntry.surface.issueId}
                     issueIdentifier={activeAutomationIssueEntry.surface.issueIdentifier}
@@ -6019,6 +6020,7 @@ function ChatViewContent(props: ChatViewProps) {
                   />
                   <AutomationIssueActivity
                     agentThreadId={activeAutomationIssueEntry.surface.issueTaskThreadId}
+                    connectionReady={activeEnvironmentConnectionPhase === "connected"}
                     environmentId={activeAutomationIssueEntry.surface.environmentId}
                     ownerThreadId={activeAutomationIssueEntry.surface.threadId}
                     refreshGeneration={automationIssueActivityRefreshGeneration}
