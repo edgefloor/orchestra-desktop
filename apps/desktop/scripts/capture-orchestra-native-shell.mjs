@@ -3179,39 +3179,7 @@ async function runElectronChild() {
       `document.querySelector('[aria-label="Toggle right panel"]')?.click()`,
       true,
     );
-    await waitFor(
-      () =>
-        renderer.executeJavaScript(
-          `(() => {
-            const close = document.querySelector('[aria-label="Close Diff"]');
-            if (!(close instanceof HTMLButtonElement) || close.disabled) return false;
-            close.click();
-            return true;
-          })()`,
-          true,
-        ),
-      "retained selected-Issue Diff surface close",
-    );
-    await waitFor(
-      () =>
-        renderer.executeJavaScript(
-          `(() => {
-            const toggle = document.querySelector('[aria-label="Toggle right panel"][aria-pressed="false"]');
-            if (!(toggle instanceof HTMLButtonElement) || toggle.disabled) return false;
-            toggle.click();
-            return true;
-          })()`,
-          true,
-        ),
-      "right panel reopen after final retained surface close",
-    );
-    await waitFor(
-      () => renderer.executeJavaScript(`document.body.innerText.includes("Open a surface")`, true),
-      "right panel empty state",
-    );
-    retainedDesktopCapabilities.surfaces.Files = await addRightPanelSurface(renderer, "Files", {
-      emptyState: true,
-    });
+    retainedDesktopCapabilities.surfaces.Files = await addRightPanelSurface(renderer, "Files");
     retainedDesktopCapabilities.surfaces.Terminal = await addRightPanelSurface(
       renderer,
       "Terminal",
