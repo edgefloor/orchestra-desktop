@@ -10,6 +10,8 @@ import { minimalPng } from "./lib/orchestra-evidence-fixtures.ts";
 import {
   buildNativeGuestFixture,
   makeNativeShellAssertion,
+  ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH,
+  ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT,
 } from "./lib/orchestra-native-shell-contract.mjs";
 import { sha256 } from "./lib/orchestra-evidence-primitives.mjs";
 import {
@@ -586,7 +588,34 @@ async function makeFixture(
       ),
       Terminal: { title: "Terminal 2", panelVisible: true },
     },
-    mutations: { commit: "unobserved", push: "unobserved" },
+    mutations: {
+      commit: {
+        menu: { selectedLabel: "Commit" },
+        dialog: { title: "Commit changes", submitLabel: "Commit", textareaFilled: true },
+        toast: {
+          title: `Committed ${"2".repeat(7)}`,
+          description: ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT,
+        },
+        beforeHead: "1".repeat(40),
+        head: "2".repeat(40),
+        subject: ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT,
+        path: ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH,
+        committedPaths: [ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH],
+      },
+      push: {
+        menu: { selectedLabel: "Push" },
+        dialog: {
+          title: "Push to default ref?",
+          submitLabel: "Push to main",
+          textareaFilled: false,
+        },
+        toast: { title: "Pushed to origin/main", description: null },
+        localHead: "2".repeat(40),
+        remoteHead: "2".repeat(40),
+        upstream: "origin/main",
+        remoteSubject: ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT,
+      },
+    },
   };
   const assertions = Object.fromEntries(
     ORCHESTRA_NATIVE_SHELL_ASSERTIONS.map((assertion) => [
@@ -1244,6 +1273,34 @@ describe("Orchestra native-shell evidence verifier", () => {
     ).rejects.toThrow(
       "manifest.assertions.retainedDesktopCapabilitiesProbed observed value contradicts passed:true",
     );
+
+    for (const mutate of [
+      (mutations: Record<string, unknown>) => {
+        const commit = mutations.commit as Record<string, unknown>;
+        commit.beforeHead = commit.head;
+      },
+      (mutations: Record<string, unknown>) => {
+        const commit = mutations.commit as Record<string, unknown>;
+        (commit.toast as Record<string, unknown>).title = "Committed deadbee";
+      },
+      (mutations: Record<string, unknown>) => {
+        const push = mutations.push as Record<string, unknown>;
+        push.remoteHead = "3".repeat(40);
+      },
+    ]) {
+      const invalidGitMutation = await makeFixture((manifest) => {
+        const observed = manifest.assertions.retainedDesktopCapabilitiesProbed!.observed as Record<
+          string,
+          unknown
+        >;
+        mutate(observed.mutations as Record<string, unknown>);
+      });
+      await expect(
+        verifyOrchestraNativeShell({ rootDir: invalidGitMutation.rootDir }),
+      ).rejects.toThrow(
+        "manifest.assertions.retainedDesktopCapabilitiesProbed observed value contradicts passed:true",
+      );
+    }
   });
 
   it("requires the exact git check Evidence initially and after reload and restart", async () => {

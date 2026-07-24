@@ -21,6 +21,8 @@ export interface NativeShellGitFixtureIdentity {
 export const ORCHESTRA_NATIVE_SHELL_ACCEPTANCE_DIRECTORY: string;
 export const ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS: ReadonlyArray<string>;
 export const ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY: NativeShellGitFixtureIdentity;
+export const ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH: string;
+export const ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT: string;
 export const ORCHESTRA_NATIVE_SHELL_TERMINAL_TITLE_PATTERN: string;
 export const ORCHESTRA_NATIVE_SHELL_ASSERTIONS: ReadonlyArray<string>;
 export const ORCHESTRA_NATIVE_SHELL_SCREENSHOTS: ReadonlyArray<NativeShellScenario>;
@@ -34,6 +36,7 @@ export function isExactNativeDogfoodResponseCount(requestCount: number): boolean
 export function isNativeShellGitFixtureIdentity(
   value: unknown,
 ): value is NativeShellGitFixtureIdentity;
+export function isNativeShellGitMutationObservation(value: unknown): boolean;
 export function isNativeShellTerminalSurfaceTitle(value: unknown): value is string;
 export function createNativeShellRequestCountWaiter(): {
   readonly count: number;

@@ -22,6 +22,7 @@ import {
   isNativeEvidenceObservation,
   isNativeGitCheckEvidenceReferenceObservation,
   isNativeGitCheckEvidenceObservation,
+  isNativeShellGitMutationObservation,
   isNativeShellResourceCleanupComplete,
   isNativeShellGitFixtureIdentity,
   isNativeShellTerminalSurfaceTitle,
@@ -1461,8 +1462,7 @@ export async function verifyOrchestraNativeShell(
     }) ||
     !isNativeShellTerminalSurfaceTitle(retainedTerminalSurface.title) ||
     retainedTerminalSurface.panelVisible !== true ||
-    retainedMutations.commit !== "unobserved" ||
-    retainedMutations.push !== "unobserved"
+    !isNativeShellGitMutationObservation(retainedMutations)
   ) {
     throw new Error(
       "manifest.assertions.retainedDesktopCapabilitiesProbed observed value contradicts passed:true",

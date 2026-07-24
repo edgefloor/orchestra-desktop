@@ -881,6 +881,8 @@ describe("native-shell acceptance capture contract", () => {
       });
       expect(runGit(repository, ["remote", "get-url", "origin"])).toBe(remoteRepository);
       expect(runGit(remoteRepository, ["rev-parse", "--is-bare-repository"])).toBe("true");
+      expect(runGit(repository, ["config", "user.name"])).toBe("Orchestra Acceptance");
+      expect(runGit(repository, ["config", "user.email"])).toBe("acceptance@invalid.local");
 
       const hasPrimaryRemote = runGit(repository, ["remote"]).split("\n").includes("origin");
       const menuItems = buildMenuItems(
@@ -906,6 +908,28 @@ describe("native-shell acceptance capture contract", () => {
     }
   });
 
+  it("drives Commit and Push only through production UI before reading isolated Git receipts", async () => {
+    const captureSource = await NodeFSP.readFile(
+      NodePath.join(NodePath.dirname(import.meta.filename), "capture-orchestra-native-shell.mjs"),
+      "utf8",
+    );
+    const mutationStart = captureSource.indexOf("const gitMutationBeforeHead =");
+    const mutationEnd = captureSource.indexOf(
+      "retainedDesktopCapabilities.mutations =",
+      mutationStart,
+    );
+    const mutationSource = captureSource.slice(mutationStart, mutationEnd);
+    expect(mutationStart).toBeGreaterThanOrEqual(0);
+    expect(mutationEnd).toBeGreaterThan(mutationStart);
+    expect(mutationSource).toContain('selectLabel: "Commit"');
+    expect(mutationSource).toContain('title: "Commit changes"');
+    expect(mutationSource).toContain('selectLabel: "Push"');
+    expect(mutationSource).toContain('title: "Push to default ref?"');
+    expect(mutationSource).toContain("observeVisibleToast(renderer");
+    expect(mutationSource).not.toContain('runGit(dogfoodRepository, ["commit"');
+    expect(mutationSource).not.toContain('runGit(dogfoodRepository, ["push"');
+  });
+
   it("accepts a real positive terminal ordinal without assuming it is the first session", () => {
     expect(isNativeShellTerminalSurfaceTitle("Terminal 1")).toBe(true);
     expect(isNativeShellTerminalSurfaceTitle("Terminal 2")).toBe(true);
@@ -919,7 +943,7 @@ describe("native-shell acceptance capture contract", () => {
       "utf8",
     );
     const helperStart = captureSource.indexOf("async function interactWithVisibleMenu");
-    const helperEnd = captureSource.indexOf("async function observeDocumentText", helperStart);
+    const helperEnd = captureSource.indexOf("async function submitVisibleDialog", helperStart);
     const helperSource = captureSource.slice(helperStart, helperEnd);
     expect(helperStart).toBeGreaterThanOrEqual(0);
     expect(helperEnd).toBeGreaterThan(helperStart);
@@ -936,7 +960,7 @@ describe("native-shell acceptance capture contract", () => {
       "window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape'",
     );
     expect(helperSource).not.toContain("querySelectorAll('[role=\"menuitem\"]')");
-    expect(captureSource.match(/interactWithVisibleMenu\(renderer/g)).toHaveLength(2);
+    expect(captureSource.match(/interactWithVisibleMenu\(renderer/g)).toHaveLength(4);
     expect(captureSource).toContain("bounded tabs:");
     const addSurfaceStart = captureSource.indexOf("async function addRightPanelSurface");
     const addSurfaceEnd = captureSource.indexOf(

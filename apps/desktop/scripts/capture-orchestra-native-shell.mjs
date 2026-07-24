@@ -34,6 +34,7 @@ import {
   isNativeWorkflowLifecycleObservation,
   isNativeShellProcessGroupEmpty,
   isNativeShellGitFixtureIdentity,
+  isNativeShellGitMutationObservation,
   isNativeShellResourceCleanupComplete,
   isNativeShellTerminalSurfaceTitle,
   isUniqueNativeSymphonyInspection,
@@ -42,6 +43,8 @@ import {
   ORCHESTRA_NATIVE_SHELL_ASSERTIONS,
   ORCHESTRA_NATIVE_SHELL_BUILD_ARTIFACTS,
   ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY,
+  ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH,
+  ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT,
   ORCHESTRA_NATIVE_SHELL_SCREENSHOTS,
   ORCHESTRA_NATIVE_SHELL_TERMINAL_TITLE_PATTERN,
   reserveNativeShellPort,
@@ -122,6 +125,8 @@ export function prepareNativeShellGitFixture({ repository, remoteRepository }) {
     "-m",
     "Seed native dogfood repository",
   ]);
+  runGit(repository, ["config", "user.name", "Orchestra Acceptance"]);
+  runGit(repository, ["config", "user.email", "acceptance@invalid.local"]);
   runGit(repository, ["remote", "add", "origin", remoteRepository]);
 
   const configuredRemote = runGit(repository, ["remote", "get-url", "origin"]);
@@ -1487,6 +1492,110 @@ async function interactWithVisibleMenu(
     throw new Error(`${context} menu returned a non-serialized receipt`);
   }
   return JSON.parse(serializedReceipt);
+}
+
+async function submitVisibleDialog(
+  renderer,
+  { title, submitLabel, textareaValue = null, context },
+) {
+  return renderer.executeJavaScript(
+    `new Promise((resolve, reject) => {
+      const deadline = window.setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(${JSON.stringify(`${context} did not render and submit within 45000ms`)}));
+      }, 45000);
+      let submitted = false;
+      const complete = () => {
+        const dialog = [...document.querySelectorAll('[data-slot="dialog-popup"]')]
+          .find((candidate) =>
+            candidate instanceof HTMLElement &&
+            candidate.getClientRects().length > 0 &&
+            candidate.querySelector('[data-slot="dialog-title"]')?.textContent?.trim() ===
+              ${JSON.stringify(title)}
+          );
+        if (!(dialog instanceof HTMLElement) || submitted) return;
+        const textareaValue = ${JSON.stringify(textareaValue)};
+        if (textareaValue !== null) {
+          const textarea = dialog.querySelector('textarea[placeholder="Leave empty to auto-generate"]');
+          if (!(textarea instanceof HTMLTextAreaElement)) return;
+          const valueSetter = Object.getOwnPropertyDescriptor(
+            HTMLTextAreaElement.prototype,
+            'value',
+          )?.set;
+          if (!valueSetter) return;
+          valueSetter.call(textarea, textareaValue);
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        submitted = true;
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            const submit = [...dialog.querySelectorAll('button')]
+              .find((button) =>
+                button.textContent?.trim() === ${JSON.stringify(submitLabel)} &&
+                !button.disabled
+              );
+            if (!(submit instanceof HTMLButtonElement)) {
+              submitted = false;
+              return;
+            }
+            submit.click();
+            window.clearTimeout(deadline);
+            observer.disconnect();
+            resolve({
+              title: ${JSON.stringify(title)},
+              submitLabel: ${JSON.stringify(submitLabel)},
+              textareaFilled: textareaValue !== null,
+            });
+          });
+        });
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+      });
+      complete();
+    })`,
+    true,
+  );
+}
+
+async function observeVisibleToast(renderer, { title, description, context }) {
+  return renderer.executeJavaScript(
+    `new Promise((resolve, reject) => {
+      const deadline = window.setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(${JSON.stringify(`${context} did not render within 45000ms`)}));
+      }, 45000);
+      const complete = () => {
+        const titleNode = [...document.querySelectorAll('[data-slot="toast-title"]')]
+          .find((candidate) =>
+            candidate instanceof HTMLElement &&
+            candidate.getClientRects().length > 0 &&
+            candidate.textContent?.trim() === ${JSON.stringify(title)}
+          );
+        if (!(titleNode instanceof HTMLElement)) return;
+        const toast = titleNode.closest('[data-position]') ?? titleNode.parentElement;
+        const descriptionNode = toast?.querySelector('[data-slot="toast-description"]');
+        const observedDescription = descriptionNode?.textContent?.trim() ?? null;
+        if (observedDescription !== ${JSON.stringify(description)}) return;
+        window.clearTimeout(deadline);
+        observer.disconnect();
+        resolve({ title: titleNode.textContent?.trim() ?? '', description: observedDescription });
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+      });
+      complete();
+    })`,
+    true,
+  );
 }
 
 async function observeDocumentText(renderer, requiredTexts, context) {
@@ -3090,7 +3199,7 @@ async function runElectronChild() {
       settings: null,
       vcs: null,
       surfaces: {},
-      mutations: { commit: "unobserved", push: "unobserved" },
+      mutations: { commit: null, push: null },
     };
 
     retainedDesktopCapabilities.modelPicker = await renderer.executeJavaScript(
@@ -3166,6 +3275,13 @@ async function runElectronChild() {
       true,
     );
 
+    const gitMutationBeforeHead = runGit(dogfoodRepository, ["rev-parse", "HEAD"]);
+    const gitMutationRemoteRepository = runGit(dogfoodRepository, ["remote", "get-url", "origin"]);
+    await NodeFSP.writeFile(
+      NodePath.join(dogfoodRepository, ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH),
+      "Observed through Orchestra's production Git action UI.\n",
+    );
+    await renderer.executeJavaScript(`window.dispatchEvent(new Event('focus'))`, true);
     const retainedVcsMenu = await interactWithVisibleMenu(renderer, {
       triggerSelector: '[aria-label="Git action options"]',
       requiredLabels: ["Commit", "Push"],
@@ -3174,6 +3290,108 @@ async function runElectronChild() {
     retainedDesktopCapabilities.vcs = {
       ...retainedVcsMenu,
       fixtureRemote: gitFixtureIdentity,
+    };
+    const commitMenu = await interactWithVisibleMenu(renderer, {
+      triggerSelector: '[aria-label="Git action options"]',
+      requiredLabels: ["Commit", "Push"],
+      selectLabel: "Commit",
+      context: "production UI Commit",
+    });
+    const commitDialog = await submitVisibleDialog(renderer, {
+      title: "Commit changes",
+      submitLabel: "Commit",
+      textareaValue: ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT,
+      context: "production UI Commit dialog",
+    });
+    const gitMutationHead = await waitFor(
+      () => {
+        const head = runGit(dogfoodRepository, ["rev-parse", "HEAD"]);
+        return head !== gitMutationBeforeHead ? head : null;
+      },
+      "production UI Commit repository mutation",
+      45_000,
+    );
+    const gitMutationSubject = runGit(dogfoodRepository, ["show", "-s", "--format=%s", "HEAD"]);
+    const gitMutationCommittedPaths = runGit(dogfoodRepository, [
+      "show",
+      "--pretty=format:",
+      "--name-only",
+      "HEAD",
+    ])
+      .split("\n")
+      .filter((path) => path.length > 0);
+    const commitToast = await observeVisibleToast(renderer, {
+      title: `Committed ${gitMutationHead.slice(0, 7)}`,
+      description: ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT,
+      context: "production UI Commit success",
+    });
+    if (
+      gitMutationSubject !== ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT ||
+      !gitMutationCommittedPaths.includes(ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH)
+    ) {
+      throw new Error("production UI Commit did not create the exact isolated fixture commit");
+    }
+
+    const pushMenu = await interactWithVisibleMenu(renderer, {
+      triggerSelector: '[aria-label="Git action options"]',
+      requiredLabels: ["Commit", "Push"],
+      selectLabel: "Push",
+      context: "production UI Push",
+    });
+    const pushDialog = await submitVisibleDialog(renderer, {
+      title: "Push to default ref?",
+      submitLabel: "Push to main",
+      context: "production UI Push dialog",
+    });
+    const gitMutationRemoteHead = await waitFor(
+      () => runGit(gitMutationRemoteRepository, ["rev-parse", "refs/heads/main"]),
+      "production UI Push remote mutation",
+      45_000,
+    );
+    const gitMutationUpstream = runGit(dogfoodRepository, [
+      "rev-parse",
+      "--abbrev-ref",
+      "--symbolic-full-name",
+      "@{upstream}",
+    ]);
+    const gitMutationRemoteSubject = runGit(gitMutationRemoteRepository, [
+      "show",
+      "-s",
+      "--format=%s",
+      "refs/heads/main",
+    ]);
+    const pushToast = await observeVisibleToast(renderer, {
+      title: "Pushed to origin/main",
+      description: null,
+      context: "production UI Push success",
+    });
+    if (
+      gitMutationRemoteHead !== gitMutationHead ||
+      gitMutationUpstream !== "origin/main" ||
+      gitMutationRemoteSubject !== ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT
+    ) {
+      throw new Error("production UI Push did not update the exact isolated bare origin");
+    }
+    retainedDesktopCapabilities.mutations = {
+      commit: {
+        menu: commitMenu,
+        dialog: commitDialog,
+        toast: commitToast,
+        beforeHead: gitMutationBeforeHead,
+        head: gitMutationHead,
+        subject: gitMutationSubject,
+        path: ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH,
+        committedPaths: gitMutationCommittedPaths,
+      },
+      push: {
+        menu: pushMenu,
+        dialog: pushDialog,
+        toast: pushToast,
+        localHead: gitMutationHead,
+        remoteHead: gitMutationRemoteHead,
+        upstream: gitMutationUpstream,
+        remoteSubject: gitMutationRemoteSubject,
+      },
     };
     await renderer.executeJavaScript(
       `document.querySelector('[aria-label="Toggle right panel"]')?.click()`,
@@ -3921,8 +4139,7 @@ async function runElectronChild() {
         ) &&
         isNativeShellTerminalSurfaceTitle(retainedDesktopCapabilities.surfaces.Terminal?.title) &&
         retainedDesktopCapabilities.surfaces.Terminal.panelVisible === true &&
-        retainedDesktopCapabilities.mutations.commit === "unobserved" &&
-        retainedDesktopCapabilities.mutations.push === "unobserved",
+        isNativeShellGitMutationObservation(retainedDesktopCapabilities.mutations),
     );
     assertNativeShellAssertions({
       ...assertions,

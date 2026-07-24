@@ -19,6 +19,9 @@ export const ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY = Object.freeze({
   externalMutation: false,
 });
 
+export const ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH = "orchestra-native-ui-mutation.txt";
+export const ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT = "Observe production UI commit and push";
+
 export const ORCHESTRA_NATIVE_SHELL_TERMINAL_TITLE_PATTERN = "^Terminal [1-9][0-9]*$";
 
 export function isNativeShellGitFixtureIdentity(value) {
@@ -30,6 +33,40 @@ export function isNativeShellGitFixtureIdentity(value) {
     value.name === ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY.name &&
     value.transport === ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY.transport &&
     value.externalMutation === ORCHESTRA_NATIVE_SHELL_GIT_FIXTURE_IDENTITY.externalMutation
+  );
+}
+
+export function isNativeShellGitMutationObservation(value) {
+  const commit = value?.commit;
+  const push = value?.push;
+  const beforeHead = commit?.beforeHead;
+  const head = commit?.head;
+  return (
+    typeof beforeHead === "string" &&
+    /^[0-9a-f]{40}$/.test(beforeHead) &&
+    typeof head === "string" &&
+    /^[0-9a-f]{40}$/.test(head) &&
+    head !== beforeHead &&
+    commit?.menu?.selectedLabel === "Commit" &&
+    commit?.dialog?.title === "Commit changes" &&
+    commit?.dialog?.submitLabel === "Commit" &&
+    commit?.dialog?.textareaFilled === true &&
+    commit?.toast?.title === `Committed ${head.slice(0, 7)}` &&
+    commit?.toast?.description === ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT &&
+    commit?.subject === ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT &&
+    commit?.path === ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH &&
+    Array.isArray(commit?.committedPaths) &&
+    commit.committedPaths.includes(ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_PATH) &&
+    push?.menu?.selectedLabel === "Push" &&
+    push?.dialog?.title === "Push to default ref?" &&
+    push?.dialog?.submitLabel === "Push to main" &&
+    push?.dialog?.textareaFilled === false &&
+    push?.toast?.title === "Pushed to origin/main" &&
+    push?.toast?.description === null &&
+    push?.localHead === head &&
+    push?.remoteHead === head &&
+    push?.upstream === "origin/main" &&
+    push?.remoteSubject === ORCHESTRA_NATIVE_SHELL_GIT_MUTATION_SUBJECT
   );
 }
 
