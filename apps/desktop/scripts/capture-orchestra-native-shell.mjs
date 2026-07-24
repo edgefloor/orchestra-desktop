@@ -3193,6 +3193,19 @@ async function runElectronChild() {
       "retained selected-Issue Diff surface close",
     );
     await waitFor(
+      () =>
+        renderer.executeJavaScript(
+          `(() => {
+            const toggle = document.querySelector('[aria-label="Toggle right panel"][aria-pressed="false"]');
+            if (!(toggle instanceof HTMLButtonElement) || toggle.disabled) return false;
+            toggle.click();
+            return true;
+          })()`,
+          true,
+        ),
+      "right panel reopen after final retained surface close",
+    );
+    await waitFor(
       () => renderer.executeJavaScript(`document.body.innerText.includes("Open a surface")`, true),
       "right panel empty state",
     );
